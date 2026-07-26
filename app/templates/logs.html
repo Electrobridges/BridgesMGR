@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% set activo = 'logs' %}
+{% block titulo %}Logs — OpenVPN Manager{% endblock %}
+
+{% block contenido %}
+<h1>Logs del servidor</h1>
+<p class="tenue"><code>{{ ruta }}</code></p>
+
+<form class="formulario en-fila"
+      hx-get="/logs/contenido"
+      hx-target="#contenido-log"
+      hx-swap="innerHTML"
+      hx-trigger="load, submit, change from:#lineas, keyup changed delay:400ms from:#filtro">
+  <label for="lineas">Líneas</label>
+  <select id="lineas" name="lineas">
+    <option value="100">100</option>
+    <option value="200" selected>200</option>
+    <option value="500">500</option>
+    <option value="1000">1000</option>
+    <option value="2000">2000</option>
+  </select>
+
+  <label for="filtro">Filtrar</label>
+  <input type="text" id="filtro" name="filtro" placeholder="texto a buscar" maxlength="120">
+
+  <button type="submit" class="boton">Actualizar</button>
+</form>
+
+<div id="contenido-log">
+  <p class="tenue">Cargando…</p>
+</div>
+{% endblock %}

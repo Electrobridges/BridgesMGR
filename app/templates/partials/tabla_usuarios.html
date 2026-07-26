@@ -1,0 +1,54 @@
+<div class="tabla-scroll">
+<table class="tabla">
+  <thead>
+    <tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Creado</th><th>Acciones</th></tr>
+  </thead>
+  <tbody>
+    {% for u in usuarios %}
+    <tr>
+      <td class="destacado">
+        {{ u.usuario }}{% if u.usuario == yo %} <span class="tenue">(tú)</span>{% endif %}
+      </td>
+      <td><span class="rol rol-{{ u.rol }}">{{ u.rol }}</span></td>
+      <td>
+        <span class="etiqueta etiqueta-{{ 'ok' if u.activo else 'mal' }}">
+          {{ 'activo' if u.activo else 'desactivado' }}
+        </span>
+      </td>
+      <td class="tenue">{{ u.creado[:19] | replace('T', ' ') }}</td>
+      <td class="acciones">
+        <form class="en-linea" hx-post="/admin/usuarios/{{ u.usuario }}/rol"
+              hx-target="#avisos" hx-swap="innerHTML">
+          <select name="rol" aria-label="Rol de {{ u.usuario }}">
+            <option value="lector" {{ 'selected' if u.rol == 'lector' }}>lector</option>
+            <option value="admin" {{ 'selected' if u.rol == 'admin' }}>admin</option>
+          </select>
+          <button type="submit" class="boton pequeno">Cambiar rol</button>
+        </form>
+
+        <form class="en-linea" hx-post="/admin/usuarios/{{ u.usuario }}/password"
+              hx-target="#avisos" hx-swap="innerHTML">
+          <input type="password" name="password" required minlength="12"
+                 placeholder="nueva contraseña" autocomplete="new-password">
+          <button type="submit" class="boton pequeno">Cambiar</button>
+        </form>
+
+        <button class="boton pequeno"
+                hx-post="/admin/usuarios/{{ u.usuario }}/activo"
+                hx-vals='{"activo": {{ 0 if u.activo else 1 }}}'
+                hx-target="#avisos" hx-swap="innerHTML">
+          {{ 'Desactivar' if u.activo else 'Activar' }}
+        </button>
+
+        <button class="boton boton-peligro pequeno"
+                hx-post="/admin/usuarios/{{ u.usuario }}/borrar"
+                hx-target="#avisos" hx-swap="innerHTML"
+                hx-confirm="¿Borrar la cuenta de panel de {{ u.usuario }}?">
+          Borrar
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>

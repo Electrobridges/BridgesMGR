@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set activo = 'auditoria' %}
+{% block titulo %}Auditoría — OpenVPN Manager{% endblock %}
+
+{% block contenido %}
+<h1>Auditoría</h1>
+<p class="tenue">Últimas 200 acciones registradas, incluidos los intentos de login fallidos.</p>
+
+{% if entradas %}
+<div class="tabla-scroll">
+<table class="tabla">
+  <thead>
+    <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Objetivo</th><th>Resultado</th><th>IP</th><th>Detalle</th></tr>
+  </thead>
+  <tbody>
+    {% for e in entradas %}
+    <tr>
+      <td class="tenue">{{ e.ts[:19] | replace('T', ' ') }}</td>
+      <td class="destacado">{{ e.usuario or '—' }}</td>
+      <td>{{ e.accion }}</td>
+      <td>{{ e.objetivo or '—' }}</td>
+      <td>
+        <span class="etiqueta etiqueta-{{ 'ok' if e.resultado == 'ok' else 'mal' }}">{{ e.resultado }}</span>
+      </td>
+      <td class="tenue">{{ e.ip or '—' }}</td>
+      <td class="tenue">{{ e.detalle or '' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="tenue">Todavía no hay entradas.</p>
+{% endif %}
+{% endblock %}

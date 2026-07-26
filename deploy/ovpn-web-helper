@@ -1,0 +1,361 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Helper privilegiado de OpenVPN Manager Web.
+
+Es lo ÚNICO que /etc/sudoers.d/ovpnweb autoriza a ejecutar como root. El panel
+web corre sin privilegios y delega aquí las operaciones sobre la PKI.
+
+Reglas de diseño, en orden de importancia:
+
+  1. Nunca acepta rutas por argumento. Todas salen de /etc/ovpn-web/config.yaml,
+     que es root:ovpnweb 0640. Si aceptara rutas del panel, un panel
+     comprometido apuntaría easyrsa a un binario propio y sería root.
+  2. Revalida el Common Name aquí, aunque el panel ya lo valide. El panel no
+     es de fiar desde este lado de la frontera de privilegios.
+  3. subprocess siempre con lista de argumentos, jamás shell=True.
+  4. Antes de tocar la PKI hace copia de seguridad con marca de tiempo.
+  5. Responde JSON por stdout; los errores van a stderr con código != 0.
+
+Uso:
+    ovpn-web-helper listar
+    ovpn-web-helper revocar <CN>
+    ovpn-web-helper restaurar <CN>
+    ovpn-web-helper crear <CN>
+    ovpn-web-helper ovpn <CN>
+    ovpn-web-helper estado-servicio
+"""
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+
+try:
+    import yaml
+except ImportError:
+    sys.stderr.write("Falta python3-yaml (apt install python3-yaml)\n")
+    sys.exit(2)
+
+CONFIG = "/etc/ovpn-web/config.yaml"
+
+# Debe coincidir con app/core/validacion.py
+CN_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$')
+RESERVADOS = {'server', 'ca'}
+
+TIMEOUT = 120
+
+
+def error(mensaje, codigo=1):
+    sys.stderr.write(mensaje.rstrip() + "\n")
+    sys.exit(codigo)
+
+
+def validar_cn(cn):
+    """Revalidación independiente del CN. No confiamos en quien nos llama."""
+    if not cn or len(cn) > 64 or not CN_RE.match(cn) or cn.lower() in RESERVADOS:
+        error("Common Name no válido: %r" % cn)
+    return cn
+
+
+def cargar_config():
+    if not os.path.exists(CONFIG):
+        error("No existe %s" % CONFIG)
+
+    st = os.stat(CONFIG)
+    if st.st_uid != 0:
+        error("%s debe pertenecer a root (uid actual: %d)" % (CONFIG, st.st_uid))
+    if st.st_mode & 0o002:
+        error("%s no puede tener permiso de escritura para todos" % CONFIG)
+
+    with open(CONFIG, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def rutas_pki(cfg):
+    base = (cfg.get("openvpn") or {}).get("easyrsa_path", "/etc/openvpn/easy-rsa")
+    return {
+        "base": base,
+        "easyrsa": os.path.join(base, "easyrsa"),
+        "pki": os.path.join(base, "pki"),
+        "issued": os.path.join(base, "pki", "issued"),
+        "private": os.path.join(base, "pki", "private"),
+        "reqs": os.path.join(base, "pki", "reqs"),
+        "index": os.path.join(base, "pki", "index.txt"),
+        "ca": os.path.join(base, "pki", "ca.crt"),
+        "backups": os.path.join(base, "pki", "ovpn-web-backups"),
+    }
+
+
+def correr_easyrsa(rutas, args, entrada=None):
+    """Ejecuta easyrsa en su directorio. Devuelve stdout; aborta si falla."""
+    if not os.path.isfile(rutas["easyrsa"]):
+        error("No se encontró easyrsa en %s" % rutas["easyrsa"])
+
+    try:
+        proc = subprocess.run(
+            [rutas["easyrsa"]] + list(args),
+            cwd=rutas["base"],
+            capture_output=True,
+            text=True,
+            input=entrada,
+            timeout=TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        error("easyrsa %s excedió %d segundos" % (" ".join(args), TIMEOUT))
+
+    if proc.returncode != 0:
+        error("easyrsa %s falló: %s" % (" ".join(args), (proc.stderr or proc.stdout).strip()))
+
+    return proc.stdout
+
+
+def leer_pem(ruta, etiqueta="CERTIFICATE"):
+    """
+    Extrae solo el bloque PEM del archivo.
+
+    Los .crt de easyrsa llevan delante el volcado en texto del certificado;
+    embeberlo entero en el .ovpn funciona pero ensucia el archivo.
+    """
+    if not os.path.isfile(ruta):
+        error("No se encontró %s" % ruta)
+
+    with open(ruta, "r", encoding="utf-8", errors="replace") as f:
+        contenido = f.read()
+
+    inicio = contenido.find("-----BEGIN")
+    if inicio == -1:
+        error("%s no contiene un bloque PEM" % ruta)
+
+    return contenido[inicio:].strip()
+
+
+def respaldar(rutas, cn):
+    """Copia index.txt y los archivos del CN antes de modificarlos"""
+    marca = datetime.now().strftime("%Y%m%d-%H%M%S")
+    destino = os.path.join(rutas["backups"], "%s-%s" % (cn, marca))
+    os.makedirs(destino, mode=0o700, exist_ok=True)
+
+    guardados = []
+    candidatos = [
+        rutas["index"],
+        os.path.join(rutas["issued"], "%s.crt" % cn),
+        os.path.join(rutas["private"], "%s.key" % cn),
+        os.path.join(rutas["reqs"], "%s.req" % cn),
+    ]
+
+    for origen in candidatos:
+        if os.path.isfile(origen):
+            shutil.copy2(origen, destino)
+            guardados.append(os.path.basename(origen))
+
+    return {"directorio": destino, "archivos": guardados}
+
+
+# --------------------------------------------------------------- subcomandos
+
+def cmd_listar(cfg):
+    rutas = rutas_pki(cfg)
+    validos = []
+    revocados = []
+
+    if os.path.isdir(rutas["issued"]):
+        for nombre in os.listdir(rutas["issued"]):
+            if nombre.endswith(".crt"):
+                cn = nombre[:-4]
+                if cn.lower() not in RESERVADOS:
+                    validos.append(cn)
+
+    if os.path.isfile(rutas["index"]):
+        with open(rutas["index"], "r", encoding="utf-8", errors="replace") as f:
+            for linea in f:
+                if not linea.startswith("R"):
+                    continue
+                partes = linea.split("\t")
+                if len(partes) < 6:
+                    continue
+                m = re.search(r'/CN=([^/\n]+)', partes[5])
+                if m and m.group(1).lower() not in RESERVADOS:
+                    revocados.append(m.group(1))
+
+    # Un CN revocado sigue teniendo su .crt en issued/ hasta que se reemite
+    revocados = sorted(set(revocados))
+    validos = sorted(set(validos) - set(revocados))
+
+    return {"validos": validos, "revocados": revocados}
+
+
+def cmd_revocar(cfg, cn):
+    rutas = rutas_pki(cfg)
+    respaldo = respaldar(rutas, cn)
+
+    correr_easyrsa(rutas, ["revoke", cn], entrada="yes\n")
+    correr_easyrsa(rutas, ["gen-crl"])
+
+    return {
+        "ok": True,
+        "accion": "revocar",
+        "cn": cn,
+        "respaldo": respaldo,
+        "requiere_reinicio": True,
+    }
+
+
+def cmd_restaurar(cfg, cn):
+    """
+    Reemite el certificado de un cliente revocado.
+
+    easyrsa no sabe "des-revocar": hay que sacar la entrada del índice y
+    retirar los archivos previos para poder emitir uno nuevo con el mismo CN.
+    Todo se respalda antes.
+    """
+    rutas = rutas_pki(cfg)
+    respaldo = respaldar(rutas, cn)
+
+    if os.path.isfile(rutas["index"]):
+        with open(rutas["index"], "r", encoding="utf-8", errors="replace") as f:
+            lineas = f.readlines()
+
+        marca = "/CN=%s" % cn
+        # Coincidencia exacta del CN: '/CN=juan' no debe borrar '/CN=juanito'
+        conservadas = [l for l in lineas if not re.search(
+            r'/CN=%s(?:/|$)' % re.escape(cn), l.rstrip("\n"))]
+
+        if len(conservadas) != len(lineas):
+            with open(rutas["index"], "w", encoding="utf-8") as f:
+                f.writelines(conservadas)
+        elif marca not in "".join(lineas):
+            error("'%s' no aparece en el índice de la PKI" % cn)
+
+    for ruta in (os.path.join(rutas["issued"], "%s.crt" % cn),
+                 os.path.join(rutas["private"], "%s.key" % cn),
+                 os.path.join(rutas["reqs"], "%s.req" % cn)):
+        if os.path.isfile(ruta):
+            os.remove(ruta)
+
+    correr_easyrsa(rutas, ["build-client-full", cn, "nopass"])
+    correr_easyrsa(rutas, ["gen-crl"])
+
+    return {
+        "ok": True,
+        "accion": "restaurar",
+        "cn": cn,
+        "respaldo": respaldo,
+        "requiere_reinicio": True,
+    }
+
+
+def cmd_crear(cfg, cn):
+    rutas = rutas_pki(cfg)
+
+    if os.path.isfile(os.path.join(rutas["issued"], "%s.crt" % cn)):
+        error("Ya existe un certificado para '%s'" % cn)
+
+    correr_easyrsa(rutas, ["build-client-full", cn, "nopass"])
+
+    return {"ok": True, "accion": "crear", "cn": cn, "requiere_reinicio": False}
+
+
+def cmd_ovpn(cfg, cn):
+    """Arma el .ovpn del cliente con todo embebido"""
+    rutas = rutas_pki(cfg)
+    cliente = cfg.get("cliente_ovpn") or {}
+
+    remote = cliente.get("remote_host")
+    if not remote:
+        error("Falta cliente_ovpn.remote_host en %s" % CONFIG)
+
+    crt = os.path.join(rutas["issued"], "%s.crt" % cn)
+    key = os.path.join(rutas["private"], "%s.key" % cn)
+
+    if not os.path.isfile(crt):
+        error("No existe certificado para '%s'" % cn)
+
+    partes = [
+        "client",
+        "dev tun",
+        "proto %s" % cliente.get("proto", "udp"),
+        "remote %s %s" % (remote, cliente.get("remote_puerto", 1194)),
+        "resolv-retry infinite",
+        "nobind",
+        "persist-key",
+        "persist-tun",
+        "remote-cert-tls server",
+        "cipher %s" % cliente.get("cipher", "AES-256-CBC"),
+        "verb 3",
+        "",
+        "<ca>", leer_pem(rutas["ca"]), "</ca>",
+        "<cert>", leer_pem(crt), "</cert>",
+        "<key>", leer_pem(key), "</key>",
+    ]
+
+    tls_crypt = cliente.get("tls_crypt")
+    if tls_crypt and os.path.isfile(tls_crypt):
+        partes += ["<tls-crypt>", leer_pem(tls_crypt), "</tls-crypt>"]
+
+    return {"ok": True, "cn": cn, "contenido": "\n".join(partes) + "\n"}
+
+
+def cmd_estado_servicio(cfg):
+    servicio = (cfg.get("openvpn") or {}).get("servicio", "openvpn@server")
+
+    if not re.match(r'^[A-Za-z0-9@._-]+$', servicio):
+        error("Nombre de servicio no válido en la configuración")
+
+    try:
+        proc = subprocess.run(
+            ["systemctl", "is-active", servicio],
+            capture_output=True, text=True, timeout=15,
+        )
+        estado = proc.stdout.strip() or proc.stderr.strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return {"activo": False, "estado": "desconocido: %s" % e, "servicio": servicio}
+
+    return {"activo": estado == "active", "estado": estado, "servicio": servicio}
+
+
+COMANDOS_CON_CN = {
+    "revocar": cmd_revocar,
+    "restaurar": cmd_restaurar,
+    "crear": cmd_crear,
+    "ovpn": cmd_ovpn,
+}
+
+COMANDOS_SIN_CN = {
+    "listar": cmd_listar,
+    "estado-servicio": cmd_estado_servicio,
+}
+
+
+def main():
+    if os.geteuid() != 0:
+        error("Este helper debe ejecutarse como root (vía sudo)")
+
+    if len(sys.argv) < 2:
+        error("Uso: ovpn-web-helper <listar|revocar|restaurar|crear|ovpn|estado-servicio> [CN]")
+
+    sub = sys.argv[1]
+    cfg = cargar_config()
+
+    if sub in COMANDOS_SIN_CN:
+        if len(sys.argv) != 2:
+            error("'%s' no acepta argumentos" % sub)
+        resultado = COMANDOS_SIN_CN[sub](cfg)
+
+    elif sub in COMANDOS_CON_CN:
+        if len(sys.argv) != 3:
+            error("Uso: ovpn-web-helper %s <CN>" % sub)
+        resultado = COMANDOS_CON_CN[sub](cfg, validar_cn(sys.argv[2]))
+
+    else:
+        error("Subcomando desconocido: %s" % sub)
+
+    json.dump(resultado, sys.stdout)
+    sys.stdout.write("\n")
+
+
+if __name__ == "__main__":
+    main()

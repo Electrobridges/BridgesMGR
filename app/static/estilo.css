@@ -1,0 +1,212 @@
+/* OpenVPN Manager Web — hoja de estilo única.
+   Sin CDNs ni fuentes remotas: la CSP del panel solo permite 'self'. */
+
+:root {
+  --fondo: #0f1419;
+  --fondo-2: #161d26;
+  --fondo-3: #1e2733;
+  --borde: #2a3644;
+  --texto: #dfe6ee;
+  --tenue: #8b9bb0;
+  --cian: #4dd0e1;
+  --verde: #4caf7d;
+  --amarillo: #e0b050;
+  --rojo: #e05561;
+  --azul: #5c9ded;
+  --radio: 8px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --fondo: #f4f6f9;
+    --fondo-2: #ffffff;
+    --fondo-3: #eef1f6;
+    --borde: #d3dae4;
+    --texto: #1c2530;
+    --tenue: #5d6c7f;
+    --cian: #0d7a8a;
+    --verde: #1f7a4d;
+    --amarillo: #96660a;
+    --rojo: #b3202c;
+    --azul: #1c5fb4;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.1rem; margin: 2rem 0 .75rem; color: var(--cian); }
+code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .9em; }
+a { color: var(--azul); }
+
+/* ------------------------------------------------------------- cabecera */
+.barra {
+  display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+  padding: .75rem 1.5rem;
+  background: var(--fondo-2);
+  border-bottom: 1px solid var(--borde);
+}
+.marca { display: flex; align-items: center; gap: .5rem; color: var(--cian); }
+.candado { font-size: 1.2rem; }
+.candado.grande { font-size: 2rem; }
+
+.nav { display: flex; gap: .25rem; flex-wrap: wrap; flex: 1; }
+.nav a {
+  padding: .4rem .8rem; border-radius: var(--radio);
+  color: var(--tenue); text-decoration: none;
+}
+.nav a:hover { background: var(--fondo-3); color: var(--texto); }
+.nav a.activo { background: var(--fondo-3); color: var(--cian); }
+
+.sesion { display: flex; align-items: center; gap: .6rem; }
+.usuario { font-weight: 600; }
+
+.rol {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+  padding: .15rem .45rem; border-radius: 999px; border: 1px solid var(--borde);
+}
+.rol-admin { color: var(--amarillo); border-color: var(--amarillo); }
+.rol-lector { color: var(--tenue); }
+
+/* -------------------------------------------------------------- contenido */
+.contenido { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+.tenue { color: var(--tenue); }
+.destacado { font-weight: 600; color: var(--cian); }
+.pequeno { font-size: .85rem; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ok { color: var(--verde); }
+.mal { color: var(--rojo); }
+
+/* --------------------------------------------------------------- tarjetas */
+.tarjetas {
+  display: grid; gap: 1rem; margin: 1rem 0;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.tarjeta {
+  display: flex; flex-direction: column; gap: .35rem;
+  padding: 1rem; background: var(--fondo-2);
+  border: 1px solid var(--borde); border-radius: var(--radio);
+}
+.tarjeta-etiqueta { font-size: .8rem; color: var(--tenue); }
+.tarjeta-valor { font-size: 1.5rem; font-weight: 600; }
+.tarjeta-valor.pequeno { font-size: 1rem; }
+
+/* ----------------------------------------------------------------- tablas */
+/* El contenedor scrollea, no la página: en móvil una tabla ancha no debe
+   provocar scroll horizontal de todo el documento. */
+.tabla-scroll { overflow-x: auto; margin: .5rem 0 1.5rem; }
+
+.tabla {
+  width: 100%; border-collapse: collapse;
+  background: var(--fondo-2);
+  border: 1px solid var(--borde); border-radius: var(--radio);
+}
+.tabla th, .tabla td {
+  padding: .55rem .75rem; text-align: left;
+  border-bottom: 1px solid var(--borde);
+}
+.tabla thead th {
+  font-size: .78rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--tenue); background: var(--fondo-3);
+}
+.tabla tbody tr:last-child td { border-bottom: none; }
+.tabla tbody tr:hover { background: var(--fondo-3); }
+.tabla-clave-valor th { width: 220px; color: var(--tenue); font-weight: 500; }
+.acciones { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+
+.etiqueta {
+  display: inline-block; font-size: .75rem; padding: .1rem .5rem;
+  border-radius: 999px; border: 1px solid currentColor;
+}
+.etiqueta-ok { color: var(--verde); }
+.etiqueta-mal { color: var(--rojo); }
+
+/* ---------------------------------------------------------------- botones */
+.boton {
+  display: inline-block; padding: .45rem .9rem;
+  background: var(--fondo-3); color: var(--texto);
+  border: 1px solid var(--borde); border-radius: var(--radio);
+  font: inherit; text-decoration: none; cursor: pointer;
+}
+.boton:hover { border-color: var(--cian); color: var(--cian); }
+.boton.pequeno { padding: .25rem .6rem; font-size: .85rem; }
+.boton-principal { background: var(--azul); border-color: var(--azul); color: #fff; }
+.boton-principal:hover { filter: brightness(1.1); color: #fff; }
+.boton-peligro:hover { border-color: var(--rojo); color: var(--rojo); }
+.boton-plano {
+  background: none; border: none; color: var(--tenue);
+  font: inherit; cursor: pointer; padding: .3rem;
+}
+.boton-plano:hover { color: var(--rojo); }
+
+/* --------------------------------------------------------------- formularios */
+.formulario { display: flex; flex-direction: column; gap: .5rem; }
+.formulario.en-fila { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.en-linea { display: inline-flex; gap: .3rem; align-items: center; margin: 0; }
+
+input, select {
+  padding: .45rem .6rem;
+  background: var(--fondo); color: var(--texto);
+  border: 1px solid var(--borde); border-radius: var(--radio);
+  font: inherit;
+}
+input:focus, select:focus { outline: 2px solid var(--azul); outline-offset: 1px; }
+label { font-size: .85rem; color: var(--tenue); }
+
+.panel-accion {
+  padding: 1rem; margin: 1rem 0;
+  background: var(--fondo-2);
+  border: 1px solid var(--borde); border-radius: var(--radio);
+}
+.panel-accion h2 { margin-top: 0; }
+
+/* ----------------------------------------------------------------- avisos */
+.avisos:empty { display: none; }
+.aviso {
+  padding: .65rem .9rem; margin: .5rem 0;
+  border-radius: var(--radio); border-left: 3px solid var(--tenue);
+  background: var(--fondo-2);
+}
+.aviso-ok { border-left-color: var(--verde); }
+.aviso-error { border-left-color: var(--rojo); }
+.aviso-aviso { border-left-color: var(--amarillo); }
+.aviso-info { border-left-color: var(--azul); }
+
+/* -------------------------------------------------------------------- log */
+.log {
+  max-height: 65vh; overflow: auto;
+  padding: .75rem; margin: 0;
+  background: var(--fondo-2);
+  border: 1px solid var(--borde); border-radius: var(--radio);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: .82rem; line-height: 1.45;
+  white-space: pre-wrap; word-break: break-word;
+}
+.log span { display: block; }
+.log-error { color: var(--rojo); }
+.log-aviso { color: var(--amarillo); }
+.log-conexion { color: var(--verde); }
+.log-info { color: var(--tenue); }
+
+/* ------------------------------------------------------------------ login */
+.login-caja {
+  max-width: 380px; margin: 8vh auto; padding: 2rem;
+  background: var(--fondo-2);
+  border: 1px solid var(--borde); border-radius: var(--radio);
+}
+.login-cabecera { text-align: center; margin-bottom: 1.5rem; }
+.login-cabecera h1 { margin: .5rem 0 .25rem; }
+.login-caja .boton { width: 100%; text-align: center; margin-top: .5rem; }
+
+@media (max-width: 700px) {
+  .barra { gap: .75rem; }
+  .contenido { padding: 1rem; }
+  .formulario.en-fila { flex-direction: column; align-items: stretch; }
+}

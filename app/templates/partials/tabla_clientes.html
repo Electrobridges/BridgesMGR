@@ -1,0 +1,70 @@
+{% for e in errores %}
+<div class="aviso aviso-error">{{ e }}</div>
+{% endfor %}
+
+{% if filas %}
+<div class="tabla-scroll">
+<table class="tabla">
+  <thead>
+    <tr>
+      <th>Cliente</th>
+      <th>Certificado</th>
+      <th>Conexión</th>
+      {% if es_admin %}<th>Acciones</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in filas %}
+    <tr>
+      <td class="destacado">{{ f.cn }}</td>
+      <td>
+        <span class="etiqueta etiqueta-{{ 'ok' if f.estado == 'valido' else 'mal' }}">
+          {{ 'válido' if f.estado == 'valido' else 'revocado' }}
+        </span>
+      </td>
+      <td>
+        {% if f.conectado %}
+        <span class="etiqueta etiqueta-ok">conectado</span>
+        {% else %}
+        <span class="tenue">—</span>
+        {% endif %}
+      </td>
+      {% if es_admin %}
+      <td class="acciones">
+        {% if f.estado == 'valido' %}
+        <a class="boton pequeno" href="/clientes/{{ f.cn }}/ovpn">Descargar .ovpn</a>
+        <button class="boton boton-peligro pequeno"
+                hx-post="/clientes/{{ f.cn }}/revocar"
+                hx-target="#avisos"
+                hx-swap="innerHTML"
+                hx-confirm="¿Revocar el acceso de {{ f.cn }}? Su certificado dejará de servir.">
+          Revocar
+        </button>
+        {% else %}
+        <button class="boton pequeno"
+                hx-post="/clientes/{{ f.cn }}/restaurar"
+                hx-target="#avisos"
+                hx-swap="innerHTML"
+                hx-confirm="Se reemitirá el certificado de {{ f.cn }}. El .ovpn anterior dejará de funcionar. ¿Continuar?">
+          Restaurar
+        </button>
+        {% endif %}
+        {% if f.conectado %}
+        <button class="boton boton-peligro pequeno"
+                hx-post="/clientes/{{ f.cn }}/desconectar"
+                hx-target="#avisos"
+                hx-swap="innerHTML"
+                hx-confirm="¿Desconectar a {{ f.cn }}?">
+          Desconectar
+        </button>
+        {% endif %}
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% elif not errores %}
+<p class="tenue">No hay certificados de cliente emitidos todavía.</p>
+{% endif %}

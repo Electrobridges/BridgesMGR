@@ -1,0 +1,49 @@
+# OpenVPN Manager Web — configuración
+#
+# Destino: /etc/ovpn-web/config.yaml   (root:ovpnweb, modo 0640)
+#
+# Lo leen dos procesos: el panel (usuario ovpnweb) y el helper privilegiado
+# (root). El helper solo acepta rutas desde aquí, nunca por argumento; por eso
+# este archivo debe pertenecer a root y no ser escribible por ovpnweb.
+
+servidor:
+  # IP en la que escucha el panel. Ponla en la IP de la LAN del servidor,
+  # nunca en 0.0.0.0 si la máquina tiene una pata en internet.
+  host_bind: "192.168.1.192"
+  puerto: 55443
+  tls_cert: "/etc/ovpn-web/tls/cert.pem"
+  tls_key: "/etc/ovpn-web/tls/key.pem"
+
+openvpn:
+  log_path: "/var/log/openvpn/openvpn.log"
+  # Ojo: el nombre depende de tu server.conf. Si pusiste
+  # 'status /var/log/openvpn/status.log', va sin el prefijo 'openvpn-'.
+  status_path: "/var/log/openvpn/status.log"
+  # 127.0.0.1 explícito: 'localhost' puede resolver a IPv6 y el management
+  # de OpenVPN solo escucha en IPv4.
+  mgmt_host: "127.0.0.1"
+  mgmt_port: 7505
+  easyrsa_path: "/etc/openvpn/easy-rsa"
+  servicio: "openvpn@server"
+
+cliente_ovpn:
+  # Dirección por la que los clientes llegan al servidor VPN desde fuera.
+  # No es la IP del panel: es la pública o el dominio dinámico.
+  remote_host: "vpn.ejemplo.com"
+  remote_puerto: 1194
+  proto: "udp"
+  cipher: "AES-256-CBC"
+  # Si tu server.conf usa tls-crypt, apunta aquí a la clave para embeberla
+  # en los .ovpn. Déjalo vacío si no usas tls-crypt.
+  tls_crypt: "/etc/openvpn/tls-crypt.key"
+
+seguridad:
+  helper: "/usr/local/sbin/ovpn-web-helper"
+  usar_sudo: true
+  db_path: "/var/lib/ovpn-web/ovpn-web.db"
+  duracion_sesion_min: 60
+  max_intentos_login: 5
+  bloqueo_login_min: 15
+  # Solo desactívalo si sirves el panel por HTTP plano (no recomendado):
+  # con true la cookie de sesión no viaja fuera de HTTPS.
+  cookie_segura: true

@@ -1,0 +1,16 @@
+# El repo se edita en Windows pero se despliega en Linux. Sin esto, git
+# convertiría a CRLF y en el servidor fallaría con "bad interpreter: /bin/bash^M".
+* text=auto eol=lf
+
+# Archivos que SIEMPRE deben tener finales LF, pase lo que pase
+deploy/install.sh        text eol=lf
+deploy/ovpn-web-helper   text eol=lf
+deploy/ovpn-web.service  text eol=lf
+deploy/ovpnweb.sudoers   text eol=lf
+*.sh                     text eol=lf
+*.py                     text eol=lf
+*.yaml                   text eol=lf
+
+# Binarios
+*.png binary
+*.jpg binary

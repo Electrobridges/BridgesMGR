@@ -1,0 +1,16 @@
+# /etc/sudoers.d/ovpnweb  —  modo 0440, propietario root:root
+#
+# El panel corre como 'ovpnweb' sin privilegios. Esta es la ÚNICA cosa que
+# puede ejecutar como root, y es un script cerrado con seis subcomandos que
+# revalida sus argumentos y no acepta rutas desde fuera.
+#
+# Deliberadamente NO se autoriza easyrsa directamente: 'easyrsa' acepta
+# opciones como --pki-dir y --vars, así que autorizarlo con comodines
+# equivaldría a dar root.
+#
+# Instalar con:  visudo -c -f deploy/ovpnweb.sudoers && install -m 0440 ...
+
+Defaults:ovpnweb !requiretty
+Defaults:ovpnweb secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+ovpnweb ALL=(root) NOPASSWD: /usr/local/sbin/ovpn-web-helper

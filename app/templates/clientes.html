@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set activo = 'clientes' %}
+{% block titulo %}Clientes VPN — OpenVPN Manager{% endblock %}
+
+{% block contenido %}
+<h1>Clientes VPN</h1>
+
+{% if es_admin %}
+<section class="panel-accion">
+  <h2>Crear cliente</h2>
+  <form class="formulario en-fila"
+        hx-post="/clientes"
+        hx-target="#avisos"
+        hx-swap="innerHTML">
+    <input type="text" name="cn" required maxlength="64"
+           placeholder="nombre-del-cliente"
+           pattern="[A-Za-z0-9][A-Za-z0-9._\-]*[A-Za-z0-9]"
+           title="Letras, números, punto, guion y guion bajo">
+    <button type="submit" class="boton boton-principal">Crear y emitir certificado</button>
+  </form>
+  <p class="tenue">
+    Se emite sin contraseña (<code>nopass</code>) para que el perfil .ovpn funcione tal cual.
+  </p>
+</section>
+{% else %}
+<p class="aviso aviso-info">
+  Tu rol es <strong>lector</strong>: puedes consultar el estado, pero no crear, revocar ni desconectar.
+</p>
+{% endif %}
+
+<div id="tabla-clientes"
+     hx-get="/clientes/tabla"
+     hx-trigger="load, clientes-actualizados from:body, every 30s"
+     hx-swap="innerHTML">
+  <p class="tenue">Cargando…</p>
+</div>
+{% endblock %}

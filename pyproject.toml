@@ -1,0 +1,42 @@
+[project]
+name = "openvpn-manager-web"
+version = "0.1.0"
+description = "Panel web de administración para servidores OpenVPN"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Daniel Puentes", email = "Contact@Electrobridges.com" }]
+keywords = ["openvpn", "vpn", "panel", "web", "fastapi", "sysadmin"]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Framework :: FastAPI",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Networking",
+  "Topic :: System :: Systems Administration",
+]
+
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "jinja2>=3.1",
+  "python-multipart>=0.0.9",
+  "argon2-cffi>=23.1",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+
+[project.urls]
+Source = "https://github.com/Electrobridges/OpenVPN-Manager-Web"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# -p no:cacheprovider evita ensuciar el repo con .pytest_cache
+addopts = "-q --strict-markers"
+filterwarnings = ["error::DeprecationWarning:app.*"]

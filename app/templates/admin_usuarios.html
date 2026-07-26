@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% set activo = 'usuarios' %}
+{% block titulo %}Usuarios del panel — OpenVPN Manager{% endblock %}
+
+{% block contenido %}
+<h1>Usuarios del panel</h1>
+<p class="tenue">
+  Cuentas que entran a este panel. No confundir con los
+  <a href="/clientes">clientes VPN</a>.
+</p>
+
+<section class="panel-accion">
+  <h2>Nuevo usuario</h2>
+  <form class="formulario en-fila"
+        hx-post="/admin/usuarios"
+        hx-target="#avisos"
+        hx-swap="innerHTML">
+    <input type="text" name="usuario" required maxlength="64" placeholder="usuario"
+           autocomplete="off">
+    <input type="password" name="password" required minlength="12"
+           placeholder="contraseña (mín. 12)" autocomplete="new-password">
+    <select name="rol" aria-label="Rol">
+      <option value="lector">lector — solo consulta</option>
+      <option value="admin">admin — puede modificar</option>
+    </select>
+    <button type="submit" class="boton boton-principal">Crear</button>
+  </form>
+</section>
+
+<div id="tabla-usuarios"
+     hx-get="/admin/usuarios/tabla"
+     hx-trigger="load, usuarios-actualizados from:body"
+     hx-swap="innerHTML">
+  <p class="tenue">Cargando…</p>
+</div>
+{% endblock %}

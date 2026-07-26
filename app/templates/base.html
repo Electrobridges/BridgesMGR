@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}OpenVPN Manager{% endblock %}</title>
+  <link rel="stylesheet" href="/static/estilo.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+{# El token CSRF viaja en todas las peticiones HTMX. Una web ajena no puede
+   poner cabeceras propias, así que esto corta el CSRF de raíz. #}
+<body{% if sesion %} hx-headers='{"X-CSRF-Token": "{{ sesion.csrf }}"}'{% endif %}>
+
+{% if sesion %}
+<header class="barra">
+  <div class="marca">
+    <span class="candado">&#128274;</span>
+    <strong>OpenVPN Manager</strong>
+  </div>
+
+  <nav class="nav">
+    <a href="/" class="{{ 'activo' if activo == 'dashboard' }}">Panel</a>
+    <a href="/conexiones" class="{{ 'activo' if activo == 'conexiones' }}">Conexiones</a>
+    <a href="/clientes" class="{{ 'activo' if activo == 'clientes' }}">Clientes VPN</a>
+    <a href="/logs" class="{{ 'activo' if activo == 'logs' }}">Logs</a>
+    <a href="/admin/auditoria" class="{{ 'activo' if activo == 'auditoria' }}">Auditoría</a>
+    {% if sesion.rol == 'admin' %}
+    <a href="/admin/usuarios" class="{{ 'activo' if activo == 'usuarios' }}">Usuarios</a>
+    {% endif %}
+    <a href="/configuracion" class="{{ 'activo' if activo == 'configuracion' }}">Configuración</a>
+  </nav>
+
+  <div class="sesion">
+    <span class="usuario">{{ sesion.usuario }}</span>
+    <span class="rol rol-{{ sesion.rol }}">{{ sesion.rol }}</span>
+    <form method="post" action="/logout" class="en-linea">
+      <button type="submit" class="boton-plano">Salir</button>
+    </form>
+  </div>
+</header>
+{% endif %}
+
+<main class="contenido">
+  {# Destino de los avisos que devuelven las acciones HTMX #}
+  <div id="avisos" class="avisos"></div>
+
+  {% block contenido %}{% endblock %}
+</main>
+
+</body>
+</html>

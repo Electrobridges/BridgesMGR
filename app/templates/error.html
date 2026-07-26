@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titulo %}Error {{ codigo }} — OpenVPN Manager{% endblock %}
+
+{% block contenido %}
+<div class="login-caja">
+  <h1>Error {{ codigo }}</h1>
+  <p>{{ mensaje }}</p>
+  <p><a class="boton" href="/">Volver al panel</a></p>
+</div>
+{% endblock %}

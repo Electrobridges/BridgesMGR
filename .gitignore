@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Pruebas
+.pytest_cache/
+.coverage
+htmlcov/
+
+# HTMX se descarga en la instalación (install.sh), no se versiona
+app/static/htmx.min.js
+
+# Configuración real del servidor: contiene rutas y ajustes del entorno
+config.yaml
+config.local.yaml
+!deploy/config.ejemplo.yaml
+
+# Base de datos del panel: usuarios, hashes de contraseña y sesiones
+*.db
+*.db-journal
+*.sqlite3
+
+# Certificados y claves (IMPORTANTE: nunca subir a git)
+*.crt
+*.key
+*.pem
+*.ovpn
+pki/
+tls/
+
+# Logs
+*.log
+
+# Notas de trabajo locales
+RESUMEN_SESION.md
+
+# IDEs / SO
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

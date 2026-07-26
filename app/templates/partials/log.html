@@ -1,0 +1,8 @@
+{% if error %}
+<div class="aviso aviso-error">{{ error }}</div>
+{% elif entradas %}
+<pre class="log">{% for e in entradas %}<span class="log-{{ e.nivel }}">{{ e.texto }}</span>
+{% endfor %}</pre>
+{% else %}
+<p class="tenue">Sin líneas que mostrar con ese filtro.</p>
+{% endif %}

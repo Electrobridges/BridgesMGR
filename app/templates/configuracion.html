@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% set activo = 'configuracion' %}
+{% block titulo %}Configuración — OpenVPN Manager{% endblock %}
+
+{% block contenido %}
+<h1>Configuración</h1>
+<p class="tenue">
+  Solo lectura. Para cambiarla edita <code>/etc/ovpn-web/config.yaml</code> y reinicia
+  <code>ovpn-web</code>.
+</p>
+
+<h2>Servidor OpenVPN</h2>
+<div class="tabla-scroll">
+<table class="tabla tabla-clave-valor">
+  <tbody>
+    <tr><th>Servicio</th>
+        <td><code>{{ servicio.servicio }}</code>
+            <span class="etiqueta etiqueta-{{ 'ok' if servicio.activo else 'mal' }}">{{ servicio.estado }}</span>
+        </td></tr>
+    <tr><th>Log</th><td><code>{{ openvpn.log_path }}</code>
+        {% if tamano_log is not none %}<span class="tenue">({{ format_bytes(tamano_log) }})</span>{% endif %}
+        </td></tr>
+    <tr><th>Status</th><td><code>{{ openvpn.status_path }}</code></td></tr>
+    <tr><th>Management</th><td><code>{{ openvpn.mgmt_host }}:{{ openvpn.mgmt_port }}</code></td></tr>
+    <tr><th>EasyRSA</th><td><code>{{ openvpn.easyrsa_path }}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Perfiles .ovpn generados</h2>
+<div class="tabla-scroll">
+<table class="tabla tabla-clave-valor">
+  <tbody>
+    <tr><th>Remote</th><td><code>{{ cliente.remote_host }}:{{ cliente.remote_puerto }}</code> ({{ cliente.proto }})</td></tr>
+    <tr><th>Cipher</th><td><code>{{ cliente.cipher }}</code></td></tr>
+    <tr><th>tls-crypt</th><td><code>{{ cliente.tls_crypt }}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Panel</h2>
+<div class="tabla-scroll">
+<table class="tabla tabla-clave-valor">
+  <tbody>
+    <tr><th>Escucha en</th><td><code>{{ servidor.host_bind }}:{{ servidor.puerto }}</code></td></tr>
+    <tr><th>Certificado TLS</th><td><code>{{ servidor.tls_cert }}</code></td></tr>
+    <tr><th>Helper privilegiado</th><td><code>{{ seguridad.helper }}</code></td></tr>
+    <tr><th>Duración de sesión</th><td>{{ seguridad.duracion_sesion_min }} minutos</td></tr>
+    <tr><th>Bloqueo de login</th><td>{{ seguridad.max_intentos_login }} intentos → {{ seguridad.bloqueo_login_min }} min</td></tr>
+  </tbody>
+</table>
+</div>
+{% endblock %}

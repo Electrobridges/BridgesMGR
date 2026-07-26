@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set activo = 'conexiones' %}
+{% block titulo %}Conexiones — OpenVPN Manager{% endblock %}
+
+{% block contenido %}
+<h1>Conexiones activas</h1>
+<p class="tenue">La tabla se actualiza sola cada 10 segundos.</p>
+
+{# hx-trigger combina la carga inicial, el refresco periódico y el evento que
+   emiten las acciones (desconectar) para recargar sin esperar al intervalo #}
+<div id="tabla-conexiones"
+     hx-get="/conexiones/tabla"
+     hx-trigger="load, every 10s, clientes-actualizados from:body"
+     hx-swap="innerHTML">
+  <p class="tenue">Cargando…</p>
+</div>
+{% endblock %}

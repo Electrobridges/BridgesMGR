@@ -1,0 +1,42 @@
+[Unit]
+Description=OpenVPN Manager Web — panel de administración
+Documentation=https://github.com/Electrobridges/OpenVPN-Manager-Web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ovpnweb
+Group=ovpnweb
+WorkingDirectory=/opt/ovpn-web
+Environment=OVPN_WEB_CONFIG=/etc/ovpn-web/config.yaml
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/ovpn-web/venv/bin/python -m app.servidor
+Restart=on-failure
+RestartSec=5
+
+# --- Aislamiento -------------------------------------------------------
+# NoNewPrivileges NO se puede activar: el panel llama a sudo para ejecutar
+# /usr/local/sbin/ovpn-web-helper, y sudo es setuid. Activarlo rompería toda
+# la gestión de certificados. El resto de restricciones compensan.
+NoNewPrivileges=false
+
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ovpn-web
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

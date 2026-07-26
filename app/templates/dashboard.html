@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% set activo = 'dashboard' %}
+{% block titulo %}Panel — OpenVPN Manager{% endblock %}
+
+{% block contenido %}
+<h1>Panel</h1>
+
+{% for e in errores %}
+<div class="aviso aviso-error">{{ e }}</div>
+{% endfor %}
+
+<section class="tarjetas">
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Conectados ahora</span>
+    <span class="tarjeta-valor">{{ resumen.conectados }}</span>
+  </div>
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Certificados activos</span>
+    <span class="tarjeta-valor">{{ certificados.validos | length }}</span>
+  </div>
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Revocados</span>
+    <span class="tarjeta-valor">{{ certificados.revocados | length }}</span>
+  </div>
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Servicio</span>
+    <span class="tarjeta-valor {{ 'ok' if servicio.activo else 'mal' }}">
+      {{ 'activo' if servicio.activo else servicio.estado }}
+    </span>
+  </div>
+</section>
+
+<section class="tarjetas">
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Descargado</span>
+    <span class="tarjeta-valor">{{ format_bytes(resumen.bytes_recv) }}</span>
+  </div>
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Subido</span>
+    <span class="tarjeta-valor">{{ format_bytes(resumen.bytes_sent) }}</span>
+  </div>
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Tráfico total</span>
+    <span class="tarjeta-valor">{{ format_bytes(resumen.bytes_total) }}</span>
+  </div>
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Fuente de datos</span>
+    <span class="tarjeta-valor pequeno">{{ fuente or 'sin datos' }}</span>
+  </div>
+</section>
+
+<h2>Top por tráfico</h2>
+{% if top %}
+<div class="tabla-scroll">
+<table class="tabla">
+  <thead>
+    <tr><th>#</th><th>Cliente</th><th>Descarga</th><th>Subida</th><th>Total</th></tr>
+  </thead>
+  <tbody>
+    {% for c in top %}
+    <tr>
+      <td class="tenue">{{ loop.index }}</td>
+      <td class="destacado">{{ c.user }}</td>
+      <td class="num">{{ format_bytes(c.bytes_recv) }}</td>
+      <td class="num">{{ format_bytes(c.bytes_sent) }}</td>
+      <td class="num">{{ format_bytes(c.bytes_recv + c.bytes_sent) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="tenue">No hay clientes conectados.</p>
+{% endif %}
+{% endblock %}

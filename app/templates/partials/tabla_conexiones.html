@@ -1,0 +1,49 @@
+{% for e in errores %}
+<div class="aviso aviso-error">{{ e }}</div>
+{% endfor %}
+
+{% if conexiones %}
+<p class="tenue">
+  {{ conexiones | length }} conexión(es) &middot; fuente: {{ fuente }}
+</p>
+<div class="tabla-scroll">
+<table class="tabla">
+  <thead>
+    <tr>
+      <th>Cliente</th>
+      <th>IP real</th>
+      <th>IP virtual</th>
+      <th>Descarga</th>
+      <th>Subida</th>
+      <th>Conectado desde</th>
+      {% if puede_desconectar %}<th></th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in conexiones %}
+    <tr>
+      <td class="destacado">{{ c.user }}</td>
+      <td>{{ c.real_ip }}</td>
+      <td>{{ c.virtual_ip }}</td>
+      <td class="num">{{ format_bytes(c.bytes_recv) }}</td>
+      <td class="num">{{ format_bytes(c.bytes_sent) }}</td>
+      <td class="tenue">{{ c.connected_since }}</td>
+      {% if puede_desconectar %}
+      <td>
+        <button class="boton boton-peligro pequeno"
+                hx-post="/clientes/{{ c.user }}/desconectar"
+                hx-target="#avisos"
+                hx-swap="innerHTML"
+                hx-confirm="¿Desconectar a {{ c.user }}? Podrá volver a conectarse enseguida.">
+          Desconectar
+        </button>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% elif not errores %}
+<p class="tenue">No hay clientes conectados ahora mismo.</p>
+{% endif %}

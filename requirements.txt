@@ -1,0 +1,17 @@
+# OpenVPN Manager Web — dependencias
+#
+# Se fijan mínimos, no versiones exactas: es un panel que se instala en
+# servidores con distintas versiones de Debian.
+
+fastapi>=0.110
+uvicorn[standard]>=0.27
+jinja2>=3.1
+python-multipart>=0.0.9   # necesario para los formularios (Form(...))
+argon2-cffi>=23.1         # hashing de contraseñas
+PyYAML>=6.0               # lectura de config.yaml
+
+# Dependencias de la librería estándar (sin instalar):
+#   sqlite3    usuarios, sesiones y auditoría
+#   socket     management interface de OpenVPN
+#   subprocess llamada al helper privilegiado
+#   secrets    tokens de sesión y CSRF

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar — OpenVPN Manager{% endblock %}
+
+{% block contenido %}
+<div class="login-caja">
+  <div class="login-cabecera">
+    <span class="candado grande">&#128274;</span>
+    <h1>OpenVPN Manager</h1>
+    <p class="tenue">Panel de administración del servidor</p>
+  </div>
+
+  {% if error %}
+  <div class="aviso aviso-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/login" class="formulario">
+    <label for="usuario">Usuario</label>
+    <input type="text" id="usuario" name="usuario" required autofocus
+           autocomplete="username" maxlength="64">
+
+    <label for="password">Contraseña</label>
+    <input type="password" id="password" name="password" required
+           autocomplete="current-password">
+
+    <button type="submit" class="boton boton-principal">Entrar</button>
+  </form>
+</div>
+{% endblock %}
