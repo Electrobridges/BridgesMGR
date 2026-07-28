@@ -84,6 +84,24 @@ dijera. Con `--universal` el lock lleva marcadores (`sys_platform != 'win32'`)
 y cubre las dos. Hay una prueba y una comprobación en CI que lo vigilan; pasó
 de verdad mientras se montaba esto.
 
+**Genéralo en Linux, aunque desarrolles en Windows.** `--universal` quita la
+dependencia de la *plataforma* del resultado, pero no la del entorno donde se
+resuelve: con la misma versión de uv y el mismo comando, Windows y Linux dan
+locks distintos —Linux desdobla paquetes por versión de Python
+(`annotated-types==0.7.0 ; python_full_version < '3.10'` y otra para arriba) y
+Windows fija una sola—. Son 384 líneas de diferencia, y la CI lo detecta al
+regenerarlo.
+
+El que vale es el de **Linux**, porque es donde se instala. Usa WSL, un
+contenedor o la propia máquina de pruebas:
+
+```bash
+# desde WSL o cualquier Linux, en la raíz del repo
+python3 -m venv /tmp/uv && /tmp/uv/bin/pip install -q uv
+/tmp/uv/bin/uv pip compile requirements.in --universal --python-version 3.9 \
+    --generate-hashes --no-header -o requirements.txt
+```
+
 **`--generate-hashes`, siempre.** Sin hashes el lock da reproducibilidad pero
 no integridad: un espejo de PyPI que devuelva otro artefacto con la misma
 versión se instala tan tranquilo. Con ellos, `pip install --require-hashes`

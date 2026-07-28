@@ -125,8 +125,14 @@ jobs:
       - name: Finales de línea
         # Un CRLF en deploy/ llega al servidor como
         # "bad interpreter: /bin/bash^M" y cuesta media hora entenderlo.
+        #
+        # Se listan los archivos con 'git ls-files' y no con un grep recursivo
+        # sobre la carpeta: el paso anterior compila el helper y deja un .pyc
+        # en deploy/__pycache__, que es binario y lo detectaba como CRLF. Lo
+        # que importa es lo que hay en el repositorio, no lo que la propia CI
+        # haya dejado por el camino.
         run: |
-          con_crlf=$(grep -rlU $'\r' deploy/ || true)
+          con_crlf=$(git ls-files -z deploy/ | xargs -0 grep -lU $'\r' || true)
           if [ -n "$con_crlf" ]; then
             echo "Archivos con CRLF (deben ser LF):"
             echo "$con_crlf"
