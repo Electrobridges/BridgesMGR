@@ -1,2 +1,3 @@
-{# Fragmento devuelto por las acciones HTMX; se inserta en #avisos #}
-<div class="aviso aviso-{{ tipo }}">{{ mensaje }}</div>
+{# Fragmento devuelto por las acciones HTMX; se inserta en #avisos.
+   Un error interrumpe (role="alert"); el resto se anuncia sin cortar. #}
+<div class="aviso aviso-{{ tipo }}"{% if tipo == 'error' %} role="alert"{% endif %}>{{ mensaje }}</div>

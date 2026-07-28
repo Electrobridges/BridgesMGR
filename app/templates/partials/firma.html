@@ -1,0 +1,17 @@
+{# Firma de ElectroBridges bajo el formulario de entrada.
+
+   Conserva el patrón de la marca del sitio: 'Electro' en texto normal,
+   'Bridges' en cian, y 'Solutions' como línea secundaria en versalitas.
+
+   rel="noopener noreferrer": abre fuera, así que ni le damos acceso a
+   window.opener ni le contamos de dónde viene. Nótese que desde una LAN sin
+   salida a internet el enlace simplemente no llevará a ninguna parte, y es lo
+   esperado — este panel no debe estar expuesto. #}
+<p class="firma">
+  <span class="firma-por">By</span>
+  <a href="https://electrobridges.com" target="_blank" rel="noopener noreferrer"
+     aria-label="ElectroBridges Solutions — abre en una pestaña nueva">
+    <span class="firma-marca">Electro<span>Bridges</span></span>
+    <span class="firma-sub">Solutions</span>
+  </a>
+</p>

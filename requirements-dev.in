@@ -1,0 +1,14 @@
+# Dependencias de desarrollo: lo de producción más lo que hace falta para probar.
+#
+# Genera requirements-dev.txt con:
+#
+#     uv pip compile requirements-dev.in --universal --python-version 3.9 \
+#         --generate-hashes --no-header -o requirements-dev.txt
+#
+# No edites requirements-dev.txt a mano: se regenera y perderías el cambio.
+
+-r requirements.in
+
+pytest>=8.0,<9.0
+httpx>=0.27,<1.0     # cliente de pruebas de FastAPI (TestClient)
+uv>=0.5,<1.0         # genera los locks; no se instala en el servidor

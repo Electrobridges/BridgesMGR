@@ -1,35 +1,69 @@
 /* OpenVPN Manager Web — hoja de estilo única.
-   Sin CDNs ni fuentes remotas: la CSP del panel solo permite 'self'. */
+   Sistema completo en DESIGN.md. Sin CDNs ni fuentes remotas: la CSP es 'self'.
 
-:root {
-  --fondo: #0f1419;
-  --fondo-2: #161d26;
-  --fondo-3: #1e2733;
-  --borde: #2a3644;
-  --texto: #dfe6ee;
-  --tenue: #8b9bb0;
-  --cian: #4dd0e1;
-  --verde: #4caf7d;
-  --amarillo: #e0b050;
-  --rojo: #e05561;
-  --azul: #5c9ded;
-  --radio: 8px;
+   ── CONTRATO DE DIRECCIÓN ──────────────────────────────────────────────
+   THESIS: un puente de mando a oscuras donde solo brillan los instrumentos.
+     Rechaza el panel-tarjetero de fondo claro y sombras blandas.
+   OWN-WORLD: navy abismo/superficie/elevado separados por líneas de 1px,
+     cian de instrumento escaso, Poppins 800 con tracking -0.03em, píldoras
+     de 999px. Ni un gradiente ni una sombra en reposo.
+   STORY: el operador llega con una tarea concreta —ver quién está dentro,
+     dar de alta, cortar un acceso— y la resuelve sin que nada compita por
+     su atención.
+   FIRST VIEWPORT: barra navy con la marca a la izquierda y la navegación
+     subrayándose en cian; debajo, la rejilla de cifras en 800 tabular.
+   FORM: consola de instrumentos. Dirección fijada por el brief del usuario
+     (electrobridges.com), sin tirada de concepto.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* ------------------------------------------------------------------ fuentes */
+/* Poppins autoalojada: es la firma tipográfica de Electrobridges y la CSP
+   'self' impide traerla de Google Fonts. */
+@font-face {
+  font-family: 'Poppins';
+  src: url('/static/fuentes/Poppins-Regular.ttf') format('truetype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('/static/fuentes/Poppins-SemiBold.ttf') format('truetype');
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('/static/fuentes/Poppins-ExtraBold.ttf') format('truetype');
+  font-weight: 800; font-style: normal; font-display: swap;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --fondo: #f4f6f9;
-    --fondo-2: #ffffff;
-    --fondo-3: #eef1f6;
-    --borde: #d3dae4;
-    --texto: #1c2530;
-    --tenue: #5d6c7f;
-    --cian: #0d7a8a;
-    --verde: #1f7a4d;
-    --amarillo: #96660a;
-    --rojo: #b3202c;
-    --azul: #1c5fb4;
-  }
+:root {
+  --fondo: #081731;
+  --fondo-2: #0b1b34;
+  --fondo-3: #0f2544;
+  --tinta: #03132b;
+
+  --linea: rgba(255, 255, 255, .08);
+  --linea-fuerte: rgba(255, 255, 255, .14);
+
+  --texto: #ffffff;
+  --texto-2: rgba(255, 255, 255, .72);
+  --texto-3: rgba(255, 255, 255, .62);
+  --tenue: rgba(255, 255, 255, .5);
+
+  --cian: #10c4d8;
+  --cian-claro: #83ebf5;
+
+  --verde: #5bf1a8;
+  --amarillo: #fbbf24;
+  --rojo: #f87171;
+  --azul: #60a5fa;
+
+  --radio: 12px;
+  --radio-sm: 8px;
+  --radio-boton: 14px;
+
+  --foco: 0 0 0 3px rgba(16, 196, 216, .35);
+  --tipo: 'Poppins', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -37,176 +71,430 @@
 body {
   margin: 0;
   background: var(--fondo);
-  color: var(--texto);
-  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--texto-2);
+  font: 400 .9375rem/1.55 var(--tipo);
+  -webkit-font-smoothing: antialiased;
 }
 
-h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
-h2 { font-size: 1.1rem; margin: 2rem 0 .75rem; color: var(--cian); }
-code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .9em; }
-a { color: var(--azul); }
+h1 {
+  font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em;
+  line-height: 1.1; color: var(--texto); margin: 0 0 .35rem;
+}
+h2 {
+  font-size: 1.05rem; font-weight: 600; letter-spacing: -.01em;
+  color: var(--cian-claro); margin: 2rem 0 .75rem;
+}
+code { font-family: var(--mono); font-size: .9em; color: var(--texto-2); }
+a { color: var(--cian); }
 
-/* ------------------------------------------------------------- cabecera */
+/* El anillo de foco es la única sombra del sistema: dice dónde está el teclado. */
+:focus-visible { outline: none; box-shadow: var(--foco); border-radius: var(--radio-sm); }
+
+/* ------------------------------------------------------------------ cabecera */
 .barra {
-  display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
-  padding: .75rem 1.5rem;
+  display: flex; align-items: center; gap: 1.75rem; flex-wrap: wrap;
+  padding: .85rem 1.5rem;
   background: var(--fondo-2);
-  border-bottom: 1px solid var(--borde);
+  border-bottom: 1px solid var(--linea);
 }
-.marca { display: flex; align-items: center; gap: .5rem; color: var(--cian); }
-.candado { font-size: 1.2rem; }
-.candado.grande { font-size: 2rem; }
+/* La marca lleva al inicio; sin subrayado porque ya es un bloque reconocible. */
+.marca {
+  display: flex; align-items: center; gap: .55rem;
+  color: var(--texto); text-decoration: none;
+}
+.marca strong { font-weight: 800; letter-spacing: -.02em; }
+/* El patrón de la marca: 'Bridges' en blanco, 'MGR' en cian. */
+.marca strong span, .acento { color: var(--cian); }
 
-.nav { display: flex; gap: .25rem; flex-wrap: wrap; flex: 1; }
+/* El escudo llega como PNG de 960px y lo reduce el navegador. width/height van
+   también en el HTML para que el diseño no salte mientras carga. */
+.marca-logo { display: block; width: 30px; height: 30px; }
+.marca-logo.grande { width: 76px; height: 76px; margin: 0 auto .25rem; }
+
+.nav { display: flex; gap: 1.5rem; flex-wrap: wrap; flex: 1; }
+/* El subrayado que crece es el gesto que hereda del sitio de marca. */
 .nav a {
-  padding: .4rem .8rem; border-radius: var(--radio);
-  color: var(--tenue); text-decoration: none;
+  position: relative; padding: .35rem 0;
+  font-size: .9rem; font-weight: 600;
+  color: var(--texto-2); text-decoration: none;
 }
-.nav a:hover { background: var(--fondo-3); color: var(--texto); }
-.nav a.activo { background: var(--fondo-3); color: var(--cian); }
+.nav a::after {
+  content: ''; position: absolute; left: 0; bottom: -.3rem;
+  width: 100%; height: 2px; border-radius: 999px;
+  background: var(--cian);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform .25s ease;
+}
+.nav a:hover, .nav a:focus-visible { color: var(--texto); }
+.nav a:hover::after, .nav a:focus-visible::after { transform: scaleX(1); }
+.nav a.activo { color: var(--texto); }
+.nav a.activo::after { transform: scaleX(1); }
 
-.sesion { display: flex; align-items: center; gap: .6rem; }
-.usuario { font-weight: 600; }
+.sesion { display: flex; align-items: center; gap: .7rem; }
+/* El nombre lleva al perfil. Sin subrayado en reposo para no competir con la
+   navegación; el cian del hover es la señal de que es un enlace. */
+.usuario { font-weight: 600; color: var(--texto); text-decoration: none; }
+.usuario:hover, .usuario.activo { color: var(--cian); }
 
 .rol {
-  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
-  padding: .15rem .45rem; border-radius: 999px; border: 1px solid var(--borde);
+  font-size: .72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .12em; padding: .15rem .55rem; border-radius: 999px;
+  border: 1px solid currentColor;
 }
-.rol-admin { color: var(--amarillo); border-color: var(--amarillo); }
-.rol-lector { color: var(--tenue); }
+/* Los tres escalones, en escala descendente de atención. El cian es el color
+   más escaso del sistema y aquí lo lleva la cuenta más escasa: hay una. */
+.rol-superusuario { color: var(--cian); }
+.rol-admin { color: var(--amarillo); }
+.rol-supervisor { color: var(--tenue); }
 
-/* -------------------------------------------------------------- contenido */
+/* ----------------------------------------------------------------- contenido */
 .contenido { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
 .tenue { color: var(--tenue); }
-.destacado { font-weight: 600; color: var(--cian); }
+.destacado { font-weight: 600; color: var(--texto); }
 .pequeno { font-size: .85rem; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .ok { color: var(--verde); }
 .mal { color: var(--rojo); }
 
-/* --------------------------------------------------------------- tarjetas */
+/* ------------------------------------------------------------------ tarjetas */
 .tarjetas {
   display: grid; gap: 1rem; margin: 1rem 0;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }
 .tarjeta {
-  display: flex; flex-direction: column; gap: .35rem;
-  padding: 1rem; background: var(--fondo-2);
-  border: 1px solid var(--borde); border-radius: var(--radio);
+  display: flex; flex-direction: column; gap: .5rem;
+  padding: 1.125rem;
+  background: var(--fondo-2);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
 }
-.tarjeta-etiqueta { font-size: .8rem; color: var(--tenue); }
-.tarjeta-valor { font-size: 1.5rem; font-weight: 600; }
-.tarjeta-valor.pequeno { font-size: 1rem; }
+.tarjeta-etiqueta {
+  font-size: .72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--tenue);
+}
+.tarjeta-valor {
+  font-size: 1.75rem; font-weight: 800; letter-spacing: -.03em;
+  line-height: 1.1; color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+/* Cuando el dato es texto y no cifra, baja al paso de cuerpo y pierde el tracking. */
+.tarjeta-valor.pequeno { font-size: .9375rem; font-weight: 600; letter-spacing: 0; }
+.tarjeta-valor.ok { color: var(--verde); }
+.tarjeta-valor.mal { color: var(--rojo); }
 
-/* ----------------------------------------------------------------- tablas */
-/* El contenedor scrollea, no la página: en móvil una tabla ancha no debe
-   provocar scroll horizontal de todo el documento. */
-.tabla-scroll { overflow-x: auto; margin: .5rem 0 1.5rem; }
+/* -------------------------------------------------------------------- tablas */
+/* El contenedor scrollea, no la página: una tabla ancha no debe provocar
+   scroll horizontal de todo el documento. */
+.tabla-scroll {
+  overflow-x: auto; margin: .5rem 0 1.5rem;
+  border: 1px solid var(--linea); border-radius: var(--radio);
+}
 
 .tabla {
   width: 100%; border-collapse: collapse;
   background: var(--fondo-2);
-  border: 1px solid var(--borde); border-radius: var(--radio);
 }
 .tabla th, .tabla td {
-  padding: .55rem .75rem; text-align: left;
-  border-bottom: 1px solid var(--borde);
+  padding: .65rem .85rem; text-align: left;
+  border-bottom: 1px solid var(--linea);
 }
 .tabla thead th {
-  font-size: .78rem; text-transform: uppercase; letter-spacing: .04em;
-  color: var(--tenue); background: var(--fondo-3);
+  font-size: .72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--texto-3);
+  background: var(--fondo-3);
+  white-space: nowrap;
 }
 .tabla tbody tr:last-child td { border-bottom: none; }
 .tabla tbody tr:hover { background: var(--fondo-3); }
-.tabla-clave-valor th { width: 220px; color: var(--tenue); font-weight: 500; }
+.tabla-clave-valor th { width: 220px; color: var(--tenue); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .acciones { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
 
-.etiqueta {
-  display: inline-block; font-size: .75rem; padding: .1rem .5rem;
-  border-radius: 999px; border: 1px solid currentColor;
-}
-.etiqueta-ok { color: var(--verde); }
-.etiqueta-mal { color: var(--rojo); }
+/* Cuando una fila no ofrece una acción, dice por qué en vez de dejar el hueco.
+   Con tope de ancho: si no, la explicación ensancha la columna y estruja el
+   resto de la tabla. */
+.acciones .tenue { max-width: 24ch; font-size: .85rem; line-height: 1.4; }
 
-/* ---------------------------------------------------------------- botones */
-.boton {
-  display: inline-block; padding: .45rem .9rem;
-  background: var(--fondo-3); color: var(--texto);
-  border: 1px solid var(--borde); border-radius: var(--radio);
-  font: inherit; text-decoration: none; cursor: pointer;
+/* El botón de cambiar rol solo aparece cuando el desplegable deja de mostrar
+   el rol vigente: mientras no cambies nada no hay nada que pulsar. La opción
+   del rol actual lleva data-actual, así que basta preguntar si sigue elegida.
+
+   La regla esconde en lugar de mostrar a propósito. Un navegador sin :has() la
+   descarta entera y el botón se queda siempre visible, que es exactamente como
+   funcionaba antes: se degrada a lo de siempre, no a un panel donde no se
+   puede cambiar un rol. */
+.cambio-rol:has(option[data-actual]:checked) button { display: none; }
+
+/* Insignia: siempre lleva palabra dentro, el color solo refuerza. */
+.etiqueta {
+  display: inline-block; font-size: .72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .08em;
+  padding: .15rem .6rem; border-radius: 999px;
+  border: 1px solid currentColor;
 }
-.boton:hover { border-color: var(--cian); color: var(--cian); }
-.boton.pequeno { padding: .25rem .6rem; font-size: .85rem; }
-.boton-principal { background: var(--azul); border-color: var(--azul); color: #fff; }
-.boton-principal:hover { filter: brightness(1.1); color: #fff; }
-.boton-peligro:hover { border-color: var(--rojo); color: var(--rojo); }
+.etiqueta-ok { color: var(--verde); background: rgba(91, 241, 168, .12); }
+.etiqueta-mal { color: var(--rojo); background: rgba(248, 113, 113, .12); }
+
+/* ------------------------------------------------------------------- botones */
+.boton {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  padding: .6rem 1.1rem;
+  background: transparent; color: var(--texto-2);
+  border: 1px solid var(--linea-fuerte); border-radius: var(--radio-boton);
+  font: 600 .875rem/1 var(--tipo); text-decoration: none; cursor: pointer;
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
+}
+.boton:hover { background: var(--fondo-3); color: var(--texto); border-color: var(--linea-fuerte); }
+.boton:focus-visible { box-shadow: var(--foco); border-radius: var(--radio-boton); }
+.boton.pequeno { padding: .35rem .75rem; font-size: .8rem; }
+
+/* Cian sobre navy tinta: 8,76:1. */
+.boton-principal {
+  background: var(--cian); border-color: var(--cian); color: var(--tinta);
+}
+.boton-principal:hover {
+  background: var(--cian-claro); border-color: var(--cian-claro); color: var(--tinta);
+}
+.boton-peligro:hover { border-color: var(--rojo); color: var(--rojo); background: rgba(248, 113, 113, .1); }
+
 .boton-plano {
   background: none; border: none; color: var(--tenue);
-  font: inherit; cursor: pointer; padding: .3rem;
+  font: 600 .875rem/1 var(--tipo); cursor: pointer; padding: .4rem .2rem;
 }
 .boton-plano:hover { color: var(--rojo); }
+.boton-plano:focus-visible { box-shadow: var(--foco); }
 
 /* --------------------------------------------------------------- formularios */
-.formulario { display: flex; flex-direction: column; gap: .5rem; }
+.formulario { display: flex; flex-direction: column; gap: .6rem; }
 .formulario.en-fila { flex-direction: row; flex-wrap: wrap; align-items: center; }
-.en-linea { display: inline-flex; gap: .3rem; align-items: center; margin: 0; }
+.en-linea { display: inline-flex; gap: .35rem; align-items: center; margin: 0; }
 
-input, select {
-  padding: .45rem .6rem;
-  background: var(--fondo); color: var(--texto);
-  border: 1px solid var(--borde); border-radius: var(--radio);
-  font: inherit;
+/* -------------------------------- contraseña del certificado de cliente */
+/* Ocupa toda la fila: son tres controles y no caben de lado con el nombre. */
+.clave-cert { flex: 1 0 100%; display: flex; flex-direction: column; gap: .5rem; }
+.casilla { display: inline-flex; align-items: center; gap: .5rem; cursor: pointer; }
+.casilla input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--cian); }
+.clave-cert-campos { display: flex; flex-wrap: wrap; gap: .5rem; }
+.clave-cert-campos input { flex: 1 1 14rem; }
+
+/* Los campos solo hacen falta si la casilla está marcada. Se esconde en vez de
+   mostrar a propósito: un navegador sin :has() descarta la regla y los deja
+   siempre visibles, que es molesto pero funciona. Al revés dejaría un
+   formulario donde no se puede escribir la contraseña. */
+.clave-cert:has(input[type="checkbox"]:not(:checked)) .clave-cert-campos {
+  display: none;
 }
-input:focus, select:focus { outline: 2px solid var(--azul); outline-offset: 1px; }
-label { font-size: .85rem; color: var(--tenue); }
+
+/* El campo se hunde respecto a la tarjeta que lo contiene. */
+input, select {
+  padding: .55rem .75rem;
+  background: var(--fondo); color: var(--texto);
+  border: 1px solid var(--linea-fuerte); border-radius: var(--radio-sm);
+  font: 400 .9375rem/1.4 var(--tipo);
+}
+input::placeholder { color: var(--tenue); }
+input:focus-visible, select:focus-visible {
+  outline: none; border-color: var(--cian); box-shadow: var(--foco);
+}
+label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
 
 .panel-accion {
-  padding: 1rem; margin: 1rem 0;
+  padding: 1.25rem; margin: 1.25rem 0;
   background: var(--fondo-2);
-  border: 1px solid var(--borde); border-radius: var(--radio);
+  border: 1px solid var(--linea); border-radius: var(--radio);
 }
 .panel-accion h2 { margin-top: 0; }
 
-/* ----------------------------------------------------------------- avisos */
+/* -------------------------------------------------------------------- avisos */
+/* Borde completo de 1px y glifo antepuesto: el estado sobrevive al daltonismo
+   y no hace falta la barra lateral gruesa que usa medio internet. */
 .avisos:empty { display: none; }
 .aviso {
-  padding: .65rem .9rem; margin: .5rem 0;
-  border-radius: var(--radio); border-left: 3px solid var(--tenue);
-  background: var(--fondo-2);
+  display: flex; gap: .6rem; align-items: baseline;
+  padding: .75rem 1rem; margin: .6rem 0;
+  border: 1px solid var(--linea-fuerte); border-radius: var(--radio-sm);
+  background: var(--fondo-2); color: var(--texto-2);
 }
-.aviso-ok { border-left-color: var(--verde); }
-.aviso-error { border-left-color: var(--rojo); }
-.aviso-aviso { border-left-color: var(--amarillo); }
-.aviso-info { border-left-color: var(--azul); }
+.aviso::before { font-weight: 800; flex-shrink: 0; }
+.aviso-ok    { border-color: rgba(91, 241, 168, .45);  background: rgba(91, 241, 168, .1); }
+.aviso-error { border-color: rgba(248, 113, 113, .45); background: rgba(248, 113, 113, .1); }
+.aviso-aviso { border-color: rgba(251, 191, 36, .45);  background: rgba(251, 191, 36, .1); }
+.aviso-info  { border-color: rgba(96, 165, 250, .45);  background: rgba(96, 165, 250, .1); }
+.aviso-ok::before    { content: '\2713'; color: var(--verde); }
+.aviso-error::before { content: '\2715'; color: var(--rojo); }
+.aviso-aviso::before { content: '\26A0'; color: var(--amarillo); }
+.aviso-info::before  { content: '\2139'; color: var(--azul); }
 
-/* -------------------------------------------------------------------- log */
+/* ----------------------------------------------------------------------- log */
+
+/* La barra de filtros va suelta en la página, no dentro de una tarjeta que ya
+   la separaría del visor. Sin este aire las dos cosas se leen como una. */
+.filtros-log { margin-bottom: 1.1rem; }
+
 .log {
   max-height: 65vh; overflow: auto;
-  padding: .75rem; margin: 0;
+  padding: .85rem 1rem; margin: 0;
   background: var(--fondo-2);
-  border: 1px solid var(--borde); border-radius: var(--radio);
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: .82rem; line-height: 1.45;
+  /* Línea fuerte y no línea: el visor se apoya en el mismo navy que las
+     tarjetas, así que el borde es lo único que dice dónde empieza. */
+  border: 1px solid var(--linea-fuerte); border-radius: var(--radio);
+  font-family: var(--mono); font-size: .82rem; line-height: 1.45;
   white-space: pre-wrap; word-break: break-word;
+  /* Blanco pleno, 17,2:1. Aquí no se ojea: se lee buscando una línea concreta,
+     a menudo con el servidor caído. El 72% del cuerpo se queda corto.
+     (Navy tinta como fondo daría el mismo efecto y está prohibido: es color de
+     texto sobre relleno cian, nunca fondo de zona.) */
+  color: var(--texto);
 }
-.log span { display: block; }
-.log-error { color: var(--rojo); }
-.log-aviso { color: var(--amarillo); }
+/* Cada nivel lleva prefijo además de color: no se distingue solo por el tono. */
+.log span { display: block; padding-left: 1.6em; text-indent: -1.6em; }
+.log span::before { display: inline-block; width: 1.6em; text-indent: 0; font-weight: 700; }
+.log-error   { color: var(--rojo); }
+.log-aviso   { color: var(--amarillo); }
 .log-conexion { color: var(--verde); }
-.log-info { color: var(--tenue); }
+/* Al 72% y no al 50%: 'info' es el grueso de un log, y en el mínimo del sistema
+   era lo más apagado de la pantalla. Sigue por debajo del blanco base, que es
+   lo que lo mantiene subordinado. 9,3:1. */
+.log-info    { color: var(--texto-2); }
+.log-error::before   { content: '!!'; }
+.log-aviso::before   { content: '! '; }
+.log-conexion::before { content: '> '; }
+.log-info::before    { content: '  '; }
 
-/* ------------------------------------------------------------------ login */
+/* --------------------------------------------------------------------- login */
 .login-caja {
-  max-width: 380px; margin: 8vh auto; padding: 2rem;
+  max-width: 400px; margin: 10vh auto; padding: 2.25rem;
   background: var(--fondo-2);
-  border: 1px solid var(--borde); border-radius: var(--radio);
+  border: 1px solid var(--linea); border-radius: var(--radio);
 }
-.login-cabecera { text-align: center; margin-bottom: 1.5rem; }
-.login-cabecera h1 { margin: .5rem 0 .25rem; }
-.login-caja .boton { width: 100%; text-align: center; margin-top: .5rem; }
+.login-cabecera { text-align: center; margin-bottom: 1.75rem; }
+.login-cabecera h1 { margin: .6rem 0 .3rem; }
+.login-caja .boton { width: 100%; margin-top: .75rem; }
+.login-caja label { margin-top: .3rem; }
+.centrado { text-align: center; }
+
+/* ------------------------------------------- fondo de las pantallas de entrada */
+/* Solo en login y verificación. DESIGN.md pide que el fondo no compita en las
+   zonas de trabajo; esto no lo es. Cian al 3,5%: se intuye, no se mira.
+   Los iconos son Material Design (react-icons/md), formas rellenas de trazo
+   ~2 sobre el viewBox de 24; los que había antes eran trazo 1,25. Pesan más a
+   igual opacidad, de ahí el 3,5% en vez del 5%. Es el único número que hay que
+   mover si se quieren más o menos presentes. */
+.fondo-marca {
+  position: fixed; inset: 0;
+  overflow: hidden;
+  pointer-events: none;      /* decoración: jamás intercepta un clic */
+  z-index: 0;
+}
+.fondo-marca svg {
+  position: absolute;
+  width: 190px; height: 190px;
+  color: var(--cian);
+  opacity: .035;
+}
+.fondo-marca .arriba-izq { top: 7vh;    left: 6vw; }
+.fondo-marca .arriba-der { top: 9vh;    right: 7vw; }
+.fondo-marca .abajo-izq  { bottom: 9vh; left: 8vw; }
+.fondo-marca .abajo-der  { bottom: 7vh; right: 6vw; }
+
+/* La caja va por encima del fondo */
+.login-caja { position: relative; z-index: 1; }
+
+/* ------------------------------------------------------------------- firma */
+.firma {
+  margin: 1.5rem 0 0;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--linea);
+  text-align: center;
+  font-size: .82rem;
+  color: var(--tenue);
+}
+.firma-por { margin-right: .3rem; }
+.firma a {
+  display: inline-flex; align-items: baseline; gap: .4rem;
+  color: var(--texto-2); text-decoration: none;
+}
+.firma a:hover { color: var(--texto); }
+.firma-marca { font-weight: 600; letter-spacing: -.01em; }
+/* El mismo patrón que la marca del panel: la segunda mitad en cian. */
+.firma-marca span { color: var(--cian); }
+.firma a:hover .firma-marca span { color: var(--cian-claro); }
+/* Paso 'label' de la escala: 0.72rem, 600, tracking 0.12em. */
+.firma-sub {
+  font-size: .72rem; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--tenue);
+}
+
+/* ------------------------------------------------------- segundo factor */
+/* El código TOTP se teclea a mano y con prisa: cifras anchas, monoespaciadas
+   y separadas, para no confundir 0 con O ni 1 con l. Tamaño 'metric' de la
+   escala, que es el paso reservado a las cifras que se leen de un vistazo. */
+#codigo, #codigo-alta {
+  font-family: var(--mono);
+  font-size: 1.75rem;
+  letter-spacing: .25em;
+  text-align: center;
+}
+
+.pasos { margin: 1rem 0; padding-left: 1.25rem; line-height: 1.9; }
+.pasos li { margin-bottom: .5rem; }
+
+/* QR a la izquierda y las instrucciones al lado; en pantalla estrecha, uno
+   debajo del otro (ver la consulta al final del archivo). */
+.alta-totp { display: flex; gap: 1.5rem; align-items: flex-start; margin: 1rem 0; }
+.alta-totp-manual { flex: 1; min-width: 0; }
+
+/* Fondo blanco propio: el QR necesita su zona de silencio clara aunque el
+   panel sea oscuro, o los lectores fallan. */
+.qr { margin: 0; flex-shrink: 0; text-align: center; }
+.qr img {
+  display: block;
+  background: #fff;
+  border-radius: var(--radio-sm);
+}
+.qr figcaption { margin-top: .5rem; }
+
+/* La clave secreta se copia a mano en el móvil: se muestra en bloque, con
+   selección fácil y sin que un salto de línea parta un grupo. */
+.secreto {
+  display: block;
+  margin: .4rem 0;
+  padding: .6rem .75rem;
+  background: var(--fondo-1, var(--fondo-2));
+  border: 1px dashed var(--linea-fuerte);
+  border-radius: var(--radio-sm);
+  color: var(--texto);
+  font-size: 1.05rem;
+  letter-spacing: .08em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.secreto.pequeno-texto { font-size: .82rem; letter-spacing: 0; }
 
 @media (max-width: 700px) {
-  .barra { gap: .75rem; }
+  /* En vertical la barra se apila con orden explícito: si se deja envolver,
+     la navegación acaba por encima de la marca. */
+  .barra {
+    flex-direction: column; align-items: flex-start;
+    gap: .85rem; padding: .85rem 1rem;
+  }
+  .marca { order: 1; }
+  .nav { order: 2; flex: none; width: 100%; gap: 1rem; }
+  .sesion { order: 3; }
   .contenido { padding: 1rem; }
   .formulario.en-fila { flex-direction: column; align-items: stretch; }
+  .login-caja { margin: 5vh auto; padding: 1.5rem; }
+  .alta-totp { flex-direction: column; align-items: center; }
+  .alta-totp-manual { width: 100%; }
+
+  /* En vertical los iconos quedarían debajo del formulario y lo ensucian:
+     se quedan solo los dos de arriba, y más pequeños. */
+  .fondo-marca svg { width: 120px; height: 120px; opacity: .028; }
+  .fondo-marca .abajo-izq, .fondo-marca .abajo-der { display: none; }
+}
+
+/* Sin movimiento para quien lo pide: el subrayado aparece, no crece. El estado
+   sigue siendo visible — se quita la animación, no la señal. */
+@media (prefers-reduced-motion: reduce) {
+  .nav a::after, .boton { transition: none; }
 }

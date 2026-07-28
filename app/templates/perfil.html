@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% set activo = 'perfil' %}
+{% block titulo %}Mi cuenta — BridgesMGR{% endblock %}
+
+{% block contenido %}
+<h1>Mi cuenta</h1>
+<p class="tenue">
+  Entraste como <strong>{{ sesion.usuario }}</strong>
+  con rol <span class="rol rol-{{ sesion.rol }}">{{ sesion.rol }}</span>.
+</p>
+
+<section class="panel-accion">
+  <h2>Verificación en dos pasos</h2>
+  <p class="tenue">
+    Un código de 6 dígitos que cambia cada 30 segundos, generado por una
+    aplicación en tu móvil. Si alguien te roba la contraseña, no le basta.
+  </p>
+
+  <div id="totp-panel">
+    {% include "partials/totp_panel.html" %}
+  </div>
+</section>
+
+<section class="panel-accion">
+  <h2>Contraseña</h2>
+  <p class="tenue">
+    {% if manda %}
+    Puedes cambiarla desde <a href="/admin/usuarios">Usuarios</a>, o en el
+    servidor con
+    <code>python -m app.cli cambiar-password {{ sesion.usuario }}</code>.
+    {% else %}
+    Pídele el cambio a un administrador del panel.
+    {% endif %}
+  </p>
+</section>
+{% endblock %}

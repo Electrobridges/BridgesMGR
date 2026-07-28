@@ -2,6 +2,7 @@
 
 from fastapi.responses import HTMLResponse
 
+from .. import db
 from ..auth import ip_cliente, sesion_opcional
 
 
@@ -17,12 +18,24 @@ def render(request, plantilla, contexto=None, **kwargs):
     """
     Renderiza añadiendo siempre la sesión actual al contexto.
 
+    Además inyecta 'manda': si esta sesión puede mutar el servidor. Es la misma
+    pregunta que responde auth.solo_admin y sale de la misma lista, db.ROLES_MANDO.
+
+    Ninguna plantilla debe comparar `sesion.rol` con una cadena. Se hacía, y al
+    añadir el rol de superusuario cuatro sitios se quedaron mirando por 'admin':
+    la cuenta con más poder del panel perdió el menú de Usuarios, el formulario
+    de crear clientes y los botones de la tabla. Un rol nuevo no puede obligar a
+    recordar cuatro plantillas; hay una prueba que lo impide.
+
     Firma moderna de Starlette: TemplateResponse(request, nombre, contexto).
     La antigua (nombre, contexto) ya no funciona: interpreta el nombre como
     request y revienta al buscar la plantilla.
     """
+    sesion = getattr(request.state, "sesion", None) or sesion_opcional(request)
+
     ctx = {
-        "sesion": getattr(request.state, "sesion", None) or sesion_opcional(request),
+        "sesion": sesion,
+        "manda": bool(sesion and sesion["rol"] in db.ROLES_MANDO),
     }
     ctx.update(contexto or {})
     return plantillas(request).TemplateResponse(request, plantilla, ctx, **kwargs)

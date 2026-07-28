@@ -1,0 +1,190 @@
+name: pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 es el mínimo que declara pyproject.toml; si se rompe ahí, hay que
+        # subir requires-python, no ignorarlo.
+        #
+        # 3.9, 3.11 y 3.13 son las de Debian 11, 12 y 13, que es donde esto se
+        # instala. 3.14 no la trae ninguna todavía, pero es la que se usa para
+        # desarrollar: sin ella, el entorno del día a día sería el único que no
+        # prueba nadie.
+        python: ["3.9", "3.11", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ejecutar la suite
+        run: pytest
+
+  dependencias:
+    name: lock y vulnerabilidades
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar uv
+        run: pip install uv
+
+      - name: El lock está al día con requirements.in
+        # Si alguien toca un rango y no regenera el lock, lo que se instala en
+        # los servidores deja de ser lo que dice el repo. Se regenera aquí y se
+        # compara: si difiere, es que faltó ejecutar el compile.
+        #
+        # --universal es obligatorio y no un adorno: sin él la resolución sale
+        # sesgada hacia el sistema de quien la generó. Un lock hecho en Windows
+        # se queda sin uvloop, porque uvicorn[standard] lo excluye allí, y el
+        # servidor Linux acabaría sin él sin que nada avisara.
+        run: |
+          for base in requirements requirements-dev; do
+            uv pip compile "$base.in" --universal --python-version 3.9 \
+              --generate-hashes --no-header -o "/tmp/$base.check" -q
+            if ! diff -q "$base.txt" "/tmp/$base.check" >/dev/null; then
+              echo "::error::$base.txt no coincide con $base.in. Regenera el lock:"
+              echo "  uv pip compile $base.in --universal --python-version 3.9 --generate-hashes --no-header -o $base.txt"
+              diff "$base.txt" "/tmp/$base.check" | head -30
+              exit 1
+            fi
+            echo "$base.txt al día"
+          done
+
+      - name: El lock cubre Linux de verdad
+        # El fallo que esto vigila: un lock generado en Windows instala sin
+        # uvloop y uvicorn cae al bucle asyncio estándar, más lento, sin que
+        # nada falle ni lo diga.
+        run: |
+          grep -q "^uvloop==" requirements.txt \
+            || { echo "::error::Falta uvloop: el lock no se generó con --universal"; exit 1; }
+          grep -q "sys_platform" requirements.txt \
+            || { echo "::error::El lock no lleva marcadores de plataforma"; exit 1; }
+
+      - name: El lock instala con hashes verificados
+        run: |
+          python -m venv /tmp/v
+          /tmp/v/bin/pip install --quiet --require-hashes -r requirements.txt
+
+      - name: Vulnerabilidades conocidas
+        # Informativo: un CVE publicado hoy no debe bloquear un arreglo urgente
+        # que no tiene nada que ver. Pero queda en el registro y hay que mirarlo.
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit --requirement requirements.txt --desc
+
+  despliegue:
+    name: mitad privilegiada (sintaxis)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sintaxis de los instaladores
+        run: |
+          bash -n deploy/install.sh
+          bash -n deploy/instalar-openvpn.sh
+
+      - name: Sintaxis del helper privilegiado
+        run: python3 -m py_compile deploy/ovpn-web-helper
+
+      - name: Regla de sudo
+        # visudo comprueba permisos además de sintaxis, así que se valida sobre
+        # una copia instalada como quedará en el servidor (root:root 0440).
+        run: |
+          sudo install -o root -g root -m 0440 deploy/ovpnweb.sudoers /tmp/ovpnweb.sudoers
+          sudo visudo -c -f /tmp/ovpnweb.sudoers
+
+      - name: Finales de línea
+        # Un CRLF en deploy/ llega al servidor como
+        # "bad interpreter: /bin/bash^M" y cuesta media hora entenderlo.
+        run: |
+          con_crlf=$(grep -rlU $'\r' deploy/ || true)
+          if [ -n "$con_crlf" ]; then
+            echo "Archivos con CRLF (deben ser LF):"
+            echo "$con_crlf"
+            exit 1
+          fi
+
+      - name: El script monta la PKI y el server.conf de verdad
+        # 'bash -n' no dice si el heredoc del server.conf sale bien formado ni
+        # si easyrsa acepta el vars que se le escribe. Se monta entero, sin
+        # tocar la red del runner ni arrancar el servicio: lo que se comprueba
+        # es lo que queda escrito, no que OpenVPN levante.
+        run: |
+          sudo bash deploy/instalar-openvpn.sh --si --sin-red --sin-arrancar \
+            --salida lan --host ci.ejemplo.com --red-lan 10.99.0.0/24 --iface lo
+
+          sudo test -f /etc/openvpn/easy-rsa/pki/ca.crt
+          sudo test -f /etc/openvpn/easy-rsa/pki/issued/server.crt
+          sudo test -f /etc/openvpn/easy-rsa/pki/crl.pem
+          sudo test -f /etc/openvpn/tls-crypt.key
+
+          # Las claves privadas no pueden quedar al alcance de nadie más
+          test "$(sudo stat -c %a /etc/openvpn/easy-rsa/pki/private)" = "700"
+
+          # Las tres líneas sin las que el panel no ve nada
+          sudo grep -qx 'status-version 3' /etc/openvpn/server/server.conf
+          sudo grep -qx 'management 127.0.0.1 7505' /etc/openvpn/server/server.conf
+          sudo grep -q '^crl-verify ' /etc/openvpn/server/server.conf
+
+          # Cada certificado con SU nombre. Un EASYRSA_REQ_CN mal puesto se los
+          # daba todos al CN de la CA, y eso deja la PKI inservible sin que
+          # ningún comando falle.
+          cn() { sudo openssl x509 -in "$1" -noout -subject | sed 's/.*CN *= *//'; }
+          test "$(cn /etc/openvpn/easy-rsa/pki/issued/server.crt)" = "server"
+          test "$(cn /etc/openvpn/easy-rsa/pki/ca.crt)" != "server"
+
+      - name: El helper emite certificados con el nombre pedido
+        # Es la ruta que easy-rsa 3.2 rompió al empezar a pedir confirmación.
+        run: |
+          sudo install -o root -g root -m 0750 deploy/ovpn-web-helper /usr/local/sbin/ovpn-web-helper
+          sudo mkdir -p /etc/ovpn-web
+          sudo install -o root -g root -m 0640 deploy/config.ejemplo.yaml /etc/ovpn-web/config.yaml
+          sudo /usr/local/sbin/ovpn-web-helper crear prueba-ci
+          test "$(sudo openssl x509 -in /etc/openvpn/easy-rsa/pki/issued/prueba-ci.crt \
+                  -noout -subject | sed 's/.*CN *= *//')" = "prueba-ci"
+          sudo /usr/local/sbin/ovpn-web-helper listar | grep -q 'prueba-ci'
+
+          # Revocar tiene que dejar la CRL legible por 'nobody': OpenVPN la
+          # relee ya sin privilegios, y en 0600 deja de admitir a NADIE.
+          sudo /usr/local/sbin/ovpn-web-helper revocar prueba-ci
+          test "$(sudo stat -c %a /etc/openvpn/easy-rsa/pki/crl.pem)" = "644"
+
+      - name: Relanzarlo no pisa lo que ya había
+        run: |
+          sudo cp /etc/openvpn/server/server.conf /tmp/antes.conf
+          sudo bash deploy/instalar-openvpn.sh --si --sin-red --sin-arrancar
+          sudo diff /tmp/antes.conf /etc/openvpn/server/server.conf
+
+      - name: shellcheck
+        # Informativo: no bloquea el merge, pero deja el aviso en el registro.
+        continue-on-error: true
+        run: shellcheck deploy/install.sh deploy/instalar-openvpn.sh

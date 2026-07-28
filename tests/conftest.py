@@ -13,8 +13,9 @@ from app.config import (
 )
 from app.main import crear_app
 
+PASSWORD_SUPER = "contrasena-super-larga"
 PASSWORD_ADMIN = "contrasena-admin-larga"
-PASSWORD_LECTOR = "contrasena-lector-larga"
+PASSWORD_SUPERVISOR = "contrasena-supervisor-larga"
 
 
 @pytest.fixture
@@ -54,10 +55,24 @@ def cliente(app):
 
 @pytest.fixture
 def usuarios(cfg):
-    """Crea un admin y un lector en la base del panel"""
+    """
+    Una cuenta de cada escalón de la jerarquía.
+
+    El orden de creación importa y no es decorativo: la primera cuenta de una
+    instalación nace superusuario se pida el rol que se pida, así que 'raiz'
+    tiene que ir antes que 'jefa' para que 'jefa' sea un admin normal. Hacen
+    falta las dos: casi todas las pruebas quieren un admin corriente, y algunas
+    quieren comprobar precisamente que no alcanza al superusuario.
+    """
+    # Normalmente lo hace crear_app, pero esta fixture se puede pedir sin
+    # levantar la app y entonces no habría ni tablas.
+    db.init_db(cfg.seguridad.db_path)
+
+    db.crear_usuario(cfg.seguridad.db_path, "raiz", PASSWORD_SUPER, "admin")
     db.crear_usuario(cfg.seguridad.db_path, "jefa", PASSWORD_ADMIN, "admin")
-    db.crear_usuario(cfg.seguridad.db_path, "mirona", PASSWORD_LECTOR, "lector")
-    return {"admin": "jefa", "lector": "mirona"}
+    db.crear_usuario(cfg.seguridad.db_path, "mirona", PASSWORD_SUPERVISOR, "supervisor")
+
+    return {"super": "raiz", "admin": "jefa", "supervisor": "mirona"}
 
 
 def _entrar(cliente, usuario, password):
@@ -71,20 +86,85 @@ def _entrar(cliente, usuario, password):
 
 
 @pytest.fixture
+def como_super(cliente, usuarios):
+    return _entrar(cliente, usuarios["super"], PASSWORD_SUPER)
+
+
+@pytest.fixture
 def como_admin(cliente, usuarios):
     return _entrar(cliente, usuarios["admin"], PASSWORD_ADMIN)
 
 
 @pytest.fixture
-def como_lector(cliente, usuarios):
-    return _entrar(cliente, usuarios["lector"], PASSWORD_LECTOR)
+def como_supervisor(cliente, usuarios):
+    return _entrar(cliente, usuarios["supervisor"], PASSWORD_SUPERVISOR)
+
+
+def csrf_de(cliente, cfg):
+    """Token CSRF de la sesión que tenga abierta ese cliente"""
+    from app.auth import COOKIE_NOMBRE
+
+    sesion = db.obtener_sesion(cfg.seguridad.db_path, cliente.cookies.get(COOKIE_NOMBRE))
+    return sesion["csrf"]
 
 
 @pytest.fixture
 def csrf_admin(como_admin, cfg):
     """Token CSRF de la sesión abierta, para las peticiones que mutan"""
-    from app.auth import COOKIE_NOMBRE
+    return csrf_de(como_admin, cfg)
 
-    token = como_admin.cookies.get(COOKIE_NOMBRE)
-    sesion = db.obtener_sesion(cfg.seguridad.db_path, token)
-    return sesion["csrf"]
+
+@pytest.fixture
+def csrf_super(como_super, cfg):
+    return csrf_de(como_super, cfg)
+
+
+def base_de_dos_roles(tmp_path, cuentas, ajustes=None, nombre="antigua.db"):
+    """
+    Escribe una base tal y como la dejaba la v0.1.0: dos roles y sin TOTP.
+
+    Se construye a mano y no con el esquema actual porque el sentido de estas
+    pruebas es justo que la forma vieja siga arrancando. 'cuentas' es una lista
+    de (usuario, rol) en el orden en que se crearon, que es el que decide a
+    quién le toca ser superusuario.
+    """
+    import sqlite3
+
+    ruta = str(tmp_path / nombre)
+    con = sqlite3.connect(ruta)
+    con.executescript("""
+        CREATE TABLE usuarios (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario       TEXT    NOT NULL UNIQUE,
+            password_hash TEXT    NOT NULL,
+            rol           TEXT    NOT NULL CHECK (rol IN ('admin', 'lector')),
+            activo        INTEGER NOT NULL DEFAULT 1,
+            creado        TEXT    NOT NULL
+        );
+        CREATE TABLE ajustes (
+            clave TEXT PRIMARY KEY,
+            valor TEXT NOT NULL
+        );
+        CREATE TABLE sesiones (
+            token_hash TEXT    PRIMARY KEY,
+            usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+            csrf       TEXT    NOT NULL,
+            creada     TEXT    NOT NULL,
+            expira     TEXT    NOT NULL,
+            ip         TEXT
+        );
+    """)
+
+    for usuario, rol in cuentas:
+        con.execute(
+            "INSERT INTO usuarios (usuario, password_hash, rol, activo, creado)"
+            " VALUES (?, 'x', ?, 1, '2026-01-01T00:00:00')",
+            (usuario, rol),
+        )
+
+    for clave, valor in (ajustes or {}).items():
+        con.execute("INSERT INTO ajustes (clave, valor) VALUES (?, ?)", (clave, valor))
+
+    con.commit()
+    con.close()
+    return ruta

@@ -1,0 +1,42 @@
+OpenVPN Manager Web (BridgesMGR)
+Copyright 2026 Daniel Puentes / Electrobridges
+
+Este producto incluye software desarrollado por Daniel Puentes
+(https://github.com/Electrobridges/OpenVPN-Manager-Web).
+
+"BridgesMGR" y "Electrobridges" son marcas de Daniel Puentes. La licencia
+Apache 2.0 no concede derecho a usarlas: un trabajo derivado puede reutilizar
+este código, pero no presentarse con este nombre ni con esta identidad visual.
+Ver la sección 6 del archivo LICENSE.
+
+--------------------------------------------------------------------------------
+Material de terceros incluido en este repositorio
+--------------------------------------------------------------------------------
+
+Poppins
+  app/static/fuentes/
+  Copyright 2020 The Poppins Project Authors
+  SIL Open Font License 1.1
+  https://github.com/itfoundry/Poppins
+
+Material Design Icons (geometría, vía react-icons/md)
+  app/templates/partials/fondo_marca.html
+  Copyright Google LLC
+  Apache License 2.0
+  https://github.com/google/material-design-icons
+
+--------------------------------------------------------------------------------
+Dependencias que instala el servidor, no incluidas en este repositorio
+--------------------------------------------------------------------------------
+
+Las versiones exactas y sus hashes están en requirements.txt.
+
+  FastAPI ........... MIT
+  Uvicorn ........... BSD 3-Clause
+  Jinja2 ............ BSD 3-Clause
+  python-multipart .. Apache License 2.0
+  argon2-cffi ....... MIT
+  PyYAML ............ MIT
+  segno ............. BSD 3-Clause
+  HTMX .............. Zero-Clause BSD  (lo descarga deploy/install.sh,
+                                        verificado contra deploy/htmx.sha256)

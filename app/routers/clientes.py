@@ -48,7 +48,10 @@ def _estado_clientes(request):
 
 @router.get("")
 def pagina_clientes(request: Request, sesion=Depends(usuario_actual)):
-    return render(request, "clientes.html", {"es_admin": sesion["rol"] == "admin"})
+    # Sin 'es_admin': render() ya inyecta 'manda' desde db.ROLES_MANDO. Aquí se
+    # comparaba con la cadena 'admin' y al superusuario le desaparecían el
+    # formulario de crear y los botones de la tabla.
+    return render(request, "clientes.html")
 
 
 @router.get("/tabla")
@@ -57,14 +60,44 @@ def tabla_clientes(request: Request, sesion=Depends(usuario_actual)):
     return render(request, "partials/tabla_clientes.html", {
         "filas": filas,
         "errores": errores,
-        "es_admin": sesion["rol"] == "admin",
     })
+
+
+def _clave_pedida(con_clave, clave, clave2):
+    """
+    Devuelve la contraseña con la que cifrar la clave privada, o None.
+
+    Aquí y no en core/easyrsa.py: esto valida lo que teclea una persona y el
+    mensaje va a su pantalla. La comprobación de easyrsa.py se queda como
+    última barrera, y el helper la repite por su cuenta porque desde el otro
+    lado de la frontera el panel no es de fiar.
+
+    La contraseña no se registra en ninguna parte: ni en la auditoría, ni en un
+    mensaje de error, ni en el log. Solo consta que se pidió.
+    """
+    if not con_clave:
+        return None
+
+    if not clave:
+        raise ValueError("Marcaste cifrar la clave privada pero no escribiste ninguna contraseña")
+    if clave != clave2:
+        raise ValueError("Las contraseñas del certificado no coinciden")
+    if len(clave) < easyrsa.MIN_CLAVE:
+        raise ValueError("La contraseña del certificado debe tener al menos %d caracteres"
+                         % easyrsa.MIN_CLAVE)
+
+    return clave
 
 
 @router.post("")
 def crear_cliente(
     request: Request,
     cn: str = Form(...),
+    # Marcada por defecto en el formulario. Un navegador no envía las casillas
+    # sin marcar, así que la ausencia significa 'sin contraseña'.
+    con_clave: str = Form(None),
+    clave: str = Form(""),
+    clave2: str = Form(""),
     sesion=Depends(solo_admin),
     _csrf=Depends(verificar_csrf),
 ):
@@ -74,17 +107,32 @@ def crear_cliente(
         return error_htmx(request, str(e))
 
     try:
-        easyrsa.crear_cliente(cfg(request), cn)
+        secreto = _clave_pedida(con_clave, clave, clave2)
+    except ValueError as e:
+        return error_htmx(request, str(e))
+
+    detalle = "clave privada cifrada" if secreto else "clave privada sin contraseña"
+
+    try:
+        easyrsa.crear_cliente(cfg(request), cn, secreto)
+    except easyrsa.ClaveInvalida as e:
+        return error_htmx(request, str(e))
     except easyrsa.ErrorHelper as e:
         auditar(request, sesion, "crear_cliente", cn, "error", str(e))
         return error_htmx(request, "No se pudo crear '%s': %s" % (cn, e))
 
-    auditar(request, sesion, "crear_cliente", cn)
-    return aviso(
-        request,
-        "Cliente '%s' creado. Ya puedes descargar su archivo .ovpn." % cn,
-        refrescar=EVENTO_REFRESCO,
-    )
+    # Se anota QUE lleva contraseña, nunca cuál
+    auditar(request, sesion, "crear_cliente", cn, detalle=detalle)
+
+    if secreto:
+        mensaje = ("Cliente '%s' creado con la clave privada cifrada. Al conectar se "
+                   "le pedirá la contraseña, así que dásela por otra vía distinta "
+                   "del propio archivo." % cn)
+    else:
+        mensaje = ("Cliente '%s' creado sin contraseña. Ojo: su .ovpn es acceso "
+                   "directo a la VPN para quien se haga con el archivo." % cn)
+
+    return aviso(request, mensaje, refrescar=EVENTO_REFRESCO)
 
 
 @router.post("/{cn}/revocar")
@@ -119,21 +167,39 @@ def revocar_cliente(
 def restaurar_cliente(
     request: Request,
     cn: str,
+    con_clave: str = Form(None),
+    clave: str = Form(""),
+    clave2: str = Form(""),
     sesion=Depends(solo_admin),
     _csrf=Depends(verificar_csrf),
 ):
+    """
+    Reemite el certificado de un cliente revocado.
+
+    Acepta contraseña porque genera una clave privada nueva: la que tuviera
+    antes no se puede recuperar ni reutilizar, así que hay que volver a
+    decidirlo. Sin marcar la casilla, la nueva sale sin cifrar.
+    """
     try:
         cn = validar_cn(cn)
     except CNInvalido as e:
         return error_htmx(request, str(e))
 
     try:
-        easyrsa.restaurar(cfg(request), cn)
+        secreto = _clave_pedida(con_clave, clave, clave2)
+    except ValueError as e:
+        return error_htmx(request, str(e))
+
+    try:
+        easyrsa.restaurar(cfg(request), cn, secreto)
+    except easyrsa.ClaveInvalida as e:
+        return error_htmx(request, str(e))
     except easyrsa.ErrorHelper as e:
         auditar(request, sesion, "restaurar", cn, "error", str(e))
         return error_htmx(request, "No se pudo restaurar '%s': %s" % (cn, e))
 
-    auditar(request, sesion, "restaurar", cn)
+    auditar(request, sesion, "restaurar", cn,
+            detalle="clave privada cifrada" if secreto else "clave privada sin contraseña")
     return aviso(
         request,
         "Certificado de '%s' reemitido. Descarga el nuevo .ovpn: el anterior ya no sirve." % cn,

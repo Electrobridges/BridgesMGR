@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Panel web de administración para servidores OpenVPN"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "Daniel Puentes", email = "Contact@Electrobridges.com" }]
 keywords = ["openvpn", "vpn", "panel", "web", "fastapi", "sysadmin"]
 
@@ -13,24 +13,29 @@ classifiers = [
   "Environment :: Web Environment",
   "Framework :: FastAPI",
   "Intended Audience :: System Administrators",
-  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: Apache Software License",
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
   "Topic :: System :: Networking",
   "Topic :: System :: Systems Administration",
 ]
 
+# Los rangos dicen contra qué versiones se sostiene el código. Lo que se
+# instala de verdad son las versiones exactas de requirements.txt, que es un
+# lock generado. Estos rangos y los de requirements.in deben coincidir; hay una
+# prueba que lo comprueba, porque si divergen hay dos verdades sobre lo mismo.
 dependencies = [
-  "fastapi>=0.110",
-  "uvicorn[standard]>=0.27",
-  "jinja2>=3.1",
-  "python-multipart>=0.0.9",
-  "argon2-cffi>=23.1",
-  "PyYAML>=6.0",
+  "fastapi>=0.110,<1.0",
+  "uvicorn[standard]>=0.27,<1.0",
+  "jinja2>=3.1,<4.0",
+  "python-multipart>=0.0.9,<1.0",
+  "argon2-cffi>=23.1,<26.0",
+  "PyYAML>=6.0,<7.0",
+  "segno>=1.6,<2.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "httpx>=0.27"]
+dev = ["pytest>=8.0,<9.0", "httpx>=0.27,<1.0"]
 
 [project.urls]
 Source = "https://github.com/Electrobridges/OpenVPN-Manager-Web"

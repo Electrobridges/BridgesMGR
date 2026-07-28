@@ -1,0 +1,110 @@
+{# Estado del segundo factor. Se recarga entero en cada acción: el flujo de
+   alta tiene tres estados y así no hay que sincronizarlos por trozos. #}
+
+{% if mensaje %}
+<div class="aviso aviso-ok" role="status">{{ mensaje }}</div>
+{% endif %}
+{% if error %}
+<div class="aviso aviso-error" role="alert">{{ error }}</div>
+{% endif %}
+
+{% if activado %}
+
+  <p>
+    <span class="etiqueta etiqueta-ok">activado</span>
+    Se te pide un código cada vez que entras.
+  </p>
+
+  {% if obligatorio %}
+  <p class="tenue">
+    Un administrador ha impuesto el segundo factor para las cuentas de tu rol,
+    así que no puedes desactivarlo.
+  </p>
+  {% else %}
+  <button class="boton boton-peligro"
+          hx-post="/perfil/totp/desactivar"
+          hx-target="#totp-panel" hx-swap="innerHTML"
+          hx-confirm="¿Desactivar la verificación en dos pasos de tu cuenta?">
+    Desactivar
+  </button>
+  {% endif %}
+
+{% elif secreto %}
+
+  <p>
+    <span class="etiqueta etiqueta-mal">sin confirmar</span>
+    Da de alta la cuenta en tu aplicación y escribe un código para terminar.
+  </p>
+
+  <div class="alta-totp">
+    {% if qr %}
+    <figure class="qr">
+      {# data: URI dentro de un <img>: la CSP ya admite img-src 'self' data:,
+         y así el SVG se dibuja en modo restringido, sin scripts. #}
+      <img src="{{ qr }}" width="220" height="220"
+           alt="Código QR para dar de alta {{ sesion.usuario }} en tu aplicación de autenticación">
+      <figcaption class="tenue">Escanéalo con la app</figcaption>
+    </figure>
+    {% endif %}
+
+    <div class="alta-totp-manual">
+      {% if fallo_qr %}
+      <div class="aviso aviso-aviso" role="status">{{ fallo_qr }}</div>
+      {% endif %}
+
+      <ol class="pasos">
+        <li>
+          Abre Google Authenticator, Aegis, FreeOTP o la que uses
+          {%- if qr %} y escanea el código{% else %} y añade una cuenta nueva{% endif -%}.
+        </li>
+        <li>
+          {% if qr %}Si prefieres no escanear, introduce la clave a mano:
+          {% else %}Introduce la clave manualmente:{% endif %}
+          <code class="secreto">{{ secreto_legible }}</code>
+          <span class="tenue">(tipo: basada en tiempo, 6 dígitos, 30 s)</span>
+        </li>
+        <li>
+          Escribe abajo el código que te muestre, para confirmar que ha
+          quedado bien dada de alta.
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <p class="tenue">
+    Guarda la clave en sitio seguro antes de continuar: no se vuelve a
+    mostrar. Si la pierdes, un administrador tendrá que restablecerte el
+    segundo factor.
+  </p>
+
+  <form class="formulario en-fila"
+        hx-post="/perfil/totp/confirmar"
+        hx-target="#totp-panel" hx-swap="innerHTML">
+    <label for="codigo-alta">Código de la aplicación</label>
+    <input type="text" id="codigo-alta" name="codigo" required
+           inputmode="numeric" pattern="[0-9 ]*" maxlength="9"
+           autocomplete="off" placeholder="000000">
+    <button type="submit" class="boton boton-principal">Confirmar</button>
+  </form>
+
+{% else %}
+
+  <p>
+    <span class="etiqueta etiqueta-mal">desactivado</span>
+    Solo se te pide la contraseña para entrar.
+  </p>
+
+  {% if obligatorio %}
+  <p class="aviso aviso-error" role="alert">
+    Un administrador ha impuesto el segundo factor para las cuentas de tu rol.
+    Actívalo para poder usar el panel.
+  </p>
+  {% endif %}
+
+  <button class="boton boton-principal"
+          hx-post="/perfil/totp/iniciar"
+          hx-target="#totp-panel" hx-swap="innerHTML">
+    Activar verificación en dos pasos
+  </button>
+
+{% endif %}

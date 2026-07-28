@@ -10,7 +10,7 @@
       <th>Cliente</th>
       <th>Certificado</th>
       <th>Conexión</th>
-      {% if es_admin %}<th>Acciones</th>{% endif %}
+      {% if manda %}<th>Acciones</th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -29,7 +29,7 @@
         <span class="tenue">—</span>
         {% endif %}
       </td>
-      {% if es_admin %}
+      {% if manda %}
       <td class="acciones">
         {% if f.estado == 'valido' %}
         <a class="boton pequeno" href="/clientes/{{ f.cn }}/ovpn">Descargar .ovpn</a>

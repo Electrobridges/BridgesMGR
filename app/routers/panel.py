@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from ..auth import usuario_actual
+from ..auth import solo_admin, usuario_actual
 from ..core import logs as core_logs
 from ..core.conexiones import obtener_conexiones, resumen_trafico, top_por_trafico
 from ..core.easyrsa import ErrorHelper, estado_servicio, listar_certificados
@@ -88,7 +88,15 @@ def contenido_logs(
 
 
 @router.get("/configuracion")
-def pagina_configuracion(request: Request, sesion=Depends(usuario_actual)):
+def pagina_configuracion(request: Request, sesion=Depends(solo_admin)):
+    """
+    Cómo está montado el servidor: rutas de la PKI y los logs, puerto del
+    management, estado de la unidad.
+
+    solo_admin y no usuario_actual: un supervisor consulta el estado de la VPN,
+    no el plano de la instalación. Nada de esto le hace falta para mirar quién
+    está conectado, y le dice a un curioso por dónde empezar.
+    """
     c = cfg(request)
 
     try:

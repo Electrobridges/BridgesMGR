@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set activo = 'usuarios' %}
-{% block titulo %}Usuarios del panel — OpenVPN Manager{% endblock %}
+{% block titulo %}Usuarios del panel — BridgesMGR{% endblock %}
 
 {% block contenido %}
 <h1>Usuarios del panel</h1>
@@ -15,16 +15,37 @@
         hx-post="/admin/usuarios"
         hx-target="#avisos"
         hx-swap="innerHTML">
-    <input type="text" name="usuario" required maxlength="64" placeholder="usuario"
-           autocomplete="off">
-    <input type="password" name="password" required minlength="12"
-           placeholder="contraseña (mín. 12)" autocomplete="new-password">
+    <label for="nuevo-usuario">Usuario</label>
+    <input type="text" id="nuevo-usuario" name="usuario" required maxlength="64"
+           placeholder="usuario" autocomplete="off">
+    <label for="nueva-password">Contraseña</label>
+    <input type="password" id="nueva-password" name="password" required minlength="12"
+           placeholder="mín. 12 caracteres" autocomplete="new-password">
+    {# El de superusuario no se ofrece: lo tiene la primera cuenta que se creó
+       y no se concede desde aquí. #}
     <select name="rol" aria-label="Rol">
-      <option value="lector">lector — solo consulta</option>
+      <option value="supervisor">supervisor — solo consulta</option>
       <option value="admin">admin — puede modificar</option>
     </select>
     <button type="submit" class="boton boton-principal">Crear</button>
   </form>
+</section>
+
+<section class="panel-accion">
+  <h2>Verificación en dos pasos</h2>
+  <p class="tenue">
+    Cada administrador activa el suyo desde <a href="/perfil">su perfil</a>;
+    desde aquí no se le puede imponer a otro. Lo que sí puedes decidir es si
+    las cuentas de rol <span class="rol rol-supervisor">supervisor</span> están
+    obligadas a usarlo.
+  </p>
+
+  <div id="politica-totp"
+       hx-get="/admin/politica/totp-supervisor"
+       hx-trigger="usuarios-actualizados from:body"
+       hx-swap="innerHTML">
+    {% include "partials/politica_totp.html" %}
+  </div>
 </section>
 
 <div id="tabla-usuarios"

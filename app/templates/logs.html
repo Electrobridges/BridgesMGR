@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 {% set activo = 'logs' %}
-{% block titulo %}Logs — OpenVPN Manager{% endblock %}
+{% block titulo %}Logs — BridgesMGR{% endblock %}
 
 {% block contenido %}
 <h1>Logs del servidor</h1>
 <p class="tenue"><code>{{ ruta }}</code></p>
 
-<form class="formulario en-fila"
+{# 'filtros-log' solo aporta la separación con el visor: aquí el formulario va
+   suelto en la página, no dentro de una tarjeta que ya lo separaría. #}
+<form class="formulario en-fila filtros-log"
       hx-get="/logs/contenido"
       hx-target="#contenido-log"
       hx-swap="innerHTML"

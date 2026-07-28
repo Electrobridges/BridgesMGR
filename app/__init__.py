@@ -2,4 +2,4 @@
 
 __version__ = "0.1.0"
 __author__ = "Daniel Puentes"
-__license__ = "MIT"
+__license__ = "Apache-2.0"

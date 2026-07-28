@@ -17,17 +17,27 @@ from .validacion import validar_cn
 
 TIMEOUT_POR_DEFECTO = 120
 
+# Marca que le pide al helper cifrar la clave privada. Tiene que coincidir con
+# MARCA_CLAVE del helper; es una palabra fija y nunca la contraseña.
+MARCA_CLAVE = "con-clave"
+
+MIN_CLAVE = 12
+
 
 class ErrorHelper(Exception):
     """El helper privilegiado falló o devolvió un error"""
 
 
-def _ejecutar(cfg, args, timeout=TIMEOUT_POR_DEFECTO):
+def _ejecutar(cfg, args, timeout=TIMEOUT_POR_DEFECTO, entrada=None):
     """
     Invoca el helper y devuelve su respuesta JSON.
 
     Nunca se usa shell=True ni se interpola nada en una cadena: los argumentos
     van como lista, así que un CN raro no puede convertirse en otro comando.
+
+    'entrada' va por stdin y es por donde viaja la contraseña del certificado.
+    Nunca como argumento: argv es público en /proc y cualquiera con una cuenta
+    en el servidor podría leerla con un 'ps' en el momento justo.
     """
     cmd = []
     if cfg.seguridad.usar_sudo:
@@ -40,6 +50,7 @@ def _ejecutar(cfg, args, timeout=TIMEOUT_POR_DEFECTO):
             cmd,
             capture_output=True,
             text=True,
+            input=entrada,
             timeout=timeout,
         )
     except FileNotFoundError:
@@ -74,16 +85,48 @@ def revocar(cfg, cn):
     return _ejecutar(cfg, ["revocar", cn])
 
 
-def restaurar(cfg, cn):
+class ClaveInvalida(ValueError):
+    """La contraseña del certificado no cumple el mínimo"""
+
+
+def _argumentos_de_emision(sub, cn, clave):
+    """
+    Monta (args, entrada) para los subcomandos que emiten una clave privada.
+
+    La contraseña no aparece en 'args' ni aquí ni en ningún sitio: lo único que
+    se le dice al helper por argumento es que va a haber una.
+    """
+    if clave is None:
+        return [sub, cn], None
+
+    if len(clave) < MIN_CLAVE:
+        raise ClaveInvalida(
+            "La contraseña del certificado debe tener al menos %d caracteres" % MIN_CLAVE
+        )
+    if "\n" in clave or "\r" in clave:
+        # El helper lee la primera línea de stdin: un salto partiría la
+        # contraseña en dos y cifraría con un trozo, en silencio.
+        raise ClaveInvalida("La contraseña del certificado no puede tener saltos de línea")
+
+    return [sub, cn, MARCA_CLAVE], clave + "\n"
+
+
+def restaurar(cfg, cn, clave=None):
     """Elimina la entrada revocada del índice y reemite el certificado"""
-    cn = validar_cn(cn)
-    return _ejecutar(cfg, ["restaurar", cn])
+    args, entrada = _argumentos_de_emision("restaurar", validar_cn(cn), clave)
+    return _ejecutar(cfg, args, entrada=entrada)
 
 
-def crear_cliente(cfg, cn):
-    """Emite un certificado de cliente nuevo (sin contraseña)"""
-    cn = validar_cn(cn)
-    return _ejecutar(cfg, ["crear", cn])
+def crear_cliente(cfg, cn, clave=None):
+    """
+    Emite un certificado de cliente nuevo.
+
+    Con 'clave' la clave privada se guarda cifrada y OpenVPN la pedirá al
+    conectar. Sin ella el perfil `.ovpn` es acceso directo a la VPN para
+    cualquiera que se haga con el archivo.
+    """
+    args, entrada = _argumentos_de_emision("crear", validar_cn(cn), clave)
+    return _ejecutar(cfg, args, entrada=entrada)
 
 
 def generar_ovpn(cfg, cn):

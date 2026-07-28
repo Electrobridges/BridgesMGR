@@ -1,12 +1,15 @@
 {% extends "base.html" %}
-{% block titulo %}Entrar — OpenVPN Manager{% endblock %}
+{% block titulo %}Entrar — BridgesMGR{% endblock %}
 
 {% block contenido %}
+{% include "partials/fondo_marca.html" %}
+
 <div class="login-caja">
   <div class="login-cabecera">
-    <span class="candado grande">&#128274;</span>
-    <h1>OpenVPN Manager</h1>
-    <p class="tenue">Panel de administración del servidor</p>
+    <img class="marca-logo grande" src="/static/imagenes/bridgesmgr-oscuro-transparente.png"
+         alt="" width="76" height="76">
+    <h1>Bridges<span class="acento">MGR</span></h1>
+    <p class="tenue">Administración del servidor OpenVPN</p>
   </div>
 
   {% if error %}
@@ -24,5 +27,7 @@
 
     <button type="submit" class="boton boton-principal">Entrar</button>
   </form>
+
+  {% include "partials/firma.html" %}
 </div>
 {% endblock %}

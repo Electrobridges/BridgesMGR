@@ -10,7 +10,7 @@ import pytest
 from app import db
 from app.auth import COOKIE_NOMBRE
 
-from .conftest import PASSWORD_ADMIN
+from .conftest import PASSWORD_ADMIN, csrf_de
 
 RUTAS_PROTEGIDAS = ["/", "/conexiones", "/clientes", "/logs", "/configuracion",
                     "/admin/auditoria", "/admin/usuarios"]
@@ -109,29 +109,35 @@ def test_token_de_sesion_no_se_guarda_en_claro(como_admin, cfg):
 
 # ------------------------------------------------------------------- roles
 
-def test_lector_puede_consultar(como_lector):
-    assert como_lector.get("/clientes").status_code == 200
-    assert como_lector.get("/conexiones").status_code == 200
+def test_supervisor_puede_consultar(como_supervisor):
+    assert como_supervisor.get("/clientes").status_code == 200
+    assert como_supervisor.get("/conexiones").status_code == 200
 
 
-def test_lector_no_puede_revocar(como_lector, cfg):
-    from app.auth import COOKIE_NOMBRE as ck
-
-    sesion = db.obtener_sesion(cfg.seguridad.db_path, como_lector.cookies.get(ck))
-    respuesta = como_lector.post(
-        "/clientes/alguien/revocar", headers={"X-CSRF-Token": sesion["csrf"]}
+def test_supervisor_no_puede_revocar(como_supervisor, cfg):
+    respuesta = como_supervisor.post(
+        "/clientes/alguien/revocar", headers={"X-CSRF-Token": csrf_de(como_supervisor, cfg)}
     )
 
     assert respuesta.status_code == 403
 
 
-def test_lector_no_entra_en_administracion(como_lector):
-    assert como_lector.get("/admin/usuarios", follow_redirects=False).status_code == 403
+def test_supervisor_no_entra_en_administracion(como_supervisor):
+    assert como_supervisor.get("/admin/usuarios", follow_redirects=False).status_code == 403
 
 
-def test_lector_no_descarga_perfiles(como_lector):
+def test_supervisor_no_descarga_perfiles(como_supervisor):
     """El .ovpn lleva la clave privada: es acceso a la VPN, solo admin"""
-    assert como_lector.get("/clientes/daniel/ovpn").status_code == 403
+    assert como_supervisor.get("/clientes/daniel/ovpn").status_code == 403
+
+
+def test_el_superusuario_manda_igual_que_un_admin(como_super):
+    """
+    El escalón de arriba no puede tener menos permiso que el de abajo. Es lo
+    que se rompería si solo_admin siguiera comparando con la cadena 'admin'.
+    """
+    assert como_super.get("/admin/usuarios").status_code == 200
+    assert como_super.get("/clientes").status_code == 200
 
 
 # -------------------------------------------------------------------- CSRF
@@ -181,8 +187,7 @@ def test_cambiar_password_cierra_sesiones(como_admin, cfg, csrf_admin):
     assert "sesiones se han cerrado" in respuesta.text
 
 
-def test_no_se_puede_borrar_el_ultimo_admin(como_admin, csrf_admin, cfg):
-    """La cuenta propia está protegida, y también el último admin"""
+def test_no_se_puede_borrar_la_cuenta_propia(como_admin, csrf_admin, cfg):
     respuesta = como_admin.post(
         "/admin/usuarios/jefa/borrar", headers={"X-CSRF-Token": csrf_admin}
     )
@@ -191,12 +196,16 @@ def test_no_se_puede_borrar_el_ultimo_admin(como_admin, csrf_admin, cfg):
     assert "tu propia cuenta" in respuesta.text
 
 
-def test_no_se_puede_degradar_el_ultimo_admin(como_admin, csrf_admin, cfg):
+def test_degradar_a_otro_admin_si_queda_alguien_al_mando(como_admin, csrf_admin, cfg, usuarios):
+    """El caso normal: hay más de uno al mando, así que degradar vale"""
+    ruta = cfg.seguridad.db_path
+    db.cambiar_rol(ruta, usuarios["supervisor"], "admin")
+
     respuesta = como_admin.post(
-        "/admin/usuarios/jefa/rol",
-        data={"rol": "lector"},
+        "/admin/usuarios/%s/rol" % usuarios["supervisor"],
+        data={"rol": "supervisor"},
         headers={"X-CSRF-Token": csrf_admin},
     )
 
-    assert respuesta.status_code == 400
-    assert "último administrador" in respuesta.text
+    assert respuesta.status_code == 200, respuesta.text
+    assert db.obtener_usuario(ruta, usuarios["supervisor"])["rol"] == "supervisor"

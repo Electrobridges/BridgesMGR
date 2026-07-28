@@ -1,0 +1,36 @@
+# OpenVPN Manager Web — dependencias directas, con los rangos que se sostienen.
+#
+# Este archivo dice QUÉ PEDIMOS. El que se instala es requirements.txt, que se
+# genera de aquí con versiones exactas y hashes:
+#
+#     uv pip compile requirements.in --universal --python-version 3.9 --generate-hashes \
+#         --no-header -o requirements.txt
+#
+# No edites requirements.txt a mano: se regenera y perderías el cambio.
+#
+# Los rangos llevan techo a propósito. Sin él, una instalación de mañana trae
+# una versión mayor que nadie ha probado contra este código, y en un panel que
+# revoca certificados eso no es una molestia: es una incidencia en producción.
+# El techo se sube cuando alguien prueba la versión nueva, no antes.
+
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27,<1.0
+jinja2>=3.1,<4.0
+python-multipart>=0.0.9,<1.0   # necesario para los formularios (Form(...))
+argon2-cffi>=23.1,<26.0        # hashing de contraseñas
+PyYAML>=6.0,<7.0               # lectura de config.yaml
+segno>=1.6,<2.0                # QR del alta del segundo factor
+
+# Sobre 'segno': Python puro y sin dependencias propias en 3.10+ (en 3.9
+# arrastra importlib-metadata). Se prefirió a escribir el codificador porque
+# un QR son ~300 líneas de Reed-Solomon y tablas de capacidad por versión, y
+# su fallo —"no escanea"— solo se ve con un móvil delante. El TOTP sí se hizo
+# a mano: son cuarenta líneas de hmac que se leen de un tirón.
+# Si falta, el panel sigue funcionando y ofrece la clave para teclearla.
+
+# Dependencias de la librería estándar (sin instalar):
+#   sqlite3    usuarios, sesiones y auditoría
+#   socket     management interface de OpenVPN
+#   subprocess llamada al helper privilegiado
+#   secrets    tokens de sesión y CSRF
+#   hmac       códigos TOTP (app/core/totp.py)

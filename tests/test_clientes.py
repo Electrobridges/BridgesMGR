@@ -19,6 +19,9 @@ def helper_falso(monkeypatch):
         "validos": ["daniel", "portatil.oficina"],
         "revocados": ["antiguo-becario"],
         "llamadas": [],
+        # Qué contraseña recibió cada emisión, para poder comprobar que llega
+        # la que se pidió y que no llega ninguna cuando no se pide.
+        "claves": {},
     }
 
     def listar(cfg):
@@ -30,13 +33,15 @@ def helper_falso(monkeypatch):
         estado["revocados"].append(cn)
         return {"ok": True}
 
-    def crear(cfg, cn):
+    def crear(cfg, cn, clave=None):
         estado["llamadas"].append(("crear", cn))
+        estado["claves"][cn] = clave
         estado["validos"].append(cn)
         return {"ok": True}
 
-    def restaurar(cfg, cn):
+    def restaurar(cfg, cn, clave=None):
         estado["llamadas"].append(("restaurar", cn))
+        estado["claves"][cn] = clave
         estado["revocados"].remove(cn)
         estado["validos"].append(cn)
         return {"ok": True}
@@ -148,3 +153,85 @@ def test_conexiones_informan_el_fallo_del_management(como_admin):
     assert respuesta.status_code == 200
     assert "Management interface" in respuesta.text
     assert "no disponible" in respuesta.text
+
+
+# ------------------------------------- contraseña del certificado de cliente
+
+CLAVE = "contrasena-del-certificado"
+
+
+def test_crear_con_contrasena_la_pasa_al_helper(como_admin, csrf_admin, helper_falso):
+    respuesta = como_admin.post(
+        "/clientes",
+        data={"cn": "movil", "con_clave": "1", "clave": CLAVE, "clave2": CLAVE},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 200
+    assert helper_falso["claves"]["movil"] == CLAVE
+    assert "cifrada" in respuesta.text
+
+
+def test_sin_marcar_la_casilla_no_se_cifra(como_admin, csrf_admin, helper_falso):
+    """
+    Un navegador no envía las casillas sin marcar: la ausencia de 'con_clave'
+    tiene que significar 'sin contraseña', no 'usa lo que venga en clave'.
+    """
+    respuesta = como_admin.post(
+        "/clientes",
+        data={"cn": "ruter", "clave": CLAVE, "clave2": CLAVE},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 200
+    assert helper_falso["claves"]["ruter"] is None
+    assert "sin contraseña" in respuesta.text
+
+
+@pytest.mark.parametrize("datos,esperado", [
+    ({"con_clave": "1", "clave": "", "clave2": ""}, "no escribiste ninguna"),
+    ({"con_clave": "1", "clave": CLAVE, "clave2": "otra-distinta-larga"}, "no coinciden"),
+    ({"con_clave": "1", "clave": "corta", "clave2": "corta"}, "al menos 12"),
+])
+def test_contrasenas_que_no_valen(como_admin, csrf_admin, helper_falso, datos, esperado):
+    datos = dict(datos, cn="cliente-nuevo")
+    respuesta = como_admin.post(
+        "/clientes", data=datos, headers={"X-CSRF-Token": csrf_admin}
+    )
+
+    assert respuesta.status_code == 400
+    assert esperado in respuesta.text
+    assert "cliente-nuevo" not in helper_falso["claves"], "no debió llegar al helper"
+
+
+def test_la_contrasena_no_queda_en_la_auditoria(como_admin, csrf_admin, helper_falso, cfg):
+    """
+    Lo que se registra es QUE lleva contraseña, nunca cuál. La auditoría la lee
+    cualquier usuario autenticado, incluido un supervisor.
+    """
+    from app import db
+
+    como_admin.post(
+        "/clientes",
+        data={"cn": "auditado", "con_clave": "1", "clave": CLAVE, "clave2": CLAVE},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    entradas = db.listar_auditoria(cfg.seguridad.db_path)
+    texto = " ".join(str(v) for e in entradas for v in e.values())
+
+    assert CLAVE not in texto, "la contraseña del certificado acabó en la auditoría"
+    assert any(e["accion"] == "crear_cliente" and "cifrada" in (e["detalle"] or "")
+               for e in entradas)
+
+
+def test_restaurar_tambien_admite_contrasena(como_admin, csrf_admin, helper_falso):
+    """Reemite una clave privada nueva, así que hay que volver a decidirlo"""
+    respuesta = como_admin.post(
+        "/clientes/antiguo-becario/restaurar",
+        data={"con_clave": "1", "clave": CLAVE, "clave2": CLAVE},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 200
+    assert helper_falso["claves"]["antiguo-becario"] == CLAVE

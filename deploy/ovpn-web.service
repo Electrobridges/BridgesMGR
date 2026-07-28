@@ -24,7 +24,19 @@ NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/ovpn-web
+
+# Las dos rutas que el servicio necesita poder escribir.
+#
+# /etc/openvpn no es un descuido ni una laxitud: ProtectSystem=strict monta el
+# sistema en solo lectura dentro del espacio de nombres del servicio, y los
+# hijos lo heredan — también el helper lanzado con sudo, aunque sea root. Sin
+# esta línea el panel no puede emitir, revocar ni restaurar un solo
+# certificado, que es justo para lo que existe. Falla además con un mensaje de
+# easyrsa que no menciona systemd por ningún lado.
+#
+# Si mueves la PKI (openvpn.easyrsa_path en config.yaml), esta línea tiene que
+# seguirla. Hay una prueba que comprueba que cubre lo que declara el ejemplo.
+ReadWritePaths=/var/lib/ovpn-web /etc/openvpn
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -36,6 +48,12 @@ LockPersonality=true
 MemoryDenyWriteExecute=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 SystemCallArchitectures=native
+
+# 0077 para que la base de datos y lo que escriba el panel nazcan cerrados.
+# Ojo: lo hereda todo lo que el panel lance, helper y easyrsa incluidos, así
+# que la CRL saldría de gen-crl en 0600 y OpenVPN —que la relee siendo
+# 'nobody'— dejaría de admitir a nadie. Por eso el helper le pone los permisos
+# a mano después de regenerarla, en vez de fiarlo al umask.
 UMask=0077
 
 [Install]

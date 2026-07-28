@@ -15,10 +15,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import db
-from .auth import CSRFInvalido, NoAutenticado, SinPermiso, sesion_opcional
+from .auth import (
+    CSRFInvalido,
+    NoAutenticado,
+    RequiereAltaTOTP,
+    SinPermiso,
+    sesion_opcional,
+)
 from .config import cargar_config
 from .core.parsers import format_bytes
-from .routers import administracion, clientes, panel, sesion
+from .routers import administracion, clientes, panel, perfil, sesion
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
@@ -40,6 +46,7 @@ def crear_app(cfg=None):
     app.state.cfg = cfg
     db.init_db(cfg.seguridad.db_path)
     db.purgar_sesiones(cfg.seguridad.db_path)
+    db.purgar_logins_pendientes(cfg.seguridad.db_path)
 
     plantillas = Jinja2Templates(directory=os.path.join(BASE, "templates"))
     plantillas.env.globals["format_bytes"] = format_bytes
@@ -89,6 +96,16 @@ def crear_app(cfg=None):
             status_code=403,
         )
 
+    @app.exception_handler(RequiereAltaTOTP)
+    def _requiere_totp(request: Request, exc):
+        # Hay sesión, pero la política obliga a activar el segundo factor
+        # antes de usar el panel. Todo lleva al perfil hasta que se active.
+        if _es_htmx(request):
+            respuesta = HTMLResponse("", status_code=403)
+            respuesta.headers["HX-Redirect"] = "/perfil"
+            return respuesta
+        return RedirectResponse("/perfil", status_code=303)
+
     @app.exception_handler(CSRFInvalido)
     def _csrf(request: Request, exc):
         return plantillas.TemplateResponse(
@@ -103,6 +120,7 @@ def crear_app(cfg=None):
     app.include_router(panel.router)
     app.include_router(clientes.router)
     app.include_router(administracion.router)
+    app.include_router(perfil.router)
 
     return app
 

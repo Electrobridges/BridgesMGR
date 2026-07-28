@@ -48,6 +48,17 @@ RESERVADOS = {'server', 'ca'}
 
 TIMEOUT = 120
 
+# Marca que pide cifrar la clave privada del cliente. Es una palabra fija, no
+# la contraseña: esa llega por stdin y no toca argv en ningún momento.
+MARCA_CLAVE = "con-clave"
+
+# Variable por la que se le pasa la contraseña a easyrsa. Va por el entorno del
+# hijo y no por su línea de comandos, así que no aparece en 'ps'; el entorno de
+# un proceso solo lo lee su dueño o root, y aquí ya somos root.
+ENV_CLAVE = "OVPNWEB_PASSOUT"
+
+MIN_CLAVE = 12
+
 
 def error(mensaje, codigo=1):
     sys.stderr.write(mensaje.rstrip() + "\n")
@@ -86,29 +97,107 @@ def rutas_pki(cfg):
         "reqs": os.path.join(base, "pki", "reqs"),
         "index": os.path.join(base, "pki", "index.txt"),
         "ca": os.path.join(base, "pki", "ca.crt"),
+        "crl": os.path.join(base, "pki", "crl.pem"),
         "backups": os.path.join(base, "pki", "ovpn-web-backups"),
     }
 
 
-def correr_easyrsa(rutas, args, entrada=None):
-    """Ejecuta easyrsa en su directorio. Devuelve stdout; aborta si falla."""
+def leer_clave_de_stdin():
+    """
+    Lee de stdin la contraseña con la que cifrar la clave privada del cliente.
+
+    Por stdin y no por argumento: argv es público en /proc, así que cualquiera
+    con una cuenta en el servidor podría leerla con un 'ps' en el momento
+    justo. Se revalida aquí aunque el panel ya valide, por el mismo motivo que
+    el CN: desde este lado de la frontera el panel no es de fiar.
+    """
+    primera = sys.stdin.read().split("\n", 1)[0].rstrip("\r")
+
+    if len(primera) < MIN_CLAVE:
+        error("La contraseña del certificado debe tener al menos %d caracteres"
+              % MIN_CLAVE)
+
+    return primera
+
+
+def emitir_cliente(rutas, cn, clave):
+    """
+    Emite el certificado del cliente, cifrando su clave privada si hay contraseña.
+
+    'nopass' y '--passout' son excluyentes en easy-rsa, así que es uno u otro y
+    nunca los dos.
+    """
+    if clave is None:
+        correr_easyrsa(rutas, ["build-client-full", cn, "nopass"])
+    else:
+        correr_easyrsa(rutas, ["build-client-full", cn], clave=clave)
+
+
+def asegurar_crl_legible(rutas):
+    """
+    Deja la CRL legible para todos después de regenerarla.
+
+    OpenVPN la relee en cada conexión, y para entonces ya ha bajado a 'nobody'.
+    Si easyrsa la deja en 0600 —depende del umask con el que corra— revocar
+    "funciona" y a partir de ese momento no entra ni un cliente, sin que nada
+    lo diga. Una CRL es pública por definición: no hay nada que proteger aquí.
+    """
+    if not os.path.isfile(rutas["crl"]):
+        error("gen-crl no dejó ninguna CRL en %s" % rutas["crl"])
+
+    try:
+        os.chmod(rutas["crl"], 0o644)
+    except OSError as e:
+        error("No se pudo dejar la CRL legible (%s): %s" % (rutas["crl"], e))
+
+
+def correr_easyrsa(rutas, args, entrada=None, clave=None):
+    """
+    Ejecuta easyrsa en su directorio. Devuelve stdout; aborta si falla.
+
+    Siempre con --batch. Aquí no hay nadie a quien preguntar: easy-rsa 3.2
+    empezó a pedir confirmación también en build-client-full, y sin esto el
+    panel no puede emitir un solo certificado en Debian 13. Las versiones
+    anteriores no preguntaban, así que el fallo aparece al actualizar el
+    sistema operativo, no al tocar este código.
+
+    Si se pasa 'clave', se le da a easyrsa por el entorno y no como argumento.
+    OpenSSL admite 'pass:', y sería una línea más corta, pero pondría la
+    contraseña del cliente en la línea de comandos: cualquiera con un 'ps' en
+    el servidor la leería. Por el entorno solo la ve root, que ya es quien
+    corre esto.
+    """
     if not os.path.isfile(rutas["easyrsa"]):
         error("No se encontró easyrsa en %s" % rutas["easyrsa"])
 
+    entorno = None
+    if clave is not None:
+        args = ["--passout=env:%s" % ENV_CLAVE] + list(args)
+        entorno = dict(os.environ, **{ENV_CLAVE: clave})
+
     try:
         proc = subprocess.run(
-            [rutas["easyrsa"]] + list(args),
+            [rutas["easyrsa"], "--batch"] + list(args),
             cwd=rutas["base"],
             capture_output=True,
             text=True,
             input=entrada,
+            env=entorno,
             timeout=TIMEOUT,
         )
     except subprocess.TimeoutExpired:
         error("easyrsa %s excedió %d segundos" % (" ".join(args), TIMEOUT))
 
     if proc.returncode != 0:
-        error("easyrsa %s falló: %s" % (" ".join(args), (proc.stderr or proc.stdout).strip()))
+        # Los dos flujos, no uno. easyrsa 3.2 escribe separadores decorativos
+        # ('-----') en stderr y el motivo real en stdout: quedarse con stderr
+        # cuando no está vacío reporta la decoración y esconde la causa. Se vio
+        # en un servidor real, donde el panel decía '-----' y nada más.
+        detalle = "\n".join(
+            parte.strip() for parte in (proc.stdout, proc.stderr) if parte and parte.strip()
+        )
+        error("easyrsa %s falló (código %d): %s"
+              % (" ".join(args), proc.returncode, detalle or "sin salida"))
 
     return proc.stdout
 
@@ -194,6 +283,7 @@ def cmd_revocar(cfg, cn):
 
     correr_easyrsa(rutas, ["revoke", cn], entrada="yes\n")
     correr_easyrsa(rutas, ["gen-crl"])
+    asegurar_crl_legible(rutas)
 
     return {
         "ok": True,
@@ -204,7 +294,7 @@ def cmd_revocar(cfg, cn):
     }
 
 
-def cmd_restaurar(cfg, cn):
+def cmd_restaurar(cfg, cn, clave=None):
     """
     Reemite el certificado de un cliente revocado.
 
@@ -236,27 +326,35 @@ def cmd_restaurar(cfg, cn):
         if os.path.isfile(ruta):
             os.remove(ruta)
 
-    correr_easyrsa(rutas, ["build-client-full", cn, "nopass"])
+    emitir_cliente(rutas, cn, clave)
     correr_easyrsa(rutas, ["gen-crl"])
+    asegurar_crl_legible(rutas)
 
     return {
         "ok": True,
         "accion": "restaurar",
         "cn": cn,
         "respaldo": respaldo,
+        "cifrada": clave is not None,
         "requiere_reinicio": True,
     }
 
 
-def cmd_crear(cfg, cn):
+def cmd_crear(cfg, cn, clave=None):
     rutas = rutas_pki(cfg)
 
     if os.path.isfile(os.path.join(rutas["issued"], "%s.crt" % cn)):
         error("Ya existe un certificado para '%s'" % cn)
 
-    correr_easyrsa(rutas, ["build-client-full", cn, "nopass"])
+    emitir_cliente(rutas, cn, clave)
 
-    return {"ok": True, "accion": "crear", "cn": cn, "requiere_reinicio": False}
+    return {
+        "ok": True,
+        "accion": "crear",
+        "cn": cn,
+        "cifrada": clave is not None,
+        "requiere_reinicio": False,
+    }
 
 
 def cmd_ovpn(cfg, cn):
@@ -329,6 +427,10 @@ COMANDOS_SIN_CN = {
     "estado-servicio": cmd_estado_servicio,
 }
 
+# Los únicos que emiten una clave privada nueva y, por tanto, los únicos que
+# pueden cifrarla.
+COMANDOS_CON_CLAVE = {"crear", "restaurar"}
+
 
 def main():
     if os.geteuid() != 0:
@@ -346,9 +448,23 @@ def main():
         resultado = COMANDOS_SIN_CN[sub](cfg)
 
     elif sub in COMANDOS_CON_CN:
-        if len(sys.argv) != 3:
-            error("Uso: ovpn-web-helper %s <CN>" % sub)
-        resultado = COMANDOS_CON_CN[sub](cfg, validar_cn(sys.argv[2]))
+        if len(sys.argv) not in (3, 4):
+            error("Uso: ovpn-web-helper %s <CN> [%s]" % (sub, MARCA_CLAVE))
+
+        cn = validar_cn(sys.argv[2])
+        clave = None
+
+        if len(sys.argv) == 4:
+            # El cuarto argumento es una marca fija, jamás la contraseña: esa
+            # llega por stdin y no pasa por argv en ningún momento.
+            if sub not in COMANDOS_CON_CLAVE or sys.argv[3] != MARCA_CLAVE:
+                error("'%s' no admite '%s'" % (sub, sys.argv[3]))
+            clave = leer_clave_de_stdin()
+
+        if sub in COMANDOS_CON_CLAVE:
+            resultado = COMANDOS_CON_CN[sub](cfg, cn, clave)
+        else:
+            resultado = COMANDOS_CON_CN[sub](cfg, cn)
 
     else:
         error("Subcomando desconocido: %s" % sub)

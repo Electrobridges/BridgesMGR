@@ -15,16 +15,24 @@ servidor:
   tls_key: "/etc/ovpn-web/tls/key.pem"
 
 openvpn:
+  # Estas rutas son las que deja deploy/instalar-openvpn.sh. Si tu servidor ya
+  # existía, ajústalas a lo que diga tu server.conf.
   log_path: "/var/log/openvpn/openvpn.log"
   # Ojo: el nombre depende de tu server.conf. Si pusiste
   # 'status /var/log/openvpn/status.log', va sin el prefijo 'openvpn-'.
+  # Y tiene que ser 'status-version 3': es el único formato que se parsea.
   status_path: "/var/log/openvpn/status.log"
   # 127.0.0.1 explícito: 'localhost' puede resolver a IPv6 y el management
   # de OpenVPN solo escucha en IPv4.
   mgmt_host: "127.0.0.1"
   mgmt_port: 7505
   easyrsa_path: "/etc/openvpn/easy-rsa"
-  servicio: "openvpn@server"
+  # Dos nombres de unidad conviven en Debian y no son intercambiables:
+  #   openvpn-server@server  lee /etc/openvpn/server/server.conf  (el moderno,
+  #                          y el que monta instalar-openvpn.sh)
+  #   openvpn@server         lee /etc/openvpn/server.conf          (el antiguo)
+  # Comprueba cuál tienes con: systemctl list-units 'openvpn*'
+  servicio: "openvpn-server@server"
 
 cliente_ovpn:
   # Dirección por la que los clientes llegan al servidor VPN desde fuera.

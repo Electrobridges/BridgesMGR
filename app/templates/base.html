@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titulo %}OpenVPN Manager{% endblock %}</title>
+  <title>{% block titulo %}BridgesMGR{% endblock %}</title>
+  {# El escudo va sobre fondo transparente: se lee igual en una pestaña clara
+     que en una oscura, porque la llave blanca recorta sobre el cian. #}
+  <link rel="icon" type="image/png" href="/static/imagenes/bridgesmgr-oscuro-transparente.png">
   <link rel="stylesheet" href="/static/estilo.css">
   <script src="/static/htmx.min.js" defer></script>
 </head>
@@ -13,10 +16,13 @@
 
 {% if sesion %}
 <header class="barra">
-  <div class="marca">
-    <span class="candado">&#128274;</span>
-    <strong>OpenVPN Manager</strong>
-  </div>
+  {# alt vacío a propósito: el nombre va al lado en texto, y repetirlo haría
+     que un lector de pantalla lo dijera dos veces. #}
+  <a class="marca" href="/">
+    <img class="marca-logo" src="/static/imagenes/bridgesmgr-oscuro-transparente.png"
+         alt="" width="30" height="30">
+    <strong>Bridges<span>MGR</span></strong>
+  </a>
 
   <nav class="nav">
     <a href="/" class="{{ 'activo' if activo == 'dashboard' }}">Panel</a>
@@ -24,14 +30,16 @@
     <a href="/clientes" class="{{ 'activo' if activo == 'clientes' }}">Clientes VPN</a>
     <a href="/logs" class="{{ 'activo' if activo == 'logs' }}">Logs</a>
     <a href="/admin/auditoria" class="{{ 'activo' if activo == 'auditoria' }}">Auditoría</a>
-    {% if sesion.rol == 'admin' %}
+    {# 'manda' y nunca el nombre del rol: lo inyecta routers/comun.py:render()
+       desde db.ROLES_MANDO, que es la misma lista que mira solo_admin. #}
+    {% if manda %}
     <a href="/admin/usuarios" class="{{ 'activo' if activo == 'usuarios' }}">Usuarios</a>
-    {% endif %}
     <a href="/configuracion" class="{{ 'activo' if activo == 'configuracion' }}">Configuración</a>
+    {% endif %}
   </nav>
 
   <div class="sesion">
-    <span class="usuario">{{ sesion.usuario }}</span>
+    <a href="/perfil" class="usuario{{ ' activo' if activo == 'perfil' }}">{{ sesion.usuario }}</a>
     <span class="rol rol-{{ sesion.rol }}">{{ sesion.rol }}</span>
     <form method="post" action="/logout" class="en-linea">
       <button type="submit" class="boton-plano">Salir</button>
@@ -41,8 +49,9 @@
 {% endif %}
 
 <main class="contenido">
-  {# Destino de los avisos que devuelven las acciones HTMX #}
-  <div id="avisos" class="avisos"></div>
+  {# Destino de los avisos que devuelven las acciones HTMX. aria-live para que
+     el resultado de cada acción se anuncie: aquí nada se silencia. #}
+  <div id="avisos" class="avisos" role="status" aria-live="polite"></div>
 
   {% block contenido %}{% endblock %}
 </main>

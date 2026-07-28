@@ -1,0 +1,20 @@
+{# Estado del interruptor de la política. Se recarga con el mismo evento que
+   la tabla, para que el botón y lo que dice no se desincronicen. #}
+<p>
+  Estado actual:
+  {% if exigir_totp_supervisor %}
+  <span class="etiqueta etiqueta-ok">exigido a los supervisores</span>
+  {% else %}
+  <span class="etiqueta etiqueta-mal">no exigido</span>
+  {% endif %}
+</p>
+
+<button class="boton {{ 'boton-peligro' if exigir_totp_supervisor else 'boton-principal' }}"
+        hx-post="/admin/politica/totp-supervisor"
+        hx-vals='{"exigir": {{ 0 if exigir_totp_supervisor else 1 }}}'
+        hx-target="#avisos" hx-swap="innerHTML"
+        {% if not exigir_totp_supervisor %}
+        hx-confirm="Los supervisores que no tengan segundo factor solo podrán entrar a su perfil hasta activarlo. ¿Seguimos?"
+        {% endif %}>
+  {{ 'Dejar de exigirlo' if exigir_totp_supervisor else 'Exigirlo a los supervisores' }}
+</button>
