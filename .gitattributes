@@ -13,6 +13,16 @@ deploy/ovpnweb.sudoers   text eol=lf
 *.yml                    text eol=lf
 *.md                     text eol=lf
 
-# Binarios
-*.png binary
-*.jpg binary
+# Binarios. Van declarados uno a uno y no confiados a la autodetección: la
+# regla '* text=auto eol=lf' de arriba normalizaría saltos de línea dentro de
+# un archivo que git no reconociera como binario, y una fuente o un .ico así
+# quedan corruptos sin que nada avise hasta que el navegador no los dibuja.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.ttf  binary
+*.woff binary
+*.woff2 binary
+
+# El manifest es JSON: texto, con LF como todo lo demás.
+*.webmanifest text eol=lf

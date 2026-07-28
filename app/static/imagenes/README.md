@@ -5,10 +5,31 @@ desde `/static/imagenes/`.
 
 | Archivo | Qué es | Dónde se usa |
 |---|---|---|
-| `bridgesmgr-oscuro-transparente.png` | 960×960, escudo cian con llave blanca | Barra superior, login y favicon |
+| `bridgesmgr-oscuro-transparente.png` | 960×960, escudo cian con llave blanca | Barra superior y login |
 | `bridgesmgr-claro-transparente.png` | 960×960, escudo navy con llave cian | Fondos claros: documentación, impresión |
 | `BridgesMGR Logo-selection-oscuro.png` | 192×192, con fondo navy | Sin usar |
 | `BridgesMGR Logo-selection-claro.png` | 484×484, con fondo blanco | Sin usar |
+
+## `favicon/`
+
+Set recortado a cada tamaño, no reducido por el navegador: a 16 px, encoger el
+PNG de 960 convierte la llave en una mancha.
+
+| Archivo | Para qué |
+|---|---|
+| `favicon.ico` | Pestaña; lo piden los navegadores antiguos y algunos lo buscan solos |
+| `favicon-32x32.png`, `favicon-16x16.png` | Pestaña en navegadores actuales |
+| `apple-touch-icon.png` | 180×180, iOS al añadir a la pantalla de inicio |
+| `android-chrome-192x192.png`, `-512x512.png` | Android, vía el manifest |
+| `site.webmanifest` | Nombre, colores y los dos iconos de Android |
+
+Todo se declara en el `<head>` de `base.html`, del que heredan también `login`
+y `login_totp`. Un solo sitio.
+
+Dos cosas del manifest que el generador deja mal y hay que revisar si se
+regenera: las rutas salen apuntando a la raíz (`/android-chrome-192x192.png`) y
+tienen que ir bajo `/static/imagenes/favicon/`, y los colores salen en blanco
+cuando aquí van en Navy Abismo (`#081731`), que es el fondo real del panel.
 
 El nombre se compone en la propia página, no va en la imagen: *Bridges* en
 blanco y *MGR* en Cian Marca (`#10c4d8`), Poppins ExtraBold. Lo hace la regla
@@ -30,8 +51,6 @@ transparente no da problemas aquí.
 - Si cambias un nombre de archivo, hay que tocar también `base.html`,
   `login.html` y `login_totp.html`.
 
-## Pendiente si algún día importa
-
-No hay iconos recortados a 32/180/512 px ni `apple-touch-icon`: el navegador
-reduce el PNG de 960 px, que para un panel de LAN va sobrado. Solo haría falta
-si se quisiera instalar como aplicación en el escritorio o en un móvil.
+- Si añades un tamaño nuevo al favicon, decláralo en `base.html` **y**
+  añádelo a `site.webmanifest` si es para Android. Un archivo suelto que nadie
+  referencia no lo usa ningún navegador.

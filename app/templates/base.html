@@ -4,9 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}BridgesMGR{% endblock %}</title>
-  {# El escudo va sobre fondo transparente: se lee igual en una pestaña clara
-     que en una oscura, porque la llave blanca recorta sobre el cian. #}
-  <link rel="icon" type="image/png" href="/static/imagenes/bridgesmgr-oscuro-transparente.png">
+  {# El escudo se lee igual en una pestaña clara que en una oscura: es cian
+     opaco con la llave recortada en blanco encima.
+
+     Los tamaños van recortados a mano y no reducidos por el navegador: a
+     16 px, encoger un PNG de 960 convierte la llave en una mancha. #}
+  <link rel="icon" href="/static/imagenes/favicon/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32"
+        href="/static/imagenes/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16"
+        href="/static/imagenes/favicon/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180"
+        href="/static/imagenes/favicon/apple-touch-icon.png">
+  <link rel="manifest" href="/static/imagenes/favicon/site.webmanifest">
+  {# Tiñe la barra del navegador en móvil con el navy del panel. #}
+  <meta name="theme-color" content="#081731">
   <link rel="stylesheet" href="/static/estilo.css">
   <script src="/static/htmx.min.js" defer></script>
 </head>

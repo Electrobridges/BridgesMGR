@@ -22,6 +22,18 @@ del que hereda el núcleo de parseo y comunicación con OpenVPN.
 - **Verificación en dos pasos**: TOTP con la app del móvil, opcional para quien manda y exigible al rol supervisor.
 - **Auditoría**: quién hizo qué, cuándo y desde qué IP, incluidos los logins fallidos.
 
+<!-- Capturas: los archivos van en docs/capturas/. Ahí está la lista de las que
+     faltan y, sobre todo, qué hay que repasar antes de publicar una captura de
+     un panel de administración en un repo público. Descomenta según las vayas
+     añadiendo.
+
+![Panel de estado con clientes conectados, tráfico y estado del servicio](docs/capturas/panel.png)
+
+![Tabla de conexiones en vivo con IP real, IP virtual y tráfico por cliente](docs/capturas/conexiones.png)
+
+![Lista de clientes VPN con certificados válidos y revocados](docs/capturas/clientes.png)
+-->
+
 ## Modelo de seguridad
 
 Es un panel que puede revocar certificados y expulsar usuarios de una VPN, así
