@@ -35,15 +35,42 @@ pueden delatar el resto.
 | `usuarios.png` | `/admin/usuarios` | Los tres roles, con el superusuario blindado |
 | `login.png` | `/login` | La pantalla de entrada con los iconos de fondo y la firma |
 
-## Cómo tomarlas
+## Cómo tomarlas, paso a paso
 
-- **1440 px de ancho**, que es donde el diseño está pensado. Más ancho deja la
-  tabla flotando; más estrecho activa el responsive y no representa el uso real.
-- **PNG**, no JPG: hay texto pequeño y mucho contraste, y el JPG lo emborrona.
-- Sin la barra del navegador, o con ella recortada si prefieres enseñar el
-  candado del HTTPS — pero entonces tapa la IP.
-- Si pesan más de ~500 KB, pásalas por un optimizador. El repo se clona en cada
-  instalación.
+Redimensionar la ventana a ojo no vale: el ancho de la ventana no es el del
+área de página, porque se lleva los bordes y la barra de desplazamiento. Chrome
+tiene una forma exacta.
+
+1. Abre la página en Chrome y pulsa **Ctrl+0** — el zoom tiene que estar al
+   100%, o todo saldrá a otra escala sin que se note.
+2. **F12** para abrir DevTools.
+3. **Ctrl+Shift+M** activa la barra de dispositivo (el icono de móvil/tableta).
+4. Arriba aparece un desplegable de dispositivo: elige **Responsive** y escribe
+   **1440 × 900** en las dos casillas de al lado.
+5. **Ctrl+Shift+P**, escribe `screenshot` y elige:
+   - **Capture screenshot** — solo lo que se ve. Es el que quieres casi siempre.
+   - **Capture full size screenshot** — la página entera incluyendo el scroll.
+     Útil solo para la tabla de clientes si quieres enseñarla completa; en las
+     demás sale una imagen larguísima que en el README se ve diminuta.
+6. Se guarda en tu carpeta de Descargas. Renómbrala según la tabla de arriba.
+
+Sale a 1440 px exactos, **sin la barra del navegador** — así que el aviso de
+«No seguro» del certificado autofirmado tampoco aparece, que es lo que quieres
+para el README.
+
+### Detalles que cambian el resultado
+
+- **Por qué 1440.** `.contenido` tiene `max-width: 1200px` centrado, así que a
+  1440 el panel se ve con sus márgenes naturales. Más ancho solo añade fondo
+  vacío; por debajo de 700 px entra el responsive y ya no representa el uso real
+  (el panel es para escritorio en la LAN).
+- **Nitidez.** En la barra de dispositivo hay un campo de DPR. A `2` la imagen
+  sale a 2880 px y el texto se ve más limpio en pantallas retina, a cambio de
+  cuadruplicar el peso. Para un README, 1x va bien.
+- **PNG, no JPG**: hay texto pequeño sobre navy y mucho contraste; el JPG lo
+  emborrona y deja halos alrededor de las letras.
+- Si alguna pasa de ~500 KB, pásala por un optimizador. El repositorio se clona
+  entero en cada instalación.
 
 ## Al añadirlas
 
