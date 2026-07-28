@@ -12,8 +12,8 @@ a montarlo. Si ya lo tienes, no lo toca.
 ## Instalar
 
 ```bash
-git clone https://github.com/Electrobridges/OpenVPN-Manager-Web.git
-cd OpenVPN-Manager-Web
+git clone https://github.com/Electrobridges/BridgesMGR.git
+cd BridgesMGR
 sudo bash deploy/install.sh
 ```
 
@@ -29,8 +29,12 @@ Después, y esto no ha cambiado:
 3. Copia la aplicación a `/opt/ovpn-web` y crea su entorno virtual.
 4. Instala el helper privilegiado en `/usr/local/sbin/ovpn-web-helper` (0750,
    root:root).
-5. Descarga HTMX y **verifica su SHA-256** contra `deploy/htmx.sha256`. La
-   primera vez guarda el hash; a partir de ahí lo comprueba y aborta si cambia.
+5. Descarga HTMX y **verifica su SHA-256** contra `deploy/htmx.sha256`, que va
+   versionado en el repositorio. Si no coincide, aborta. Y si el archivo falta,
+   **también aborta**: HTMX se sirve desde el propio panel, así que la CSP lo da
+   por bueno y un archivo manipulado sería JavaScript corriendo con la sesión
+   del administrador. Aceptar lo que devuelva un CDN sin comparar no es una
+   opción por defecto; para subir de versión a conciencia está `--htmx-confiar`.
 6. Coloca la configuración de ejemplo en `/etc/ovpn-web/config.yaml`
    (root:ovpnweb 0640) si no existe ya. Si existe, **no la pisa**. Y si acaba
    de montar la VPN, la rellena con lo que ese script decidió, en vez de
@@ -229,7 +233,7 @@ El detalle está en [seguridad.md](seguridad.md#verificación-en-dos-pasos-totp)
 ## Actualizar
 
 ```bash
-cd OpenVPN-Manager-Web
+cd BridgesMGR
 git pull
 sudo bash deploy/install.sh
 sudo systemctl restart ovpn-web

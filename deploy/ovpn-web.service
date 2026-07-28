@@ -1,6 +1,6 @@
 [Unit]
 Description=OpenVPN Manager Web — panel de administración
-Documentation=https://github.com/Electrobridges/OpenVPN-Manager-Web
+Documentation=https://github.com/Electrobridges/BridgesMGR
 After=network-online.target
 Wants=network-online.target
 

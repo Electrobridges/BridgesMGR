@@ -68,8 +68,8 @@ tenerlo ya**: si no lo encuentra, el instalador se ofrece a montarlo —PKI,
 que haya decidido. Si ya tienes un servidor, no le toca ni una línea.
 
 ```bash
-git clone https://github.com/Electrobridges/OpenVPN-Manager-Web.git
-cd OpenVPN-Manager-Web
+git clone https://github.com/Electrobridges/BridgesMGR.git
+cd BridgesMGR
 sudo bash deploy/install.sh
 ```
 

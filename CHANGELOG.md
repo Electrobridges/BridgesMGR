@@ -233,5 +233,5 @@ servidor OpenVPN desde el navegador, con el núcleo portado de
   endurecida y certificado TLS autofirmado.
 - 84 pruebas.
 
-[Sin publicar]: https://github.com/Electrobridges/OpenVPN-Manager-Web/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Electrobridges/OpenVPN-Manager-Web/releases/tag/v0.1.0
+[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.1.0

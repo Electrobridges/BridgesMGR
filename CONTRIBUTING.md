@@ -17,8 +17,8 @@ mandar código.
 ## Montar el entorno
 
 ```bash
-git clone https://github.com/Electrobridges/OpenVPN-Manager-Web.git
-cd OpenVPN-Manager-Web
+git clone https://github.com/Electrobridges/BridgesMGR.git
+cd BridgesMGR
 
 python -m venv .venv
 source .venv/bin/activate        # en Windows: .venv\Scripts\activate
