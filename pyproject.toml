@@ -1,5 +1,5 @@
 [project]
-name = "openvpn-manager-web"
+name = "bridgesmgr"
 version = "0.1.0"
 description = "Panel web de administración para servidores OpenVPN"
 readme = "README.md"
