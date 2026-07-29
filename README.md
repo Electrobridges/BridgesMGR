@@ -22,17 +22,15 @@ del que hereda el núcleo de parseo y comunicación con OpenVPN.
 - **Verificación en dos pasos**: TOTP con la app del móvil, opcional para quien manda y exigible al rol supervisor.
 - **Auditoría**: quién hizo qué, cuándo y desde qué IP, incluidos los logins fallidos.
 
-<!-- Capturas: los archivos van en docs/capturas/. Ahí está la lista de las que
-     faltan y, sobre todo, qué hay que repasar antes de publicar una captura de
-     un panel de administración en un repo público. Descomenta según las vayas
-     añadiendo.
+![Lista de clientes VPN con sus certificados marcados como válidos, sobre el formulario de crear cliente con la casilla de cifrar la clave privada con contraseña](docs/capturas/clientes.png)
 
-![Panel de estado con clientes conectados, tráfico y estado del servicio](docs/capturas/panel.png)
+![Pantalla de entrada: usuario, contraseña y el isotipo del escudo con llave sobre fondo navy](docs/capturas/login.png)
 
-![Tabla de conexiones en vivo con IP real, IP virtual y tráfico por cliente](docs/capturas/conexiones.png)
-
-![Lista de clientes VPN con certificados válidos y revocados](docs/capturas/clientes.png)
--->
+<!-- Faltan las de /logs y /admin/usuarios, y repetir las de / y /conexiones con
+     clientes conectados de verdad: las que hay salieron con todo a cero. En
+     docs/capturas/README.md está el método exacto y, sobre todo, qué repasar
+     antes de publicar una captura de un panel de administración en un repo
+     público. -->
 
 ## Modelo de seguridad
 

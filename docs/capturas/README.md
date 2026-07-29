@@ -24,16 +24,17 @@ no de una real con los nombres tapados: un recuadro negro encima sigue dejando
 el texto si la imagen se recorta mal, y el nombre del archivo o los metadatos
 pueden delatar el resto.
 
-## Qué falta por capturar
+## Qué hay y qué falta
 
-| Archivo | Página | Qué debe verse |
+| Archivo | Página | Estado |
 |---|---|---|
-| `panel.png` | `/` | La rejilla de cifras con datos plausibles, no todo a cero |
-| `conexiones.png` | `/conexiones` | Dos o tres clientes conectados, con tráfico |
-| `clientes.png` | `/clientes` | La tabla con un válido y un revocado, y el formulario de crear |
-| `logs.png` | `/logs` | El visor con los cuatro niveles de color a la vista |
-| `usuarios.png` | `/admin/usuarios` | Los tres roles, con el superusuario blindado |
-| `login.png` | `/login` | La pantalla de entrada con los iconos de fondo y la firma |
+| `clientes.png` | `/clientes` | **En el README.** Falta que se vea un revocado; los dos que hay quedan por debajo del corte |
+| `login.png` | `/login` | **En el README.** Completa |
+| `panel.png` | `/` | Hecha, sin usar: salió con el tráfico a cero y sin nadie conectado. Repetir con datos plausibles |
+| `conexiones.png` | `/conexiones` | Hecha, sin usar: salió vacía. Repetir con dos o tres clientes conectados, con tráfico |
+| `perfil.png` | `/perfil` | Hecha, sin usar. Si se repite con el 2FA a medio activar, **el QR codifica un secreto TOTP real**: reactívalo después, o tómala con una cuenta de usar y tirar |
+| `logs.png` | `/logs` | Falta. El visor con los cuatro niveles de color a la vista |
+| `usuarios.png` | `/admin/usuarios` | Falta. Los tres roles, con el superusuario blindado |
 
 ## Cómo tomarlas, paso a paso
 
