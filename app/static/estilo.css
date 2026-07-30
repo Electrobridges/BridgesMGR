@@ -324,6 +324,19 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
 .aviso-aviso::before { content: '\26A0'; color: var(--amarillo); }
 .aviso-info::before  { content: '\2139'; color: var(--azul); }
 
+/* ------------------------------------------------ histórico de eliminados */
+/* <details> nativo: sin JavaScript, y con el teclado y el lector de pantalla
+   ya resueltos por el navegador. */
+.archivados { margin-top: 1.75rem; border-top: 1px solid var(--linea); padding-top: 1rem; }
+.archivados > summary {
+  cursor: pointer; user-select: none;
+  display: flex; gap: .5rem; align-items: center;
+  padding: .4rem 0; color: var(--texto-2); font-weight: 600;
+}
+.archivados > summary:hover { color: var(--texto); }
+.archivados > summary::marker { color: var(--texto-3); }
+.archivados > p { max-width: 68ch; }
+
 /* ------------------------------------------------- perfiles por repartir */
 /* Ámbar y no rojo: no hay nada roto, hay algo pendiente. Y no se puede cerrar
    con una equis, solo con el botón: es un recordatorio que tiene que sobrevivir

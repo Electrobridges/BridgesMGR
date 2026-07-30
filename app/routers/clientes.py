@@ -37,11 +37,17 @@ def _estado_clientes(request):
     errores += errores_con
     conectados = {con["user"] for con in conexiones}
 
+    # Los archivados salen de la lista activa, pero siguen en la PKI y siguen
+    # revocados: esto es solo estado del panel.
+    archivados = db.cn_archivados(c.seguridad.db_path)
+
     filas = []
     for cn in certificados["validos"]:
-        filas.append({"cn": cn, "estado": "valido", "conectado": cn in conectados})
+        if cn not in archivados:
+            filas.append({"cn": cn, "estado": "valido", "conectado": cn in conectados})
     for cn in certificados["revocados"]:
-        filas.append({"cn": cn, "estado": "revocado", "conectado": False})
+        if cn not in archivados:
+            filas.append({"cn": cn, "estado": "revocado", "conectado": False})
 
     filas.sort(key=lambda f: (f["estado"] != "valido", f["cn"].lower()))
     return filas, errores
@@ -63,6 +69,7 @@ def tabla_clientes(request: Request, sesion=Depends(usuario_actual)):
     return render(request, "partials/tabla_clientes.html", {
         "filas": filas,
         "errores": errores,
+        "archivados": db.listar_archivados(cfg(request).seguridad.db_path),
     })
 
 
@@ -235,6 +242,80 @@ def desconectar(
 
     auditar(request, sesion, "desconectar", cn)
     return aviso(request, "'%s' desconectado." % cn, refrescar=EVENTO_REFRESCO)
+
+
+@router.post("/{cn}/archivar")
+def archivar_cliente(
+    request: Request,
+    cn: str,
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Retira el perfil de la lista activa y lo pasa al histórico de eliminados.
+
+    No toca la PKI, y eso no es una limitación: la CRL se regenera desde
+    index.txt, así que borrar de ahí la línea del certificado le devolvería la
+    validez en la siguiente revocación de cualquier otro. Archivado sigue
+    revocado y sigue bloqueado; solo deja de estorbar.
+
+    Solo se admiten certificados revocados. Ocultar uno válido escondería un
+    acceso vivo, que es justo lo contrario de lo que espera quien lo pulsa.
+    """
+    try:
+        cn = validar_cn(cn)
+    except CNInvalido as e:
+        return error_htmx(request, str(e))
+
+    # Se pregunta a la PKI y no a _estado_clientes: aquella mezcla el estado de
+    # los certificados con quién está conectado ahora, y un management interface
+    # caído no puede impedir archivar algo que ya está revocado.
+    try:
+        certificados = easyrsa.listar_certificados(cfg(request))
+    except easyrsa.ErrorHelper as e:
+        return error_htmx(request, "No se pudo consultar la PKI: %s" % e)
+
+    if cn in certificados["validos"]:
+        auditar(request, sesion, "archivar", cn, "error", "aún válido")
+        return error_htmx(
+            request,
+            "'%s' sigue teniendo un certificado válido. Revócalo primero: si no, "
+            "desaparecería de la lista conservando el acceso." % cn,
+        )
+
+    if cn not in certificados["revocados"]:
+        return error_htmx(request, "'%s' no está en la lista de clientes." % cn)
+
+    db.archivar_cliente(cfg(request).seguridad.db_path, cn, sesion["usuario"])
+    auditar(request, sesion, "archivar", cn)
+
+    return aviso(
+        request,
+        "'%s' pasa a los perfiles eliminados. Su certificado sigue revocado y en "
+        "la CRL: se oculta de la lista, no se borra de la PKI." % cn,
+        refrescar=EVENTO_REFRESCO,
+    )
+
+
+@router.post("/{cn}/desarchivar")
+def desarchivar_cliente(
+    request: Request,
+    cn: str,
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """Lo devuelve a la lista activa. Sigue revocado; solo vuelve a verse."""
+    try:
+        cn = validar_cn(cn)
+    except CNInvalido as e:
+        return error_htmx(request, str(e))
+
+    if not db.desarchivar_cliente(cfg(request).seguridad.db_path, cn):
+        return error_htmx(request, "'%s' no estaba en los eliminados." % cn)
+
+    auditar(request, sesion, "desarchivar", cn)
+    return aviso(request, "'%s' vuelve a la lista de clientes." % cn,
+                 refrescar=EVENTO_REFRESCO)
 
 
 @router.post("/reparto/{reparto_id}/aceptar")

@@ -48,6 +48,16 @@
                 hx-confirm="Se reemitirá el certificado de {{ f.cn }}. El .ovpn anterior dejará de funcionar. ¿Continuar?">
           Restaurar
         </button>
+        {# Solo en revocados: ocultar uno válido escondería un acceso vivo. El
+           router lo comprueba igualmente, que un botón que no se pinta no es
+           una barrera. #}
+        <button class="boton pequeno"
+                hx-post="/clientes/{{ f.cn }}/archivar"
+                hx-target="#avisos"
+                hx-swap="innerHTML"
+                hx-confirm="{{ f.cn }} pasará a los perfiles eliminados. Su certificado seguirá revocado y en la CRL: se oculta de la lista, no se borra de la PKI. ¿Continuar?">
+          Eliminar
+        </button>
         {% endif %}
         {% if f.conectado %}
         <button class="boton boton-peligro pequeno"
@@ -67,4 +77,59 @@
 </div>
 {% elif not errores %}
 <p class="tenue">No hay certificados de cliente emitidos todavía.</p>
+{% endif %}
+
+{# Histórico de perfiles retirados de la lista.
+
+   <details> y no un desplegable con JavaScript: la CSP es script-src 'self' y
+   esto lo resuelve el navegador solo, con su teclado y su lector de pantalla
+   ya funcionando. Cerrado por defecto, que es información de consulta. #}
+{% if archivados %}
+<details class="archivados">
+  <summary>
+    Perfiles eliminados
+    <span class="etiqueta">{{ archivados | length }}</span>
+  </summary>
+
+  <p class="tenue">
+    Siguen revocados y en la CRL, así que sus <code>.ovpn</code> no sirven.
+    <strong>No se borran de la PKI a propósito</strong>: la CRL se regenera
+    desde <code>index.txt</code> cada vez que se revoca a alguien, y quitar de
+    ahí un certificado le devolvería la validez en esa siguiente regeneración.
+    Se podrán borrar de verdad al reconstruir la CA, cuando queden firmados por
+    una autoridad que ya no existe y no haya nada que bloquear.
+  </p>
+
+  <div class="tabla-scroll">
+  <table class="tabla">
+    <thead>
+      <tr>
+        <th>Cliente</th>
+        <th>Eliminado</th>
+        <th>Por</th>
+        {% if manda %}<th>Acciones</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in archivados %}
+      <tr>
+        <td class="destacado">{{ a.cn }}</td>
+        <td class="tenue">{{ a.archivado[:10] }}</td>
+        <td class="tenue">{{ a.por or '—' }}</td>
+        {% if manda %}
+        <td class="acciones">
+          <button class="boton pequeno"
+                  hx-post="/clientes/{{ a.cn }}/desarchivar"
+                  hx-target="#avisos"
+                  hx-swap="innerHTML">
+            Devolver a la lista
+          </button>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
 {% endif %}

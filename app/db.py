@@ -150,6 +150,17 @@ CREATE TABLE IF NOT EXISTS reparto_clientes (
     PRIMARY KEY (reparto_id, cn)
 );
 
+-- Perfiles retirados de la lista activa. NO se borran de la PKI: la CRL se
+-- regenera desde index.txt cada vez que se revoca algo, así que quitar de ahí
+-- una línea 'R' devolvería la validez a ese certificado en la siguiente
+-- regeneración, y en silencio. Esto es solo estado del panel: el certificado
+-- sigue revocado y bloqueado, pero deja de estorbar en la lista.
+CREATE TABLE IF NOT EXISTS clientes_archivados (
+    cn        TEXT PRIMARY KEY,
+    archivado TEXT NOT NULL,
+    por       TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_auditoria_ts ON auditoria(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_sesiones_expira ON sesiones(expira);
 CREATE INDEX IF NOT EXISTS idx_pendientes_expira ON logins_pendientes(expira);
@@ -810,6 +821,50 @@ def listar_auditoria(ruta, limite=200):
             "SELECT * FROM auditoria ORDER BY id DESC LIMIT ?", (int(limite),)
         ).fetchall()
     return [dict(f) for f in filas]
+
+
+# -------------------------------------------------------- perfiles archivados
+
+def archivar_cliente(ruta, cn, usuario):
+    """
+    Retira un CN de la lista activa sin tocar la PKI.
+
+    Quien pulsa «eliminar» quiere dejar de verlo, no destruir el registro. Y
+    destruirlo sería peor que inútil: la CRL se regenera desde index.txt, así
+    que borrar de ahí la línea del certificado le devolvería la validez en la
+    siguiente revocación de cualquier otro cliente.
+
+    Solo se archivan certificados ya revocados. Archivar uno válido escondería
+    un acceso vivo, que es lo contrario de lo que espera quien lo pulsa; el
+    router lo comprueba y esto no se llama de otro modo.
+    """
+    with conexion(ruta) as con:
+        con.execute(
+            "INSERT INTO clientes_archivados (cn, archivado, por) VALUES (?, ?, ?)"
+            " ON CONFLICT(cn) DO NOTHING",
+            (cn, _iso(_ahora()), usuario),
+        )
+
+
+def desarchivar_cliente(ruta, cn):
+    """Lo devuelve a la lista activa. Dice si había algo que devolver."""
+    with conexion(ruta) as con:
+        cur = con.execute("DELETE FROM clientes_archivados WHERE cn = ?", (cn,))
+        return cur.rowcount > 0
+
+
+def listar_archivados(ruta):
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT cn, archivado, por FROM clientes_archivados ORDER BY archivado DESC"
+        ).fetchall()
+    return [dict(f) for f in filas]
+
+
+def cn_archivados(ruta):
+    """Solo los nombres, para filtrar la lista activa sin traer el resto"""
+    with conexion(ruta) as con:
+        return {f[0] for f in con.execute("SELECT cn FROM clientes_archivados")}
 
 
 # ------------------------------------------------ perfiles pendientes de repartir
