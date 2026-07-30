@@ -9,6 +9,7 @@ la auditoría con su resultado.
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import Response
 
+from .. import db
 from ..auth import solo_admin, usuario_actual, verificar_csrf
 from ..core import easyrsa
 from ..core.conexiones import obtener_conexiones
@@ -51,7 +52,9 @@ def pagina_clientes(request: Request, sesion=Depends(usuario_actual)):
     # Sin 'es_admin': render() ya inyecta 'manda' desde db.ROLES_MANDO. Aquí se
     # comparaba con la cadena 'admin' y al superusuario le desaparecían el
     # formulario de crear y los botones de la tabla.
-    return render(request, "clientes.html")
+    return render(request, "clientes.html", {
+        "reparto": db.reparto_abierto(cfg(request).seguridad.db_path),
+    })
 
 
 @router.get("/tabla")
@@ -234,6 +237,44 @@ def desconectar(
     return aviso(request, "'%s' desconectado." % cn, refrescar=EVENTO_REFRESCO)
 
 
+@router.post("/reparto/{reparto_id}/aceptar")
+def aceptar_reparto(
+    request: Request,
+    reparto_id: int,
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Da por repartidos los perfiles y retira el aviso.
+
+    Se audita porque es una afirmación, no una preferencia de pantalla: alguien
+    dice que N personas ya tienen su archivo nuevo. Si luego resulta que no, hay
+    que poder saber quién lo dio por hecho y cuándo.
+    """
+    ruta = cfg(request).seguridad.db_path
+    reparto = db.reparto_abierto(ruta)
+
+    if not db.cerrar_reparto(ruta, reparto_id, sesion["usuario"]):
+        # Dos pestañas, o el botón pulsado dos veces. No es un error que
+        # merezca asustar, pero tampoco se audita algo que no ocurrió.
+        return aviso(request, "Ese aviso ya estaba cerrado.", tipo="aviso",
+                     oob="partials/aviso_reparto.html")
+
+    sin_descargar = reparto["pendientes"] if reparto else 0
+    detalle = ("%d sin descargar" % sin_descargar) if sin_descargar else None
+    auditar(request, sesion, "cerrar_reparto", str(reparto_id), detalle=detalle)
+
+    if sin_descargar:
+        mensaje = ("Aviso retirado, pero quedaban %d perfiles sin descargar. "
+                   "Esos clientes seguirán sin poder conectar." % sin_descargar)
+        tipo = "aviso"
+    else:
+        mensaje = "Aviso retirado. Todos los perfiles se descargaron."
+        tipo = "ok"
+
+    return aviso(request, mensaje, tipo=tipo, oob="partials/aviso_reparto.html")
+
+
 @router.get("/{cn}/ovpn")
 def descargar_ovpn(request: Request, cn: str, sesion=Depends(solo_admin)):
     """
@@ -253,6 +294,9 @@ def descargar_ovpn(request: Request, cn: str, sesion=Depends(solo_admin)):
         return error_htmx(request, "No se pudo generar el perfil de '%s': %s" % (cn, e))
 
     auditar(request, sesion, "descargar_ovpn", cn)
+    # Si hay un reparto pendiente, este CN deja de estarlo. No hace nada cuando
+    # no lo hay, que es el caso normal.
+    db.marcar_descargado(cfg(request).seguridad.db_path, cn)
 
     return Response(
         content=contenido,

@@ -129,10 +129,38 @@ CREATE TABLE IF NOT EXISTS auditoria (
     ip        TEXT
 );
 
+-- Perfiles pendientes de repartir. Hay operaciones que invalidan de golpe TODOS
+-- los .ovpn ya entregados —rotar la clave tls-crypt, reconstruir la CA— y
+-- dejan al administrador con N archivos que repartir y ninguna forma de
+-- acordarse. Un aviso que se va al recargar no sirve: esto vive en el servidor
+-- y aguanta hasta que alguien lo da por cerrado.
+CREATE TABLE IF NOT EXISTS repartos (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          TEXT NOT NULL,
+    motivo      TEXT NOT NULL,
+    detalle     TEXT,
+    cerrado     TEXT,
+    cerrado_por TEXT
+);
+
+CREATE TABLE IF NOT EXISTS reparto_clientes (
+    reparto_id INTEGER NOT NULL REFERENCES repartos(id) ON DELETE CASCADE,
+    cn         TEXT NOT NULL,
+    descargado TEXT,
+    PRIMARY KEY (reparto_id, cn)
+);
+
 CREATE INDEX IF NOT EXISTS idx_auditoria_ts ON auditoria(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_sesiones_expira ON sesiones(expira);
 CREATE INDEX IF NOT EXISTS idx_pendientes_expira ON logins_pendientes(expira);
+CREATE INDEX IF NOT EXISTS idx_repartos_cerrado ON repartos(cerrado);
 """
+
+# Motivos por los que se abre un reparto. Cadenas fijas y no texto libre: la
+# plantilla decide el mensaje a partir de esto, y la auditoría se puede filtrar.
+MOTIVO_TLS_CRYPT = "rotacion_tls_crypt"
+MOTIVO_CA = "reconstruccion_ca"
+MOTIVOS = (MOTIVO_TLS_CRYPT, MOTIVO_CA)
 
 # Columnas añadidas después de la primera versión. CREATE TABLE IF NOT EXISTS
 # no toca una tabla que ya existe, así que las bases ya instaladas hay que
@@ -782,3 +810,96 @@ def listar_auditoria(ruta, limite=200):
             "SELECT * FROM auditoria ORDER BY id DESC LIMIT ?", (int(limite),)
         ).fetchall()
     return [dict(f) for f in filas]
+
+
+# ------------------------------------------------ perfiles pendientes de repartir
+
+def abrir_reparto(ruta, motivo, cns, detalle=None):
+    """
+    Anota que estos clientes necesitan un perfil nuevo.
+
+    Lo llaman las operaciones que invalidan de golpe todos los .ovpn ya
+    entregados. Si ya había un reparto abierto se cierra: dos avisos a la vez
+    solo confunden, y el último es el que manda —los perfiles del anterior
+    también dejaron de servir.
+    """
+    if motivo not in MOTIVOS:
+        raise ValueError("Motivo de reparto desconocido: %r" % motivo)
+
+    cns = sorted(set(cns))
+    ahora = _iso(_ahora())
+
+    with conexion(ruta) as con:
+        con.execute(
+            "UPDATE repartos SET cerrado = ?, cerrado_por = 'sistema'"
+            " WHERE cerrado IS NULL",
+            (ahora,),
+        )
+        cur = con.execute(
+            "INSERT INTO repartos (ts, motivo, detalle) VALUES (?, ?, ?)",
+            (ahora, motivo, detalle),
+        )
+        reparto_id = cur.lastrowid
+        con.executemany(
+            "INSERT INTO reparto_clientes (reparto_id, cn) VALUES (?, ?)",
+            [(reparto_id, cn) for cn in cns],
+        )
+
+    return reparto_id
+
+
+def reparto_abierto(ruta):
+    """
+    El reparto pendiente, con sus clientes y cuáles se han descargado ya.
+
+    Devuelve None si no hay ninguno, que es el caso normal.
+    """
+    with conexion(ruta) as con:
+        fila = con.execute(
+            "SELECT * FROM repartos WHERE cerrado IS NULL ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if fila is None:
+            return None
+
+        clientes = con.execute(
+            "SELECT cn, descargado FROM reparto_clientes"
+            " WHERE reparto_id = ? ORDER BY cn",
+            (fila["id"],),
+        ).fetchall()
+
+    reparto = dict(fila)
+    reparto["clientes"] = [dict(c) for c in clientes]
+    reparto["pendientes"] = sum(1 for c in clientes if not c["descargado"])
+    return reparto
+
+
+def marcar_descargado(ruta, cn):
+    """
+    Apunta que el perfil de este CN ya se ha descargado desde el reparto.
+
+    Se llama al descargar un .ovpn. Si no hay reparto abierto, o el CN no está
+    en él, no hace nada: descargar un perfil cualquiera es lo normal.
+    """
+    with conexion(ruta) as con:
+        con.execute(
+            "UPDATE reparto_clientes SET descargado = ?"
+            " WHERE cn = ? AND descargado IS NULL AND reparto_id IN"
+            " (SELECT id FROM repartos WHERE cerrado IS NULL)",
+            (_iso(_ahora()), cn),
+        )
+
+
+def cerrar_reparto(ruta, reparto_id, usuario):
+    """
+    Da el reparto por hecho. Devuelve si cerró algo.
+
+    Comprueba que siga abierto para que dos pestañas no lo cierren dos veces y
+    la auditoría acabe con un registro que no ocurrió.
+    """
+    with conexion(ruta) as con:
+        cur = con.execute(
+            "UPDATE repartos SET cerrado = ?, cerrado_por = ?"
+            " WHERE id = ? AND cerrado IS NULL",
+            (_iso(_ahora()), usuario, int(reparto_id)),
+        )
+        return cur.rowcount > 0

@@ -1,0 +1,56 @@
+{# Banda de «perfiles pendientes de repartir».
+
+   La pintan dos sitios: la página de clientes, y la respuesta de Aceptar, que
+   la devuelve vacía con hx-swap-oob para que desaparezca sin recargar. Por eso
+   el div exterior existe siempre, aunque no haya nada dentro: HTMX necesita
+   algo con ese id a lo que apuntar.
+
+   Se declara el valor por defecto en vez de fiarlo a que Jinja trate lo no
+   definido como falso: aquí conviene que se vea que puede no venir. #}
+{% set reparto = reparto | default(none) %}
+<div id="aviso-reparto"{% if oob %} hx-swap-oob="true"{% endif %}>
+{% if reparto %}
+  {# Clase propia y no .aviso: aquel es flex con un glifo antepuesto, pensado
+     para una línea de texto, y aquí hay título, lista y botón. #}
+  <section class="reparto" role="status">
+    <h2>Hay perfiles pendientes de repartir</h2>
+
+    <p>
+      {% if reparto.motivo == 'rotacion_tls_crypt' %}
+        Se rotó la clave <code>tls-crypt</code> del servidor.
+      {% elif reparto.motivo == 'reconstruccion_ca' %}
+        Se reconstruyó la autoridad certificadora.
+      {% else %}
+        Se hizo una operación que invalida los perfiles.
+      {% endif %}
+      <strong>Los <code>.ovpn</code> que repartiste antes ya no sirven</strong>,
+      así que estos clientes no podrán conectar hasta que reciban uno nuevo.
+    </p>
+
+    {% if reparto.detalle %}<p class="tenue">{{ reparto.detalle }}</p>{% endif %}
+
+    <ul class="lista-reparto">
+      {% for c in reparto.clientes %}
+        <li class="{{ 'hecho' if c.descargado else 'pendiente' }}">
+          <code>{{ c.cn }}</code>
+          {% if c.descargado %}<span class="tenue">descargado</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+
+    <p class="tenue">
+      Quedan <strong>{{ reparto.pendientes }}</strong> de
+      {{ reparto.clientes | length }} por descargar. La marca solo dice que
+      bajaste el archivo, no que haya llegado a su destino.
+    </p>
+
+    {% if manda %}
+    <form hx-post="/clientes/reparto/{{ reparto.id }}/aceptar"
+          hx-target="#avisos"
+          hx-swap="innerHTML">
+      <button type="submit" class="boton">Aceptar: ya los he repartido</button>
+    </form>
+    {% endif %}
+  </section>
+{% endif %}
+</div>

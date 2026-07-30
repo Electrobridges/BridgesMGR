@@ -119,6 +119,17 @@ def csrf_super(como_super, cfg):
     return csrf_de(como_super, cfg)
 
 
+@pytest.fixture
+def csrf_supervisor(como_supervisor, cfg):
+    """
+    Para comprobar que a un supervisor se le corta por el rol y no por el CSRF.
+
+    Sin token válido, una ruta prohibida devolvería 403 igualmente y la prueba
+    pasaría por el motivo equivocado.
+    """
+    return csrf_de(como_supervisor, cfg)
+
+
 def base_de_dos_roles(tmp_path, cuentas, ajustes=None, nombre="antigua.db"):
     """
     Escribe una base tal y como la dejaba la v0.1.0: dos roles y sin TOTP.

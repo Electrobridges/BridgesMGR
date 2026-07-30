@@ -324,6 +324,33 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
 .aviso-aviso::before { content: '\26A0'; color: var(--amarillo); }
 .aviso-info::before  { content: '\2139'; color: var(--azul); }
 
+/* ------------------------------------------------- perfiles por repartir */
+/* Ámbar y no rojo: no hay nada roto, hay algo pendiente. Y no se puede cerrar
+   con una equis, solo con el botón: es un recordatorio que tiene que sobrevivir
+   a recargar la página, no una notificación que se descarta sin querer. */
+.reparto {
+  padding: 1rem 1.25rem; margin: 0 0 1.25rem;
+  border: 1px solid rgba(251, 191, 36, .45); border-radius: var(--radio-sm);
+  background: rgba(251, 191, 36, .08);
+}
+.reparto h2 { margin: 0 0 .5rem; font-size: 1.05rem; color: var(--amarillo); }
+.reparto p  { margin: .4rem 0; }
+.reparto form { margin-top: .9rem; }
+
+.lista-reparto {
+  display: flex; flex-wrap: wrap; gap: .4rem .75rem;
+  margin: .7rem 0; padding: 0; list-style: none;
+}
+.lista-reparto li {
+  display: flex; gap: .35rem; align-items: baseline;
+  padding: .2rem .55rem; border-radius: var(--radio-sm);
+  background: var(--fondo-2);
+}
+/* El glifo distingue descargado de pendiente sin depender del color */
+.lista-reparto .hecho::before     { content: '\2713'; color: var(--verde); }
+.lista-reparto .pendiente::before { content: '\2022'; color: var(--amarillo); }
+.lista-reparto .hecho code        { opacity: .65; }
+
 /* ----------------------------------------------------------------------- log */
 
 /* La barra de filtros va suelta en la página, no dentro de una tarjeta que ya
