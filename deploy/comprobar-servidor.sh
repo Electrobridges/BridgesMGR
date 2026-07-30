@@ -314,7 +314,7 @@ else
     bien "Hay logrotate para ese directorio"
   else
     aviso "Sin logrotate: $LOG_REAL crecerá sin límite" \
-          "Y cuando lo añadas, que lleve 'create 0640 root adm' o la rotación dejará al panel sin poder leerlo"
+          "Añádelo con 'copytruncate': rotar renombrando exige avisar a OpenVPN con SIGHUP, que reinicia el túnel y desconecta a todos"
   fi
 fi
 echo

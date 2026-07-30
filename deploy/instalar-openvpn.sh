@@ -299,6 +299,32 @@ for archivo in "$STATUS_FILE" "$LOG_FILE"; do
   [[ -f "$archivo" ]] || install -o root -g adm -m 0640 /dev/null "$archivo"
 done
 
+# Con log-append y sin rotación, openvpn.log crece sin límite. El status.log no
+# entra: OpenVPN lo reescribe entero cada pocos segundos y no crece.
+#
+# copytruncate y no el rotado normal, por el mismo motivo que el comentario de
+# arriba: rotar renombrando obliga a avisar al demonio para que reabra, y a
+# OpenVPN se le avisa con SIGHUP —que reinicia el túnel y desconecta a todo el
+# mundo. Una rotación semanal no puede costar eso. Truncando en el sitio, el
+# proceso sigue escribiendo en el mismo descriptor y el archivo conserva su
+# dueño y sus permisos, que es lo que deja al panel leerlo por el grupo 'adm'.
+LOGROTATE=/etc/logrotate.d/ovpn-web
+if [[ ! -f "$LOGROTATE" ]]; then
+  info "Instalando rotación de $LOG_FILE"
+  cat > "$LOGROTATE" <<FIN
+${LOG_FILE} {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+FIN
+  chmod 0644 "$LOGROTATE"
+fi
+
 # --------------------------------------------------------------- server.conf
 info "Escribiendo $SERVER_CONF"
 mkdir -p "$SERVER_DIR"
