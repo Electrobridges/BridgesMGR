@@ -8,37 +8,7 @@
 {% if manda %}
 <section class="panel-accion">
   <h2>Crear cliente</h2>
-  <form class="formulario en-fila"
-        hx-post="/clientes"
-        hx-target="#avisos"
-        hx-swap="innerHTML">
-    <label for="cn">Nombre</label>
-    {# El pattern replica exactamente _CN_RE de app/core/validacion.py y el
-       CN_RE del helper: un solo carácter también es válido. #}
-    <input type="text" id="cn" name="cn" required maxlength="64"
-           placeholder="nombre-del-cliente"
-           pattern="[A-Za-z0-9]([A-Za-z0-9._\-]{0,62}[A-Za-z0-9])?"
-           title="Letras, números, punto, guion y guion bajo">
-    <button type="submit" class="boton boton-principal">Crear y emitir certificado</button>
-
-    {# Los dos campos salen del flujo al desmarcar la casilla; lo hace el CSS
-       con :has(), sin JavaScript. Sin 'required' a propósito: un campo oculto
-       y obligatorio impide enviar el formulario y el navegador no dice por
-       qué. Lo válida el servidor, y también el helper. #}
-    <div class="clave-cert">
-      <label class="casilla" for="con-clave">
-        <input type="checkbox" id="con-clave" name="con_clave" value="1" checked>
-        Cifrar la clave privada con contraseña
-      </label>
-
-      <div class="clave-cert-campos">
-        <input type="password" name="clave" minlength="12" autocomplete="new-password"
-               placeholder="contraseña (mín. 12)" aria-label="Contraseña del certificado">
-        <input type="password" name="clave2" minlength="12" autocomplete="new-password"
-               placeholder="repítela" aria-label="Repite la contraseña del certificado">
-      </div>
-    </div>
-  </form>
+  {% include "partials/form_crear_cliente.html" %}
 
   <p class="tenue">
     Con contraseña, OpenVPN la pide al conectar y el archivo por sí solo no

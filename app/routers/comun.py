@@ -41,19 +41,60 @@ def render(request, plantilla, contexto=None, **kwargs):
     return plantillas(request).TemplateResponse(request, plantilla, ctx, **kwargs)
 
 
-def aviso(request, mensaje, tipo="ok", refrescar=None, status_code=200):
+def _texto(request, plantilla, contexto=None):
+    """
+    Renderiza una plantilla a texto suelto, con el mismo contexto que render().
+
+    Hace falta para juntar dos fragmentos en una sola respuesta: TemplateResponse
+    calcula Content-Length al construirse, así que concatenar sobre su .body deja
+    una cabecera que miente y el navegador corta el HTML por donde decía la
+    longitud vieja.
+    """
+    sesion = getattr(request.state, "sesion", None) or sesion_opcional(request)
+
+    ctx = {
+        "request": request,
+        "sesion": sesion,
+        "manda": bool(sesion and sesion["rol"] in db.ROLES_MANDO),
+    }
+    ctx.update(contexto or {})
+    return plantillas(request).get_template(plantilla).render(ctx)
+
+
+def aviso(request, mensaje, tipo="ok", refrescar=None, status_code=200, oob=None):
     """
     Devuelve el fragmento de aviso que HTMX inserta en la barra de mensajes.
 
     Si se pasa 'refrescar', se emite la cabecera HX-Trigger con ese evento
     para que las listas afectadas se recarguen solas.
+
+    Si se pasa 'oob', se añade esa plantilla detrás del aviso, renderizada con
+    oob=True para que lleve hx-swap-oob. HTMX la empareja por su id y la
+    sustituye sin que la acción tenga que apuntarle, así que una misma respuesta
+    puede escribir el aviso y, de paso, devolver un formulario limpio.
+
+    Es la única vía compatible con la CSP: hx-on::after-request="this.reset()"
+    sería lo habitual, pero HTMX evalúa ese atributo como JavaScript y aquí
+    script-src es 'self' sin unsafe-eval.
+
+    Ojo: esto va solo en el camino de éxito. error_htmx() no lo usa a propósito,
+    porque vaciar el formulario ante un error obligaría a reescribir también lo
+    que estaba bien.
     """
-    respuesta = render(
-        request,
-        "partials/aviso.html",
-        {"tipo": tipo, "mensaje": mensaje},
-        status_code=status_code,
-    )
+    if oob is None:
+        respuesta = render(
+            request,
+            "partials/aviso.html",
+            {"tipo": tipo, "mensaje": mensaje},
+            status_code=status_code,
+        )
+    else:
+        cuerpo = (
+            _texto(request, "partials/aviso.html", {"tipo": tipo, "mensaje": mensaje})
+            + _texto(request, oob, {"oob": True})
+        )
+        respuesta = HTMLResponse(cuerpo, status_code=status_code)
+
     if refrescar:
         respuesta.headers["HX-Trigger"] = refrescar
     return respuesta

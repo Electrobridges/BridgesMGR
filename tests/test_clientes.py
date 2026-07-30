@@ -127,6 +127,63 @@ def test_error_del_helper_se_muestra_y_audita(como_admin, csrf_admin, helper_fal
     assert any(e["accion"] == "revocar" and e["resultado"] == "error" for e in entradas)
 
 
+def test_la_pagina_pinta_el_formulario_sin_oob(como_admin, helper_falso):
+    """
+    El mismo partial se usa en dos modos y solo uno lleva hx-swap-oob.
+
+    En la página sería un intercambio fuera de banda sin nada que intercambiar;
+    el atributo tiene que aparecer solo cuando lo devuelve una acción.
+    """
+    respuesta = como_admin.get("/clientes")
+
+    assert respuesta.status_code == 200
+    assert 'id="form-crear-cliente"' in respuesta.text
+    assert "hx-swap-oob" not in respuesta.text
+
+
+def test_crear_devuelve_el_formulario_vacio(como_admin, csrf_admin, helper_falso):
+    """
+    Tras crear, la respuesta trae el formulario limpio con hx-swap-oob.
+
+    Sin esto el nombre y las dos contraseñas se quedaban escritos: la del
+    certificado a la vista en el navegador, y el botón invitando a crear el
+    mismo CN por segunda vez. No se puede resolver con hx-on::after-request
+    porque la CSP es script-src 'self' sin unsafe-eval.
+    """
+    respuesta = como_admin.post(
+        "/clientes",
+        data={"cn": "nuevo-portatil", "con_clave": "1",
+              "clave": "contraseña-larga", "clave2": "contraseña-larga"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 200
+    assert 'hx-swap-oob="true"' in respuesta.text
+    assert 'id="form-crear-cliente"' in respuesta.text
+
+    # Ningún campo puede volver con lo que se tecleó
+    assert "nuevo-portatil" not in respuesta.text.split('id="form-crear-cliente"')[1]
+    assert "contraseña-larga" not in respuesta.text
+
+
+def test_error_al_crear_no_vacia_el_formulario(como_admin, csrf_admin, helper_falso):
+    """
+    Ante un error, el formulario NO se toca: se conserva lo tecleado.
+
+    Vaciarlo aquí obligaría a reescribir las dos contraseñas por una errata en
+    el nombre. Por eso el fragmento va en aviso() y no en error_htmx().
+    """
+    respuesta = como_admin.post(
+        "/clientes",
+        data={"cn": "con espacio", "con_clave": "1",
+              "clave": "contraseña-larga", "clave2": "contraseña-larga"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 400
+    assert "hx-swap-oob" not in respuesta.text
+
+
 def test_descargar_ovpn(como_admin, helper_falso):
     respuesta = como_admin.get("/clientes/daniel/ovpn")
 

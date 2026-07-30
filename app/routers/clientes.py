@@ -132,7 +132,10 @@ def crear_cliente(
         mensaje = ("Cliente '%s' creado sin contraseña. Ojo: su .ovpn es acceso "
                    "directo a la VPN para quien se haga con el archivo." % cn)
 
-    return aviso(request, mensaje, refrescar=EVENTO_REFRESCO)
+    # El formulario vuelve vacío en el mismo intercambio: si no, el nombre y las
+    # dos contraseñas se quedaban escritos tras crear.
+    return aviso(request, mensaje, refrescar=EVENTO_REFRESCO,
+                 oob="partials/form_crear_cliente.html")
 
 
 @router.post("/{cn}/revocar")

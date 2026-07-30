@@ -1,0 +1,47 @@
+{# Formulario de alta de cliente.
+
+   Vive aparte porque lo pintan dos sitios: la página, y la respuesta de una
+   creación con éxito, que lo devuelve vacío con hx-swap-oob para que HTMX lo
+   sustituya por su id. Sin eso, el nombre y las dos contraseñas se quedaban
+   escritos después de crear —la contraseña del certificado a la vista en el
+   navegador, y un segundo clic intentando crear el mismo CN otra vez.
+
+   No se usa hx-on::after-request="this.reset()", que sería lo habitual: HTMX
+   evalúa ese atributo como JavaScript y la CSP del panel es script-src 'self'
+   sin unsafe-eval. Aflojar la CSP por un reset() sería un mal cambio. #}
+<form id="form-crear-cliente" class="formulario en-fila"
+      {% if oob %}hx-swap-oob="true"{% endif %}
+      hx-post="/clientes"
+      hx-target="#avisos"
+      hx-swap="innerHTML">
+  <label for="cn">Nombre</label>
+  {# El pattern replica exactamente _CN_RE de app/core/validacion.py y el
+     CN_RE del helper: un solo carácter también es válido. #}
+  <input type="text" id="cn" name="cn" required maxlength="64"
+         placeholder="nombre-del-cliente"
+         pattern="[A-Za-z0-9]([A-Za-z0-9._\-]{0,62}[A-Za-z0-9])?"
+         title="Letras, números, punto, guion y guion bajo">
+  <button type="submit" class="boton boton-principal">Crear y emitir certificado</button>
+
+  {# Los dos campos salen del flujo al desmarcar la casilla; lo hace el CSS
+     con :has(), sin JavaScript. Sin 'required' a propósito: un campo oculto
+     y obligatorio impide enviar el formulario y el navegador no dice por
+     qué. Lo válida el servidor, y también el helper.
+
+     La casilla vuelve marcada tras crear, que es su valor por defecto:
+     conservar «desmarcada» por comodidad haría que el siguiente cliente
+     saliera sin contraseña sin que nadie lo hubiera decidido. #}
+  <div class="clave-cert">
+    <label class="casilla" for="con-clave">
+      <input type="checkbox" id="con-clave" name="con_clave" value="1" checked>
+      Cifrar la clave privada con contraseña
+    </label>
+
+    <div class="clave-cert-campos">
+      <input type="password" name="clave" minlength="12" autocomplete="new-password"
+             placeholder="contraseña (mín. 12)" aria-label="Contraseña del certificado">
+      <input type="password" name="clave2" minlength="12" autocomplete="new-password"
+             placeholder="repítela" aria-label="Repite la contraseña del certificado">
+    </div>
+  </div>
+</form>
