@@ -102,6 +102,112 @@ def rutas_pki(cfg):
     }
 
 
+# Las dos rutas estándar del server.conf, en orden. Las dos unidades que
+# conviven en Debian no son intercambiables: openvpn@server lee la primera y
+# openvpn-server@server la segunda. Se prueban ambas cuando openvpn.server_conf
+# no está declarado.
+SERVER_CONF_ESTANDAR = (
+    "/etc/openvpn/server.conf",
+    "/etc/openvpn/server/server.conf",
+)
+
+
+def _ruta_server_conf(cfg):
+    """
+    La declarada manda; si no existe o no hay, se prueban las estándar.
+
+    Que una ruta mal escrita caiga a la detección automática es deliberado: esta
+    clave es un escape para instalaciones raras, y una errata en ella no debe
+    dejar peor el resultado que no haberla puesto —el certificado del servidor
+    volvería a colarse en la lista de clientes sin decir nada.
+    """
+    candidatas = []
+
+    declarada = ((cfg.get("openvpn") or {}).get("server_conf") or "").strip()
+    if declarada:
+        candidatas.append(declarada)
+    candidatas.extend(SERVER_CONF_ESTANDAR)
+
+    for ruta in candidatas:
+        if os.path.isfile(ruta):
+            return ruta
+    return None
+
+
+def cn_del_servidor(cfg):
+    """
+    CN del certificado con el que se identifica el propio servidor OpenVPN.
+
+    Hay que excluirlo de la lista de clientes: es un certificado más dentro de
+    la misma PKI y, sin esto, el panel lo enseña como si fuera un cliente, con
+    su botón de revocar al lado. RESERVADOS no basta porque compara exacto y los
+    instaladores al uso generan el nombre con un sufijo aleatorio, del tipo
+    'server_SU1O2eUJ8SUV0x2W'.
+
+    Se deduce del certificado que declara el server.conf, que es la fuente
+    autoritativa. Queda descartado un prefijo tipo «empieza por server»: dejaría
+    fuera a un cliente legítimo llamado 'server-madrid'.
+
+    Esto solo lo puede hacer el helper, y por eso vive aquí y no también en
+    app/core/validacion.py como CN_RE y RESERVADOS: el certificado del servidor
+    pertenece a root y el panel, que corre como ovpnweb, no lo alcanza.
+
+    Devuelve None si no hay forma de averiguarlo. Es una capa por encima de
+    RESERVADOS, no un sustituto: si falla, el filtro de siempre sigue en pie.
+    """
+    ovpn = cfg.get("openvpn") or {}
+
+    # Escape para instalaciones raras. Si está declarado se cree y no se toca
+    # el disco.
+    declarado = (ovpn.get("cn_servidor") or "").strip()
+    if declarado:
+        return declarado
+
+    conf = _ruta_server_conf(cfg)
+    if not conf:
+        return None
+
+    cert = None
+    try:
+        with open(conf, "r", encoding="utf-8", errors="replace") as f:
+            for linea in f:
+                m = re.match(r'^\s*cert\s+(\S+)', linea)
+                if m:
+                    cert = m.group(1)
+    except OSError:
+        return None
+
+    if not cert:
+        return None
+
+    # Ojo: las rutas del server.conf pueden ser relativas. OpenVPN las resuelve
+    # contra su directorio de trabajo, que la unidad fija con --cd al directorio
+    # del propio archivo. Sin esto se busca el certificado donde no está.
+    if not os.path.isabs(cert):
+        cert = os.path.join(os.path.dirname(conf), cert)
+
+    if not os.path.isfile(cert):
+        return None
+
+    try:
+        salida = subprocess.run(
+            ["openssl", "x509", "-noout", "-subject", "-in", cert],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=10, check=True,
+        ).stdout.decode("utf-8", "replace")
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    m = re.search(r'CN\s*=\s*([^,/\n]+)', salida)
+    return m.group(1).strip() if m else None
+
+
+def _es_del_servidor(cn, propio):
+    """RESERVADOS más el CN real del servidor, si se ha podido averiguar"""
+    bajo = cn.lower()
+    return bajo in RESERVADOS or (propio is not None and bajo == propio.lower())
+
+
 def leer_clave_de_stdin():
     """
     Lee de stdin la contraseña con la que cifrar la clave privada del cliente.
@@ -248,6 +354,7 @@ def respaldar(rutas, cn):
 
 def cmd_listar(cfg):
     rutas = rutas_pki(cfg)
+    propio = cn_del_servidor(cfg)
     validos = []
     revocados = []
 
@@ -255,7 +362,7 @@ def cmd_listar(cfg):
         for nombre in os.listdir(rutas["issued"]):
             if nombre.endswith(".crt"):
                 cn = nombre[:-4]
-                if cn.lower() not in RESERVADOS:
+                if not _es_del_servidor(cn, propio):
                     validos.append(cn)
 
     if os.path.isfile(rutas["index"]):
@@ -267,7 +374,7 @@ def cmd_listar(cfg):
                 if len(partes) < 6:
                     continue
                 m = re.search(r'/CN=([^/\n]+)', partes[5])
-                if m and m.group(1).lower() not in RESERVADOS:
+                if m and not _es_del_servidor(m.group(1), propio):
                     revocados.append(m.group(1))
 
     # Un CN revocado sigue teniendo su .crt en issued/ hasta que se reemite
@@ -452,6 +559,15 @@ def main():
             error("Uso: ovpn-web-helper %s <CN> [%s]" % (sub, MARCA_CLAVE))
 
         cn = validar_cn(sys.argv[2])
+
+        # El certificado del servidor no es un cliente y ninguna operación puede
+        # tocarlo. Se comprueba aquí además de al listar, porque no salir en la
+        # lista no impide que alguien invoque la operación a mano —y el helper
+        # no se fía de quien le llama.
+        propio = cn_del_servidor(cfg)
+        if propio is not None and cn.lower() == propio.lower():
+            error("'%s' es el certificado del propio servidor OpenVPN, no un cliente" % cn)
+
         clave = None
 
         if len(sys.argv) == 4:

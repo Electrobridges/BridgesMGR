@@ -33,6 +33,15 @@ openvpn:
   #   openvpn@server         lee /etc/openvpn/server.conf          (el antiguo)
   # Comprueba cuál tienes con: systemctl list-units 'openvpn*'
   servicio: "openvpn-server@server"
+  # De aquí saca el helper con qué certificado se identifica el servidor, para
+  # excluirlo de la lista de clientes: es un certificado más de la misma PKI y
+  # si no, el panel lo ofrece como si fuera un cliente, con su botón de revocar.
+  # Vacío = prueba /etc/openvpn/server.conf y /etc/openvpn/server/server.conf.
+  server_conf: ""
+  # Vacío = se deduce del certificado que declare ese archivo, que es lo
+  # correcto casi siempre. Decláralo solo si la deducción no sirve en tu
+  # instalación; entonces el helper se lo cree y no mira el disco.
+  cn_servidor: ""
 
 cliente_ovpn:
   # Dirección por la que los clientes llegan al servidor VPN desde fuera.

@@ -33,6 +33,13 @@ class OpenVPNCfg:
     mgmt_port: int = 7505
     easyrsa_path: str = "/etc/openvpn/easy-rsa"
     servicio: str = "openvpn@server"
+    # Vacío = el helper prueba las dos rutas estándar. Solo lo usa él, para
+    # averiguar con qué certificado se identifica el servidor y excluirlo de la
+    # lista de clientes.
+    server_conf: str = ""
+    # Vacío = se deduce del certificado anterior. Se declara a mano solo si esa
+    # deducción no sirve en una instalación rara.
+    cn_servidor: str = ""
 
 
 @dataclass
@@ -66,7 +73,13 @@ class Config:
 
 
 def _seccion(datos, clave, clase):
-    """Construye una dataclass ignorando claves desconocidas del YAML"""
+    """
+    Construye una dataclass rechazando las claves desconocidas del YAML.
+
+    Rechazar y no ignorar: una errata en un nombre de clave pasaría inadvertida
+    como valor por defecto, y en este archivo los valores por defecto apuntan a
+    otra instalación.
+    """
     bruto = datos.get(clave) or {}
     if not isinstance(bruto, dict):
         raise ValueError("La sección '%s' debe ser un mapa" % clave)
