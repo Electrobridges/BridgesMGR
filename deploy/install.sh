@@ -72,8 +72,12 @@ done
 # de esperar cinco minutos de venv y encontrarse otra.
 rm -f "$HECHOS_VPN"
 
+VPN_PREEXISTENTE=0
+
 if [[ -f "$PKI_ESPERADA" ]]; then
   info "Servidor OpenVPN detectado: no se toca"
+  # Se comprueba al final, cuando ya exista config.yaml con qué contrastarlo.
+  VPN_PREEXISTENTE=1
 elif [[ "$OPENVPN" == "no" ]]; then
   amar "Sin servidor OpenVPN y con --sin-openvpn: se instala solo el panel."
 else
@@ -318,3 +322,22 @@ echo "Arranca el panel:"
 echo "    systemctl start ovpn-web && systemctl status ovpn-web"
 echo
 echo "Y ábrelo en:  https://<IP_DEL_SERVIDOR>:55443"
+
+# Un OpenVPN que ya existía casi nunca encaja con lo que el panel espera: rutas
+# relativas, la CRL duplicada, otro nombre de unidad, los logs sin permisos. Y
+# varios de esos desajustes no dan la cara hasta que hace falta —revocar y que
+# no surta efecto. Mejor decirlo aquí que descubrirlo el día malo.
+if [[ "$VPN_PREEXISTENTE" == "1" && -x "$(dirname "$0")/comprobar-servidor.sh" ]]; then
+  echo
+  info "Tu servidor OpenVPN ya existía: comprobando que encaja con el panel"
+  echo
+  if bash "$(dirname "$0")/comprobar-servidor.sh"; then
+    :
+  else
+    echo
+    rojo "Hay problemas CRÍTICOS que resolver antes de usar el panel."
+    echo "  El panel está instalado y arrancará, pero alguna función no hará"
+    echo "  lo que dice. Vuelve a lanzar la comprobación cuando los corrijas:"
+    echo "      sudo bash deploy/comprobar-servidor.sh"
+  fi
+fi

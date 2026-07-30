@@ -26,6 +26,7 @@ SUDOERS = DEPLOY / "ovpnweb.sudoers"
 SERVICIO = DEPLOY / "ovpn-web.service"
 INSTALADOR = DEPLOY / "install.sh"
 INSTALA_VPN = DEPLOY / "instalar-openvpn.sh"
+COMPROBADOR = DEPLOY / "comprobar-servidor.sh"
 EJEMPLO = DEPLOY / "config.ejemplo.yaml"
 
 
@@ -451,6 +452,54 @@ def test_el_cn_de_la_ca_no_contamina_al_resto():
     assert re.search(r"--req-cn=.*build-ca", fuente), (
         "El CN de la CA debe ir en la propia orden build-ca"
     )
+
+
+# ------------------------------------------------- el comprobador previo
+
+def test_el_comprobador_no_escribe_nada():
+    """
+    Su única promesa es que se puede lanzar en producción sin miedo.
+
+    Es la clase de promesa que se rompe sola en cuanto alguien añade un arreglo
+    automático «que no hace daño». Si algún día se quiere que corrija cosas, que
+    sea otro script y con otro nombre.
+    """
+    fuente = _leer(COMPROBADOR)
+
+    # Se miran las órdenes, no los textos: el informe cita comandos de arreglo
+    # dentro de cadenas y esos sí pueden nombrar chmod o chown.
+    ordenes = []
+    for linea in fuente.splitlines():
+        limpia = linea.strip()
+        if limpia.startswith("#"):
+            continue
+        ordenes.append(re.sub(r'"[^"]*"|\'[^\']*\'', "", limpia))
+    ordenes = "\n".join(ordenes)
+
+    prohibidas = [
+        r'\brm\b', r'\bmv\b', r'\bcp\b', r'\bchmod\b', r'\bchown\b',
+        r'\binstall\b', r'\bsed -i\b', r'\btee\b', r'\bmkdir\b',
+        r'systemctl\s+(start|stop|restart|reload|enable|disable)',
+        r'\bapt(-get)?\s+install',
+    ]
+    for patron in prohibidas:
+        assert not re.search(patron, ordenes), (
+            "comprobar-servidor.sh debe ser de solo lectura y usa: %s" % patron
+        )
+
+
+def test_el_comprobador_no_aborta_al_primer_fallo():
+    """
+    Sin 'set -e' a propósito: una comprobación que falle no puede llevarse por
+    delante el resto del informe. Quien lo lanza quiere la lista entera, no la
+    primera línea.
+    """
+    fuente = _leer(COMPROBADOR)
+
+    assert re.search(r'^set -uo pipefail\s*$', fuente, re.M), (
+        "Debe declarar 'set -uo pipefail', sin -e"
+    )
+    assert not re.search(r'^set -e', fuente, re.M)
 
 
 @pytest.mark.parametrize("archivo", sorted(

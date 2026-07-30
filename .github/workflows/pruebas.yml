@@ -111,6 +111,7 @@ jobs:
         run: |
           bash -n deploy/install.sh
           bash -n deploy/instalar-openvpn.sh
+          bash -n deploy/comprobar-servidor.sh
 
       - name: Sintaxis del helper privilegiado
         run: python3 -m py_compile deploy/ovpn-web-helper
@@ -193,4 +194,4 @@ jobs:
       - name: shellcheck
         # Informativo: no bloquea el merge, pero deja el aviso en el registro.
         continue-on-error: true
-        run: shellcheck deploy/install.sh deploy/instalar-openvpn.sh
+        run: shellcheck deploy/install.sh deploy/instalar-openvpn.sh deploy/comprobar-servidor.sh

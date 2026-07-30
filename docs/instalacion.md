@@ -119,8 +119,30 @@ los comandos exactos por pantalla.
 
 ## Si ya tenías un servidor OpenVPN
 
-El instalador lo respeta y no cambia ni una línea. A cambio, el `server.conf`
-que ya tienes debe llevar esto, o el panel no verá nada:
+El instalador lo respeta y no cambia ni una línea. A cambio hay que ajustar
+varias cosas a mano, y para no ir a ciegas está el comprobador:
+
+```bash
+sudo bash deploy/comprobar-servidor.sh
+```
+
+**Solo lee**: no instala, no escribe y no reinicia nada, así que se puede lanzar
+en producción con clientes conectados. Contrasta tu `server.conf` con lo que
+dice `/etc/ovpn-web/config.yaml`, ordena los hallazgos en críticos y avisos, y
+da el comando exacto para arreglar cada uno. `install.sh` lo llama solo cuando
+detecta que tu OpenVPN ya existía.
+
+Dos de sus comprobaciones existen porque son las que fallan sin decir nada:
+
+- **Que el usuario al que OpenVPN suelta privilegios pueda leer de verdad la
+  CRL.** No lo deduce de los permisos: lo intenta. El directorio que la contiene
+  también tiene que dejarse atravesar, y ese detalle se escapa mirando solo el
+  modo del archivo.
+- **Que la CRL no esté caducada.** Una CRL vencida hace que OpenVPN rechace
+  *todas* las conexiones, no solo las revocadas, y el síntoma no apunta a la CRL
+  por ninguna parte.
+
+El `server.conf` que ya tienes debe llevar esto, o el panel no verá nada:
 
 ```conf
 management 127.0.0.1 7505
