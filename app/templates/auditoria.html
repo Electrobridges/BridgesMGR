@@ -4,32 +4,107 @@
 
 {% block contenido %}
 <h1>Auditoría</h1>
-<p class="tenue">Últimas 200 acciones registradas, incluidos los intentos de login fallidos.</p>
 
-{% if entradas %}
-<div class="tabla-scroll">
-<table class="tabla">
-  <thead>
-    <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Objetivo</th><th>Resultado</th><th>IP</th><th>Detalle</th></tr>
-  </thead>
-  <tbody>
-    {% for e in entradas %}
-    <tr>
-      <td class="tenue">{{ e.ts[:19] | replace('T', ' ') }}</td>
-      <td class="destacado">{{ e.usuario or '—' }}</td>
-      <td>{{ e.accion }}</td>
-      <td>{{ e.objetivo or '—' }}</td>
-      <td>
-        <span class="etiqueta etiqueta-{{ 'ok' if e.resultado == 'ok' else 'mal' }}">{{ e.resultado }}</span>
-      </td>
-      <td class="tenue">{{ e.ip or '—' }}</td>
-      <td class="tenue">{{ e.detalle or '' }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
+{# Dos fuentes distintas, no una tabla mezclada: el panel registra acciones de
+   una cuenta del panel, y la VPN conexiones de un certificado. Enlaces normales
+   y no pestañas con JavaScript: cada vista tiene su URL, se puede compartir y
+   el botón de atrás funciona. #}
+<nav class="pestanas">
+  <a class="{{ 'activa' if fuente == 'panel' }}" href="/admin/auditoria?fuente=panel">Panel web</a>
+  <a class="{{ 'activa' if fuente == 'vpn' }}" href="/admin/auditoria?fuente=vpn">VPN</a>
+</nav>
+
+{% if fuente == 'vpn' %}
+
+  <p class="tenue">
+    Sucesos leídos del log de OpenVPN, del más reciente al más antiguo.
+    <strong>No se guardan en la base del panel</strong>: se leen en vivo, así
+    que el histórico llega hasta donde llegue el archivo.
+  </p>
+
+  {% for a in avisos %}
+  <div class="aviso aviso-aviso">{{ a }}</div>
+  {% endfor %}
+
+  <nav class="filtros">
+    <a class="{{ 'activa' if filtro == 'todo' }}" href="/admin/auditoria?fuente=vpn&amp;filtro=todo">Todo</a>
+    <a class="{{ 'activa' if filtro == 'conexiones' }}" href="/admin/auditoria?fuente=vpn&amp;filtro=conexiones">Conexiones</a>
+    <a class="{{ 'activa' if filtro == 'fallos' }}" href="/admin/auditoria?fuente=vpn&amp;filtro=fallos">Rechazos</a>
+  </nav>
+
+  {% if eventos %}
+  <div class="tabla-scroll">
+  <table class="tabla">
+    <thead>
+      <tr><th>Fecha</th><th>Suceso</th><th>Cliente</th><th>IP de origen</th><th>Detalle</th></tr>
+    </thead>
+    <tbody>
+      {% for e in eventos %}
+      <tr>
+        <td class="tenue">{{ e.ts }}</td>
+        <td>
+          {% if e.tipo == 'conexion' %}
+            <span class="etiqueta etiqueta-ok">conexión establecida</span>
+          {% elif e.tipo == 'desconexion' %}
+            <span class="etiqueta">desconexión</span>
+          {% elif e.tipo == 'rechazo_revocado' %}
+            <span class="etiqueta etiqueta-mal">rechazado: revocado</span>
+          {% elif e.tipo == 'rechazo_certificado' %}
+            <span class="etiqueta etiqueta-mal">rechazado: certificado</span>
+          {% elif e.tipo == 'rechazo_clave' %}
+            <span class="etiqueta etiqueta-mal">rechazado: clave</span>
+          {% elif e.tipo == 'rechazo_tls' %}
+            <span class="etiqueta etiqueta-mal">rechazado: TLS</span>
+          {% elif e.tipo == 'arranque' %}
+            <span class="etiqueta">servidor arrancado</span>
+          {% elif e.tipo == 'crl' %}
+            <span class="etiqueta">CRL recargada</span>
+          {% endif %}
+        </td>
+        {# Vacío y no inventado: un rechazo temprano muere antes de que el
+           cliente llegue a presentar certificado, así que no hay CN. #}
+        <td class="destacado">{{ e.cn or '—' }}</td>
+        <td class="tenue">{{ e.ip or '—' }}{% if e.puerto %}:{{ e.puerto }}{% endif %}</td>
+        <td class="tenue">{{ e.detalle or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% elif not avisos %}
+  <p class="tenue">No hay sucesos que mostrar con este filtro.</p>
+  {% endif %}
+
 {% else %}
-<p class="tenue">Todavía no hay entradas.</p>
+
+  <p class="tenue">Últimas 200 acciones registradas en el panel, incluidos los intentos de login fallidos.</p>
+
+  {% if entradas %}
+  <div class="tabla-scroll">
+  <table class="tabla">
+    <thead>
+      <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Objetivo</th><th>Resultado</th><th>IP</th><th>Detalle</th></tr>
+    </thead>
+    <tbody>
+      {% for e in entradas %}
+      <tr>
+        <td class="tenue">{{ e.ts[:19] | replace('T', ' ') }}</td>
+        <td class="destacado">{{ e.usuario or '—' }}</td>
+        <td>{{ e.accion }}</td>
+        <td>{{ e.objetivo or '—' }}</td>
+        <td>
+          <span class="etiqueta etiqueta-{{ 'ok' if e.resultado == 'ok' else 'mal' }}">{{ e.resultado }}</span>
+        </td>
+        <td class="tenue">{{ e.ip or '—' }}</td>
+        <td class="tenue">{{ e.detalle or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="tenue">Todavía no hay entradas.</p>
+  {% endif %}
+
 {% endif %}
 {% endblock %}

@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, Form, Request
 
 from .. import db
 from ..auth import solo_admin, usuario_actual, verificar_csrf
+from ..core import eventos_vpn
 from .comun import auditar, aviso, cfg, error_htmx, render
 
 router = APIRouter(prefix="/admin")
@@ -325,8 +326,33 @@ def politica_totp_supervisor(
 
 
 @router.get("/auditoria")
-def pagina_auditoria(request: Request, sesion=Depends(usuario_actual)):
-    """La auditoría la puede consultar cualquier usuario autenticado"""
-    return render(request, "auditoria.html", {
-        "entradas": db.listar_auditoria(cfg(request).seguridad.db_path, 200),
-    })
+def pagina_auditoria(
+    request: Request,
+    fuente: str = "panel",
+    filtro: str = "todo",
+    sesion=Depends(usuario_actual),
+):
+    """
+    La auditoría la puede consultar cualquier usuario autenticado.
+
+    Dos fuentes distintas, y por eso dos pestañas y no una tabla mezclada:
+
+    - 'panel' sale de la tabla `auditoria`, son acciones de una cuenta del
+      panel y llevan usuario.
+    - 'vpn' sale del log de OpenVPN, son conexiones de un certificado y no
+      tienen cuenta del panel. Se leen en vivo; no se guardan en la base.
+    """
+    c = cfg(request)
+    contexto = {"fuente": "vpn" if fuente == "vpn" else "panel", "filtro": filtro}
+
+    if contexto["fuente"] == "vpn":
+        eventos, avisos = eventos_vpn.leer_eventos(c)
+        if filtro == "fallos":
+            eventos = [e for e in eventos if e["fallo"]]
+        elif filtro == "conexiones":
+            eventos = [e for e in eventos if e["tipo"] == eventos_vpn.CONEXION]
+        contexto.update({"eventos": eventos, "avisos": avisos})
+    else:
+        contexto["entradas"] = db.listar_auditoria(c.seguridad.db_path, 200)
+
+    return render(request, "auditoria.html", contexto)

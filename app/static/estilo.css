@@ -324,6 +324,36 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
 .aviso-aviso::before { content: '\26A0'; color: var(--amarillo); }
 .aviso-info::before  { content: '\2139'; color: var(--azul); }
 
+/* ------------------------------------------- pestañas y filtros de vista */
+/* Enlaces, no botones: cada vista tiene su URL, se comparte y el botón de
+   atrás funciona. El subrayado de la activa va con box-shadow para que no
+   desplace el texto medio píxel al cambiar de pestaña. */
+.pestanas {
+  display: flex; gap: .25rem;
+  margin: 0 0 1.25rem; border-bottom: 1px solid var(--linea);
+}
+.pestanas a {
+  padding: .55rem 1rem; color: var(--texto-2);
+  text-decoration: none; font-weight: 600;
+  box-shadow: inset 0 -2px 0 transparent;
+}
+.pestanas a:hover { color: var(--texto); }
+.pestanas a.activa { color: var(--cian); box-shadow: inset 0 -2px 0 var(--cian); }
+
+.filtros { display: flex; flex-wrap: wrap; gap: .4rem; margin: .9rem 0; }
+.filtros a {
+  padding: .25rem .7rem; border: 1px solid var(--linea);
+  border-radius: 999px; color: var(--texto-2);
+  text-decoration: none; font-size: .85rem;
+}
+.filtros a:hover { border-color: var(--linea-fuerte); color: var(--texto); }
+/* rgba del propio --cian (#10c4d8), como hace --foco: una variable no se puede
+   usar con alfa directamente sin color-mix. */
+.filtros a.activa {
+  border-color: var(--cian); color: var(--cian);
+  background: rgba(16, 196, 216, .08);
+}
+
 /* ------------------------------------------------ histórico de eliminados */
 /* <details> nativo: sin JavaScript, y con el teclado y el lector de pantalla
    ya resueltos por el navegador. */
