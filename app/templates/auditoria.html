@@ -9,9 +9,15 @@
    una cuenta del panel, y la VPN conexiones de un certificado. Enlaces normales
    y no pestañas con JavaScript: cada vista tiene su URL, se puede compartir y
    el botón de atrás funciona. #}
-<nav class="pestanas">
-  <a class="{{ 'activa' if fuente == 'panel' }}" href="/admin/auditoria?fuente=panel">Panel web</a>
-  <a class="{{ 'activa' if fuente == 'vpn' }}" href="/admin/auditoria?fuente=vpn">VPN</a>
+{# aria-current además de la clase: el subrayado cian solo lo ve quien ve. Sin
+   él, un lector de pantalla lee dos enlaces indistinguibles. #}
+<nav class="pestanas" aria-label="Fuente de la auditoría">
+  <a class="{{ 'activa' if fuente == 'panel' }}"
+     {% if fuente == 'panel' %}aria-current="page"{% endif %}
+     href="/admin/auditoria?fuente=panel">Panel web</a>
+  <a class="{{ 'activa' if fuente == 'vpn' }}"
+     {% if fuente == 'vpn' %}aria-current="page"{% endif %}
+     href="/admin/auditoria?fuente=vpn">VPN</a>
 </nav>
 
 {% if fuente == 'vpn' %}
@@ -26,10 +32,12 @@
   <div class="aviso aviso-aviso">{{ a }}</div>
   {% endfor %}
 
-  <nav class="filtros">
-    <a class="{{ 'activa' if filtro == 'todo' }}" href="/admin/auditoria?fuente=vpn&amp;filtro=todo">Todo</a>
-    <a class="{{ 'activa' if filtro == 'conexiones' }}" href="/admin/auditoria?fuente=vpn&amp;filtro=conexiones">Conexiones</a>
-    <a class="{{ 'activa' if filtro == 'fallos' }}" href="/admin/auditoria?fuente=vpn&amp;filtro=fallos">Rechazos</a>
+  <nav class="filtros" aria-label="Filtro de sucesos">
+    {% for clave, texto in [('todo', 'Todo'), ('conexiones', 'Conexiones'), ('fallos', 'Rechazos')] %}
+    <a class="{{ 'activa' if filtro == clave }}"
+       {% if filtro == clave %}aria-current="true"{% endif %}
+       href="/admin/auditoria?fuente=vpn&amp;filtro={{ clave }}">{{ texto }}</a>
+    {% endfor %}
   </nav>
 
   {% if eventos %}

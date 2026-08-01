@@ -36,18 +36,29 @@
     <strong>Bridges<span>MGR</span></strong>
   </a>
 
-  <nav class="nav">
-    <a href="/" class="{{ 'activo' if activo == 'dashboard' }}">Panel</a>
-    <a href="/conexiones" class="{{ 'activo' if activo == 'conexiones' }}">Conexiones</a>
-    <a href="/clientes" class="{{ 'activo' if activo == 'clientes' }}">Clientes VPN</a>
-    <a href="/logs" class="{{ 'activo' if activo == 'logs' }}">Logs</a>
-    <a href="/admin/auditoria" class="{{ 'activo' if activo == 'auditoria' }}">Auditoría</a>
+  {# El activo lleva aria-current además de la clase: el subrayado cian y el
+     texto en blanco solo los ve quien ve. Sin él, un lector de pantalla
+     anuncia siete enlaces indistinguibles y no dice dónde estás. #}
+  <nav class="nav" aria-label="Secciones del panel">
+    {% set secciones = [
+      ('/', 'dashboard', 'Panel'),
+      ('/conexiones', 'conexiones', 'Conexiones'),
+      ('/clientes', 'clientes', 'Clientes VPN'),
+      ('/logs', 'logs', 'Logs'),
+      ('/admin/auditoria', 'auditoria', 'Auditoría'),
+    ] %}
     {# 'manda' y nunca el nombre del rol: lo inyecta routers/comun.py:render()
        desde db.ROLES_MANDO, que es la misma lista que mira solo_admin. #}
     {% if manda %}
-    <a href="/admin/usuarios" class="{{ 'activo' if activo == 'usuarios' }}">Usuarios</a>
-    <a href="/configuracion" class="{{ 'activo' if activo == 'configuracion' }}">Configuración</a>
+      {% set secciones = secciones + [
+        ('/admin/usuarios', 'usuarios', 'Usuarios'),
+        ('/configuracion', 'configuracion', 'Configuración'),
+      ] %}
     {% endif %}
+    {% for url, clave, texto in secciones %}
+    <a href="{{ url }}" class="{{ 'activo' if activo == clave }}"
+       {% if activo == clave %}aria-current="page"{% endif %}>{{ texto }}</a>
+    {% endfor %}
   </nav>
 
   <div class="sesion">

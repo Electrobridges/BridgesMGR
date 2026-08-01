@@ -35,4 +35,12 @@
      hx-swap="innerHTML">
   <p class="tenue">Cargando…</p>
 </div>
+
+{# Sin 'every 30s' a propósito: dentro lleva un <details> y el refresco
+   periódico lo cerraría mientras alguien lo lee. Se recarga solo cuando una
+   acción cambia algo, que es cuando su contenido puede haber cambiado. #}
+<div id="lista-archivados"
+     hx-get="/clientes/archivados"
+     hx-trigger="load, clientes-actualizados from:body"
+     hx-swap="innerHTML"></div>
 {% endblock %}

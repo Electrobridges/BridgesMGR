@@ -1,0 +1,58 @@
+{# Histórico de perfiles retirados de la lista activa.
+
+   <details> nativo y no un desplegable con JavaScript: la CSP es
+   script-src 'self', y así el teclado y el lector de pantalla vienen resueltos
+   por el navegador. Cerrado por defecto, que es información de consulta.
+
+   Aparte de la tabla de clientes a propósito: aquella se recarga sola cada 30
+   segundos y eso cerraría este desplegable mientras alguien lo lee. Aquí solo
+   se refresca cuando una acción cambia algo. #}
+{% if archivados %}
+<details class="archivados">
+  <summary>
+    Perfiles eliminados
+    <span class="etiqueta">{{ archivados | length }}</span>
+  </summary>
+
+  <p class="tenue">
+    Siguen revocados y en la CRL, así que sus <code>.ovpn</code> no sirven.
+    <strong>No se borran de la PKI a propósito</strong>: la CRL se regenera
+    desde <code>index.txt</code> cada vez que se revoca a alguien, y quitar de
+    ahí un certificado le devolvería la validez en esa siguiente regeneración.
+    Se podrán borrar de verdad al reconstruir la CA, cuando queden firmados por
+    una autoridad que ya no existe y no haya nada que bloquear.
+  </p>
+
+  <div class="tabla-scroll">
+  <table class="tabla">
+    <thead>
+      <tr>
+        <th>Cliente</th>
+        <th>Eliminado</th>
+        <th>Por</th>
+        {% if manda %}<th>Acciones</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in archivados %}
+      <tr>
+        <td class="destacado">{{ a.cn }}</td>
+        <td class="tenue">{{ a.archivado[:10] }}</td>
+        <td class="tenue">{{ a.por or '—' }}</td>
+        {% if manda %}
+        <td class="acciones">
+          <button class="boton pequeno"
+                  hx-post="/clientes/{{ a.cn }}/desarchivar"
+                  hx-target="#avisos"
+                  hx-swap="innerHTML">
+            Devolver a la lista
+          </button>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+{% endif %}

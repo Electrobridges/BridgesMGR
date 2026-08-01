@@ -93,12 +93,32 @@ def test_el_archivado_sale_de_la_lista_activa(como_admin, csrf_admin, helper_fal
                     headers={"X-CSRF-Token": csrf_admin})
 
     tabla = como_admin.get("/clientes/tabla").text
+    historico = como_admin.get("/clientes/archivados").text
 
-    # Fuera de la tabla activa, pero presente en el histórico
-    assert "Perfiles eliminados" in tabla
-    assert "Devolver a la lista" in tabla
+    # Fuera de la tabla activa...
+    assert "antiguo-becario" not in tabla
+    # ...y dentro del histórico
+    assert "antiguo-becario" in historico
+    assert "Perfiles eliminados" in historico
     # Los que siguen activos no se tocan
     assert "daniel" in tabla
+
+
+def test_el_historico_no_va_en_el_fragmento_que_se_auto_refresca(como_admin,
+                                                                 csrf_admin,
+                                                                 helper_falso):
+    """
+    El histórico es un <details> y la tabla de clientes se recarga sola cada 30
+    segundos: si viviera dentro, se cerraría en las narices de quien lo lee.
+
+    Se comprueba el reparto de responsabilidades, no solo que se vea: es el
+    tipo de cosa que alguien deshace sin querer al reordenar plantillas.
+    """
+    como_admin.post("/clientes/antiguo-becario/archivar",
+                    headers={"X-CSRF-Token": csrf_admin})
+
+    assert "<details" not in como_admin.get("/clientes/tabla").text
+    assert "<details" in como_admin.get("/clientes/archivados").text
 
 
 def test_desarchivar_lo_devuelve(como_admin, csrf_admin, helper_falso, cfg):

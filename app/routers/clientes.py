@@ -69,6 +69,19 @@ def tabla_clientes(request: Request, sesion=Depends(usuario_actual)):
     return render(request, "partials/tabla_clientes.html", {
         "filas": filas,
         "errores": errores,
+    })
+
+
+@router.get("/archivados")
+def lista_archivados(request: Request, sesion=Depends(usuario_actual)):
+    """
+    El histórico de eliminados, aparte de la tabla.
+
+    Su propio fragmento porque la tabla se recarga sola cada 30 segundos y
+    dentro de este hay un <details>: el refresco periódico lo cerraría mientras
+    alguien lo está leyendo.
+    """
+    return render(request, "partials/lista_archivados.html", {
         "archivados": db.listar_archivados(cfg(request).seguridad.db_path),
     })
 
