@@ -204,8 +204,10 @@ def log_vpn(cfg):
 def test_la_pestana_del_panel_es_la_de_por_defecto(como_admin):
     texto = como_admin.get("/admin/auditoria").text
 
-    assert "Panel web" in texto
-    assert "acciones registradas en el panel" in texto
+    assert 'aria-current="page"' in texto
+    # El filtro de 'Certificados' solo existe en la pestaña del panel
+    assert "filtro=certificados" in texto
+    assert "filtro=conexiones" not in texto
 
 
 def test_la_pestana_de_vpn_muestra_los_sucesos(como_admin, log_vpn):

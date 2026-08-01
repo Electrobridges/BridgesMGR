@@ -178,9 +178,13 @@ def parse_eventos(lineas):
     return eventos
 
 
-def leer_eventos(cfg, limite=200):
+def leer_eventos(cfg, limite=None):
     """
     Punto de entrada único: devuelve (eventos, avisos).
+
+    Sin 'limite' los devuelve todos los que haya en la cola del archivo: quien
+    llama pagina después, y para paginar hace falta saber cuántos hay. El techo
+    real es LINEAS_MAX, que acota la lectura del disco.
 
     Los avisos existen porque los tres motivos por los que esto sale vacío se
     parecen entre sí y solo uno es normal: que no haya pasado nada, que el panel
@@ -216,4 +220,4 @@ def leer_eventos(cfg, limite=200):
             "conexiones y los rechazos."
         )
 
-    return eventos[:limite], avisos
+    return (eventos[:limite] if limite else eventos), avisos

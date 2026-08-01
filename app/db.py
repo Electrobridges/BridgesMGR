@@ -815,10 +815,43 @@ def registrar(ruta, usuario, accion, objetivo=None, resultado="ok", detalle=None
         )
 
 
-def listar_auditoria(ruta, limite=200):
+# Filtros de la auditoría del panel. Se resuelven en SQL y no en Python: con la
+# tabla creciendo sin límite, traerse todo para descartar la mayor parte
+# convierte cada visita en una lectura completa del historial.
+FILTROS_AUDITORIA = {
+    "todo": "",
+    "fallos": "resultado != 'ok'",
+    "certificados": ("accion IN ('crear_cliente', 'revocar', 'restaurar',"
+                     " 'descargar_ovpn', 'desconectar', 'archivar', 'desarchivar')"),
+    "sesiones": "accion IN ('login', 'logout')",
+}
+
+
+def _donde(filtro):
+    condicion = FILTROS_AUDITORIA.get(filtro or "todo", "")
+    return (" WHERE " + condicion) if condicion else ""
+
+
+def contar_auditoria(ruta, filtro=None):
+    with conexion(ruta) as con:
+        return con.execute(
+            "SELECT COUNT(*) FROM auditoria" + _donde(filtro)
+        ).fetchone()[0]
+
+
+def listar_auditoria(ruta, limite=200, desplazamiento=0, filtro=None):
+    """
+    Página de la auditoría, de la entrada más reciente hacia atrás.
+
+    El filtro se interpola desde FILTROS_AUDITORIA y nunca desde lo que llegue
+    por la URL: son fragmentos SQL fijos elegidos por clave, así que un valor
+    inventado cae en 'todo' en vez de acercarse a la consulta.
+    """
     with conexion(ruta) as con:
         filas = con.execute(
-            "SELECT * FROM auditoria ORDER BY id DESC LIMIT ?", (int(limite),)
+            "SELECT * FROM auditoria" + _donde(filtro) +
+            " ORDER BY id DESC LIMIT ? OFFSET ?",
+            (int(limite), int(desplazamiento)),
         ).fetchall()
     return [dict(f) for f in filas]
 

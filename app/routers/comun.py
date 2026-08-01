@@ -104,6 +104,41 @@ def error_htmx(request, mensaje, refrescar=None):
     return aviso(request, mensaje, tipo="error", refrescar=refrescar, status_code=400)
 
 
+TAMANOS_PAGINA = (50, 100, 200)
+
+
+def paginar(total, pagina, por_pagina, base):
+    """
+    Los números que necesita partials/paginacion.html.
+
+    Se sanea aquí y no en la plantilla: 'pagina' y 'por_pagina' llegan por la
+    URL y cualquiera puede escribir lo que quiera. Un tamaño fuera de la lista
+    cae al primero, y una página fuera de rango se pega al extremo más cercano
+    en vez de dejar la tabla vacía sin explicación.
+
+    'base' es la URL con los demás parámetros ya puestos (fuente, filtro), para
+    que moverse de página no pierda el filtro en el que estabas.
+    """
+    if por_pagina not in TAMANOS_PAGINA:
+        por_pagina = TAMANOS_PAGINA[0]
+
+    paginas = max(1, -(-total // por_pagina))  # techo de la división
+    pagina = max(1, min(pagina, paginas))
+    desplazamiento = (pagina - 1) * por_pagina
+
+    return {
+        "total": total,
+        "pagina": pagina,
+        "paginas": paginas,
+        "por_pagina": por_pagina,
+        "desplazamiento": desplazamiento,
+        "desde": desplazamiento + 1 if total else 0,
+        "hasta": min(desplazamiento + por_pagina, total),
+        "tamanos": TAMANOS_PAGINA,
+        "base": base,
+    }
+
+
 def auditar(request, sesion, accion, objetivo=None, resultado="ok", detalle=None):
     from .. import db
     db.registrar(

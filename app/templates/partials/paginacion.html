@@ -1,0 +1,49 @@
+{# Controles de paginación, compartidos por las dos pestañas de Auditoría.
+
+   Enlaces normales: cada página tiene su URL, se comparte y el botón de atrás
+   funciona. 'pg.base' ya trae los demás parámetros —fuente, filtro— para que
+   cambiar de página no pierda el filtro en el que estabas.
+
+   Se pinta también con una sola página, porque el selector de tamaño y el
+   recuento siguen siendo información útil; solo desaparece si no hay nada. #}
+{% if pg.total %}
+<nav class="paginacion" aria-label="Paginación">
+
+  <p class="paginacion-cuenta tenue">
+    Mostrando <strong>{{ pg.desde }}</strong>–<strong>{{ pg.hasta }}</strong>
+    de <strong>{{ pg.total }}</strong>
+  </p>
+
+  <div class="paginacion-tamano">
+    <span class="tenue">Por página:</span>
+    {% for t in pg.tamanos %}
+    <a class="{{ 'activa' if t == pg.por_pagina }}"
+       {% if t == pg.por_pagina %}aria-current="true"{% endif %}
+       href="{{ pg.base }}&amp;por_pagina={{ t }}&amp;pagina=1">{{ t }}</a>
+    {% endfor %}
+  </div>
+
+  {% if pg.paginas > 1 %}
+  <div class="paginacion-pasos">
+    {% if pg.pagina > 1 %}
+    <a class="boton pequeno"
+       href="{{ pg.base }}&amp;por_pagina={{ pg.por_pagina }}&amp;pagina={{ pg.pagina - 1 }}"
+       rel="prev">← Anterior</a>
+    {% else %}
+    <span class="boton pequeno desactivado" aria-hidden="true">← Anterior</span>
+    {% endif %}
+
+    <span class="tenue">Página {{ pg.pagina }} de {{ pg.paginas }}</span>
+
+    {% if pg.pagina < pg.paginas %}
+    <a class="boton pequeno"
+       href="{{ pg.base }}&amp;por_pagina={{ pg.por_pagina }}&amp;pagina={{ pg.pagina + 1 }}"
+       rel="next">Siguiente →</a>
+    {% else %}
+    <span class="boton pequeno desactivado" aria-hidden="true">Siguiente →</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</nav>
+{% endif %}

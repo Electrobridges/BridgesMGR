@@ -40,6 +40,8 @@
     {% endfor %}
   </nav>
 
+  {% include "partials/paginacion.html" %}
+
   {% if eventos %}
   <div class="tabla-scroll">
   <table class="tabla">
@@ -79,13 +81,30 @@
     </tbody>
   </table>
   </div>
+
+  {% include "partials/paginacion.html" %}
+
   {% elif not avisos %}
   <p class="tenue">No hay sucesos que mostrar con este filtro.</p>
   {% endif %}
 
 {% else %}
 
-  <p class="tenue">Últimas 200 acciones registradas en el panel, incluidos los intentos de login fallidos.</p>
+  <p class="tenue">
+    Acciones registradas en el panel, de la más reciente a la más antigua.
+    Incluye los intentos de login fallidos.
+  </p>
+
+  <nav class="filtros" aria-label="Filtro de acciones">
+    {% for clave, texto in [('todo', 'Todo'), ('fallos', 'Fallos'),
+                            ('certificados', 'Certificados'), ('sesiones', 'Sesiones')] %}
+    <a class="{{ 'activa' if filtro == clave }}"
+       {% if filtro == clave %}aria-current="true"{% endif %}
+       href="/admin/auditoria?fuente=panel&amp;filtro={{ clave }}">{{ texto }}</a>
+    {% endfor %}
+  </nav>
+
+  {% include "partials/paginacion.html" %}
 
   {% if entradas %}
   <div class="tabla-scroll">
@@ -110,8 +129,14 @@
     </tbody>
   </table>
   </div>
+
+  {% include "partials/paginacion.html" %}
+
   {% else %}
-  <p class="tenue">Todavía no hay entradas.</p>
+  <p class="tenue">
+    {% if filtro == 'todo' %}Todavía no hay entradas.
+    {% else %}No hay acciones que encajen con este filtro.{% endif %}
+  </p>
   {% endif %}
 
 {% endif %}

@@ -354,6 +354,33 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
   background: rgba(16, 196, 216, .08);
 }
 
+/* -------------------------------------------------------------- paginación */
+/* Una sola fila que se parte por su cuenta en ventana estrecha: el recuento a
+   la izquierda, el tamaño de página en medio y los pasos a la derecha. */
+.paginacion {
+  display: flex; flex-wrap: wrap; gap: .75rem 1.25rem;
+  align-items: center; justify-content: space-between;
+  margin: .9rem 0;
+}
+.paginacion-cuenta { margin: 0; }
+.paginacion-tamano { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.paginacion-tamano a {
+  padding: .15rem .55rem; border: 1px solid var(--linea);
+  border-radius: var(--radio-sm); color: var(--texto-2);
+  text-decoration: none; font-size: .82rem;
+  font-variant-numeric: tabular-nums;
+}
+.paginacion-tamano a:hover { border-color: var(--linea-fuerte); color: var(--texto); }
+.paginacion-tamano a.activa { border-color: var(--cian); color: var(--cian); }
+.paginacion-pasos {
+  display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+/* El extremo se queda a la vista y apagado en vez de desaparecer: si los
+   botones se movieran de sitio al llegar al final, el siguiente clic caería
+   donde ya no hay nada. */
+.paginacion .desactivado { opacity: .35; cursor: default; }
+
 /* ------------------------------------------------ histórico de eliminados */
 /* <details> nativo: sin JavaScript, y con el teclado y el lector de pantalla
    ya resueltos por el navegador. */

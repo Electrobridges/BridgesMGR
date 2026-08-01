@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from .. import db
 from ..auth import solo_admin, usuario_actual, verificar_csrf
 from ..core import eventos_vpn
-from .comun import auditar, aviso, cfg, error_htmx, render
+from .comun import auditar, aviso, cfg, error_htmx, paginar, render
 
 router = APIRouter(prefix="/admin")
 
@@ -325,11 +325,22 @@ def politica_totp_supervisor(
     return aviso(request, mensaje, refrescar=EVENTO_REFRESCO)
 
 
+# Filtros de la pestaña de VPN. Los del panel viven en db.FILTROS_AUDITORIA,
+# porque allí son condiciones SQL.
+FILTROS_VPN = {
+    "todo": lambda e: True,
+    "conexiones": lambda e: e["tipo"] == eventos_vpn.CONEXION,
+    "fallos": lambda e: e["fallo"],
+}
+
+
 @router.get("/auditoria")
 def pagina_auditoria(
     request: Request,
     fuente: str = "panel",
     filtro: str = "todo",
+    pagina: int = 1,
+    por_pagina: int = 50,
     sesion=Depends(usuario_actual),
 ):
     """
@@ -338,21 +349,39 @@ def pagina_auditoria(
     Dos fuentes distintas, y por eso dos pestañas y no una tabla mezclada:
 
     - 'panel' sale de la tabla `auditoria`, son acciones de una cuenta del
-      panel y llevan usuario.
+      panel y llevan usuario. Se filtra y se pagina en SQL: la tabla crece sin
+      límite y traerla entera para descartar la mayor parte sería leer todo el
+      historial en cada visita.
     - 'vpn' sale del log de OpenVPN, son conexiones de un certificado y no
-      tienen cuenta del panel. Se leen en vivo; no se guardan en la base.
+      tienen cuenta del panel. Se leen en vivo, acotadas por la cola del
+      archivo, y se paginan en memoria porque ya vienen acotadas.
     """
     c = cfg(request)
-    contexto = {"fuente": "vpn" if fuente == "vpn" else "panel", "filtro": filtro}
+    fuente = "vpn" if fuente == "vpn" else "panel"
+    validos = FILTROS_VPN if fuente == "vpn" else db.FILTROS_AUDITORIA
+    if filtro not in validos:
+        filtro = "todo"
 
-    if contexto["fuente"] == "vpn":
+    base = "/admin/auditoria?fuente=%s&filtro=%s" % (fuente, filtro)
+    contexto = {"fuente": fuente, "filtro": filtro}
+
+    if fuente == "vpn":
         eventos, avisos = eventos_vpn.leer_eventos(c)
-        if filtro == "fallos":
-            eventos = [e for e in eventos if e["fallo"]]
-        elif filtro == "conexiones":
-            eventos = [e for e in eventos if e["tipo"] == eventos_vpn.CONEXION]
-        contexto.update({"eventos": eventos, "avisos": avisos})
+        eventos = [e for e in eventos if FILTROS_VPN[filtro](e)]
+        pg = paginar(len(eventos), pagina, por_pagina, base)
+        contexto.update({
+            "eventos": eventos[pg["desplazamiento"]:pg["desplazamiento"] + pg["por_pagina"]],
+            "avisos": avisos,
+            "pg": pg,
+        })
     else:
-        contexto["entradas"] = db.listar_auditoria(c.seguridad.db_path, 200)
+        total = db.contar_auditoria(c.seguridad.db_path, filtro)
+        pg = paginar(total, pagina, por_pagina, base)
+        contexto.update({
+            "entradas": db.listar_auditoria(
+                c.seguridad.db_path, pg["por_pagina"], pg["desplazamiento"], filtro
+            ),
+            "pg": pg,
+        })
 
     return render(request, "auditoria.html", contexto)
