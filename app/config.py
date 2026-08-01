@@ -54,6 +54,37 @@ class ClienteOvpnCfg:
 
 
 @dataclass
+class CorreoCfg:
+    servidor: str = ""
+    puerto: int = 587
+    usuario: str = ""
+    password: str = ""
+    desde: str = ""
+    destinatarios: List[str] = field(default_factory=list)
+    tls: bool = True
+
+
+@dataclass
+class DiscordCfg:
+    # La URL del webhook ES la credencial: quien la tenga escribe en ese canal.
+    webhook: str = ""
+
+
+@dataclass
+class NotificacionesCfg:
+    """
+    Destinos de las alertas.
+
+    Viven aquí y no en la tabla `ajustes` a propósito, al revés que la política
+    de TOTP: este archivo es root:ovpnweb 0640, así que el panel lo lee y no lo
+    escribe. Un panel comprometido puede callar las alertas —eso se avisa antes
+    de apagarlas— pero no puede redirigirlas a otro buzón ni a otro canal.
+    """
+    correo: CorreoCfg = field(default_factory=CorreoCfg)
+    discord: DiscordCfg = field(default_factory=DiscordCfg)
+
+
+@dataclass
 class SeguridadCfg:
     helper: str = "/usr/local/sbin/ovpn-web-helper"
     usar_sudo: bool = True
@@ -70,6 +101,7 @@ class Config:
     openvpn: OpenVPNCfg = field(default_factory=OpenVPNCfg)
     cliente_ovpn: ClienteOvpnCfg = field(default_factory=ClienteOvpnCfg)
     seguridad: SeguridadCfg = field(default_factory=SeguridadCfg)
+    notificaciones: NotificacionesCfg = field(default_factory=NotificacionesCfg)
 
 
 def _seccion(datos, clave, clase):
@@ -113,4 +145,28 @@ def cargar_config(ruta=None):
         openvpn=_seccion(datos, "openvpn", OpenVPNCfg),
         cliente_ovpn=_seccion(datos, "cliente_ovpn", ClienteOvpnCfg),
         seguridad=_seccion(datos, "seguridad", SeguridadCfg),
+        notificaciones=_notificaciones(datos),
+    )
+
+
+def _notificaciones(datos):
+    """
+    La única sección con dos niveles, y por eso no vale _seccion() a secas.
+
+    Se comprueban las claves desconocidas en los tres niveles, por el mismo
+    motivo que en el resto: una errata aquí dejaría un canal silencioso sin
+    decirlo, que es el peor fallo posible en algo que existe para avisar.
+    """
+    bruto = datos.get("notificaciones") or {}
+    if not isinstance(bruto, dict):
+        raise ValueError("La sección 'notificaciones' debe ser un mapa")
+
+    desconocidas = set(bruto) - {"correo", "discord"}
+    if desconocidas:
+        raise ValueError("Claves desconocidas en 'notificaciones': %s"
+                         % ", ".join(sorted(desconocidas)))
+
+    return NotificacionesCfg(
+        correo=_seccion(bruto, "correo", CorreoCfg),
+        discord=_seccion(bruto, "discord", DiscordCfg),
     )

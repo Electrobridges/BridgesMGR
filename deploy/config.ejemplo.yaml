@@ -54,6 +54,32 @@ cliente_ovpn:
   # en los .ovpn. Déjalo vacío si no usas tls-crypt.
   tls_crypt: "/etc/openvpn/tls-crypt.key"
 
+# Avisos de sucesos importantes. Es lo ÚNICO que hace que el panel salga a
+# internet: sin esto solo habla con 127.0.0.1, el disco y sudo. Si lo dejas
+# vacío, no sale nada y no hay canal de salida que comprometer.
+#
+# Los destinos van aquí y no en el panel a propósito: este archivo es
+# root:ovpnweb 0640, así que el panel lo lee y no lo escribe. Quien lo
+# comprometa podría callar las alertas —y al hacerlo se manda un aviso por los
+# canales que aún estaban activos— pero no puede desviarlas a su propio buzón.
+#
+# Qué se avisa y por qué canal se elige desde Configuración, en el panel.
+notificaciones:
+  correo:
+    servidor: ""
+    # 587 con STARTTLS (tls: true) o 465 con SSL directo.
+    puerto: 587
+    # Vacío = no se autentica. Hay relés de red local que no lo piden.
+    usuario: ""
+    password: ""
+    desde: ""
+    destinatarios: []
+    tls: true
+  discord:
+    # La URL del webhook ES la credencial: quien la tenga escribe en ese canal.
+    # Trátala como una contraseña.
+    webhook: ""
+
 seguridad:
   helper: "/usr/local/sbin/ovpn-web-helper"
   usar_sudo: true

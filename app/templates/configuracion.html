@@ -50,4 +50,63 @@
   </tbody>
 </table>
 </div>
+
+<h2>Notificaciones</h2>
+
+<p class="tenue">
+  Avisos de sucesos importantes por correo y por Discord.
+  <strong>Es la única parte del panel que sale a internet</strong>: hasta aquí
+  solo habla con la propia máquina. Los destinatarios y las credenciales se
+  configuran en <code>/etc/ovpn-web/config.yaml</code>, que este panel puede
+  leer pero no escribir — así, quien lo comprometa no puede redirigir las
+  alertas a otro buzón.
+</p>
+
+<section class="panel-accion">
+  <form class="formulario"
+        hx-post="/configuracion/notificaciones"
+        hx-target="#avisos"
+        hx-swap="innerHTML">
+
+    <h3>Canales</h3>
+    <label class="casilla" for="notif-correo">
+      <input type="checkbox" id="notif-correo" name="correo" value="1"
+             {% if notif.canales.correo %}checked{% endif %}
+             {% if not notif.configurado.correo %}disabled{% endif %}>
+      Correo
+      {% if notif.configurado.correo %}
+        <span class="tenue">→ {{ notif.destinatarios | join(', ') }}</span>
+      {% else %}
+        <span class="tenue">sin servidor SMTP ni destinatarios en config.yaml</span>
+      {% endif %}
+    </label>
+
+    <label class="casilla" for="notif-discord">
+      <input type="checkbox" id="notif-discord" name="discord" value="1"
+             {% if notif.canales.discord %}checked{% endif %}
+             {% if not notif.configurado.discord %}disabled{% endif %}>
+      Discord
+      {% if not notif.configurado.discord %}
+        <span class="tenue">sin webhook en config.yaml</span>
+      {% endif %}
+    </label>
+
+    <h3>Qué avisar</h3>
+    {% for clave, texto in notif.categorias.items() %}
+    <label class="casilla" for="ev-{{ clave }}">
+      <input type="checkbox" id="ev-{{ clave }}" name="eventos" value="{{ clave }}"
+             {% if clave in notif.eventos %}checked{% endif %}>
+      {{ texto }}
+    </label>
+    {% endfor %}
+
+    <p class="tenue">
+      Al desactivar un canal o quitar una categoría, <strong>se envía primero el
+      aviso de que se está reduciendo la vigilancia</strong>, por los canales que
+      seguían activos. Quien apague esto no puede hacerlo en silencio.
+    </p>
+
+    <button type="submit" class="boton boton-principal">Guardar notificaciones</button>
+  </form>
+</section>
 {% endblock %}

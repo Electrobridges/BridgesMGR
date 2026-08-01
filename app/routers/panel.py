@@ -1,12 +1,15 @@
 """Dashboard, conexiones activas, logs y configuración"""
 
-from fastapi import APIRouter, Depends, Query, Request
+from typing import List
 
-from ..auth import solo_admin, usuario_actual
+from fastapi import APIRouter, Depends, Form, Query, Request
+
+from .. import notificar
+from ..auth import ip_cliente, solo_admin, usuario_actual, verificar_csrf
 from ..core import logs as core_logs
 from ..core.conexiones import obtener_conexiones, resumen_trafico, top_por_trafico
 from ..core.easyrsa import ErrorHelper, estado_servicio, listar_certificados
-from .comun import cfg, render
+from .comun import auditar, aviso, cfg, render
 
 router = APIRouter()
 
@@ -111,4 +114,92 @@ def pagina_configuracion(request: Request, sesion=Depends(solo_admin)):
         "seguridad": c.seguridad,
         "servicio": servicio,
         "tamano_log": core_logs.tamano_log(c.openvpn.log_path),
+        "notif": _estado_notificaciones(c),
     })
+
+
+def _estado_notificaciones(c):
+    """
+    Lo que necesita la sección de notificaciones: qué está encendido y qué
+    tiene destino configurado en el YAML.
+
+    Las dos cosas por separado a propósito: un canal encendido sin destino no
+    manda nada, y hay que poder decirlo en pantalla en vez de dejar que alguien
+    lo dé por activo.
+    """
+    ruta = c.seguridad.db_path
+    return {
+        "canales": notificar.canales_activos(ruta),
+        "eventos": notificar.eventos_activos(ruta),
+        "categorias": notificar.CATEGORIAS,
+        "configurado": {
+            "correo": notificar.configurado(c, "correo"),
+            "discord": notificar.configurado(c, "discord"),
+        },
+        "destinatarios": [d for d in (c.notificaciones.correo.destinatarios or []) if d],
+    }
+
+
+@router.post("/configuracion/notificaciones")
+def guardar_notificaciones(
+    request: Request,
+    correo: str = Form(None),
+    discord: str = Form(None),
+    eventos: List[str] = Form(default=[]),
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Guarda qué canales y qué categorías avisan.
+
+    La regla que sostiene esto: **si el cambio reduce la vigilancia, el aviso
+    sale antes de guardarlo y por los canales que todavía estaban activos.**
+
+    Los destinos viven en config.yaml, que el panel no puede escribir, así que
+    un atacante no puede redirigir las alertas a su buzón. Pero sí podría
+    callarlas desde aquí, y esta regla hace que el último mensaje que salga sea
+    justo el que dice que lo están haciendo. Se manda en el hilo, sin pasar por
+    la cola: hay que saber si salió antes de aplicar el cambio.
+    """
+    c = cfg(request)
+    ruta = c.seguridad.db_path
+
+    antes = notificar.canales_activos(ruta)
+    antes["eventos"] = notificar.eventos_activos(ruta)
+
+    ahora = {"correo": bool(correo), "discord": bool(discord),
+             "eventos": {e for e in eventos if e in notificar.CATEGORIAS}}
+
+    apaga_canal = any(antes[c_] and not ahora[c_] for c_ in ("correo", "discord"))
+    quita_evento = bool(antes["eventos"] - ahora["eventos"])
+    fallos_aviso = []
+
+    if apaga_canal or quita_evento:
+        canales_previos = {c_: antes[c_] and notificar.configurado(c, c_)
+                           for c_ in ("correo", "discord")}
+        if any(canales_previos.values()):
+            _, fallos_aviso = notificar.avisar_ahora(
+                c, canales_previos,
+                "[%s] Se están reduciendo las notificaciones" % c.servidor.host_bind,
+                notificar.aviso_de_apagado(c, sesion["usuario"], ip_cliente(request),
+                                           antes, ahora),
+                grave=True,
+            )
+
+    notificar.guardar_ajustes(ruta, ahora["correo"], ahora["discord"], ahora["eventos"])
+    auditar(request, sesion, "ajustar_notificaciones", None,
+            detalle="canales=%s eventos=%s" % (
+                ",".join(sorted(k for k in ("correo", "discord") if ahora[k])) or "ninguno",
+                ",".join(sorted(ahora["eventos"])) or "ninguno"))
+
+    mensaje = "Notificaciones guardadas."
+    if apaga_canal or quita_evento:
+        if fallos_aviso:
+            mensaje = ("Guardado, pero el aviso previo de la desactivación no pudo "
+                       "entregarse: %s" % "; ".join(fallos_aviso))
+        else:
+            mensaje = ("Guardado. Se envió antes el aviso de que se reduce la "
+                       "vigilancia, por los canales que seguían activos.")
+
+    return aviso(request, mensaje,
+                 tipo="aviso" if fallos_aviso else "ok")
