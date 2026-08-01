@@ -61,3 +61,52 @@ def test_el_destino_existe(cliente, url, metodo, plantilla):
     assert respuesta.status_code != 404, (
         "%s enlaza a %s %s y no hay ninguna ruta que lo atienda" % (plantilla, metodo, url)
     )
+
+
+# ------------------------------------------------- el diálogo de confirmación
+
+def test_el_script_de_confirmacion_se_sirve(cliente):
+    """
+    Va en /static y no en línea: la CSP es script-src 'self'.
+
+    Si dejara de servirse, HTMX volvería a su confirm nativo —la guarda de las
+    acciones destructivas no se pierde— pero el diálogo del panel sí.
+    """
+    respuesta = cliente.get("/static/confirmar.js")
+
+    assert respuesta.status_code == 200
+    assert "htmx:confirm" in respuesta.text
+
+
+def test_la_pagina_trae_el_dialogo_y_el_script(como_admin):
+    texto = como_admin.get("/clientes").text
+
+    assert 'src="/static/confirmar.js"' in texto
+    assert 'id="dialogo-confirmar"' in texto
+
+
+def test_el_foco_arranca_en_cancelar(como_admin):
+    """
+    Casi todo lo que pasa por el diálogo es destructivo. Un Intro de más no
+    puede ser lo que revoque un certificado.
+    """
+    import re
+
+    texto = como_admin.get("/clientes").text
+    dialogo = re.search(r'<dialog id="dialogo-confirmar".*?</dialog>', texto, re.S).group(0)
+    autofocus = re.search(r'<button value="(\w+)"[^>]*autofocus', dialogo)
+
+    assert autofocus and autofocus.group(1) == "no"
+
+
+def test_las_confirmaciones_siguen_en_las_plantillas(cliente):
+    """
+    El diálogo sustituye la apariencia del confirm, no la confirmación. Si
+    alguien quitara los hx-confirm creyendo que el modal ya los cubre, las
+    acciones destructivas pasarían a ejecutarse a la primera.
+    """
+    destructivas = 0
+    for archivo in PLANTILLAS.rglob("*.html"):
+        destructivas += archivo.read_text(encoding="utf-8").count("hx-confirm")
+
+    assert destructivas >= 8

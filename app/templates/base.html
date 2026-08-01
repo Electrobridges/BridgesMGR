@@ -21,6 +21,10 @@
   <meta name="theme-color" content="#081731">
   <link rel="stylesheet" href="/static/estilo.css">
   <script src="/static/htmx.min.js" defer></script>
+  {# Cambia el confirm() del navegador por el diálogo de abajo. Archivo local,
+     nunca en línea: la CSP es script-src 'self'. Si no cargara, HTMX vuelve a
+     su confirm nativo y la guarda sigue puesta. #}
+  <script src="/static/confirmar.js" defer></script>
 </head>
 {# El token CSRF viaja en todas las peticiones HTMX. Una web ajena no puede
    poner cabeceras propias, así que esto corta el CSRF de raíz. #}
@@ -78,6 +82,24 @@
 
   {% block contenido %}{% endblock %}
 </main>
+
+{# Diálogo de confirmación, uno por página y compartido por todas las acciones.
+
+   <dialog> nativo y no un div: trae el atrapado del foco, el cierre con
+   Escape, el ::backdrop y el papel de modal ante el lector de pantalla sin
+   que haya que reimplementar nada de eso.
+
+   El foco arranca en Cancelar y no en Continuar. Casi todo lo que pasa por
+   aquí es destructivo —revocar, eliminar, borrar una cuenta— y un Intro de
+   más no puede ser lo que revoque un certificado. #}
+<dialog id="dialogo-confirmar" class="dialogo" aria-labelledby="dialogo-titulo">
+  <h2 id="dialogo-titulo">Confirmar</h2>
+  <p class="dialogo-texto"></p>
+  <form method="dialog" class="dialogo-botones">
+    <button value="no" class="boton" autofocus>Cancelar</button>
+    <button value="si" class="boton boton-principal">Continuar</button>
+  </form>
+</dialog>
 
 </body>
 </html>

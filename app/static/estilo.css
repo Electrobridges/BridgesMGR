@@ -354,6 +354,28 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
   background: rgba(16, 196, 216, .08);
 }
 
+/* --------------------------------------------- diálogo de confirmación */
+/* Un escalón tonal por encima de la página, no una tarjeta flotante: la
+   separación la hace la línea de 1px, como en todo el sistema. La única
+   sombra sigue siendo el anillo de foco.
+   El velo va en negro plano, sin backdrop-filter: aquí no se difumina nada. */
+.dialogo {
+  max-width: 34rem; width: calc(100% - 2rem);
+  padding: 1.5rem; border: 1px solid var(--linea-fuerte);
+  border-radius: var(--radio); background: var(--fondo-3);
+  color: var(--texto-2);
+}
+.dialogo::backdrop { background: rgba(3, 19, 43, .72); }
+.dialogo h2 {
+  margin: 0 0 .75rem; font-size: 1.05rem; font-weight: 600;
+  letter-spacing: -.01em; color: var(--cian-claro);
+}
+.dialogo-texto { margin: 0; line-height: 1.55; }
+.dialogo-botones {
+  display: flex; flex-wrap: wrap; gap: .6rem;
+  justify-content: flex-end; margin-top: 1.5rem;
+}
+
 /* -------------------------------------------------------------- paginación */
 /* Una sola fila que se parte por su cuenta en ventana estrecha: el recuento a
    la izquierda, el tamaño de página en medio y los pasos a la derecha. */
