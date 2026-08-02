@@ -7,6 +7,12 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.2.0] — 2026-08-02
+
+Los cinco fallos corregidos que más importan salieron del primer despliegue en
+un servidor real y del uso de la interfaz, no de la suite. Esta versión añade
+las pruebas que los habrían cazado.
+
 ### Cambiado
 
 - **Los roles pasan a ser una jerarquía de tres.** El rol `lector` se llama
@@ -311,6 +317,8 @@ rompían el panel entero.
 - Guía de contribución, código de conducta, política de seguridad y plantillas
   de incidencia y de pull request.
 
+- 560 pruebas, 476 más que en la 0.1.0.
+
 ## [0.1.0] — 2026-07-26
 
 Primera versión. Panel web (FastAPI + Jinja2 + HTMX) para administrar un
@@ -346,5 +354,6 @@ servidor OpenVPN desde el navegador, con el núcleo portado de
   endurecida y certificado TLS autofirmado.
 - 84 pruebas.
 
-[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.1.0...HEAD
+[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.1.0
