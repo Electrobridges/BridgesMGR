@@ -77,12 +77,44 @@ fuera `../../etc/passwd`, `cliente;rm -rf /`, `--pki-dir=/tmp`, los saltos de
 línea (que serían inyección en el protocolo del management) y los nombres
 reservados `server` y `ca`.
 
-**4. `NoNewPrivileges` debe seguir en `false`.**
-Es la línea que más tienta a "endurecer" en `ovpn-web.service`. Sudo es setuid:
-activarla rompe toda la gestión de certificados, y lo hace con un error que no
-señala la causa. El resto del aislamiento de systemd (`ProtectSystem=strict`,
-`ReadWritePaths` con solo las dos rutas que hacen falta,
-`MemoryDenyWriteExecute`, `RestrictAddressFamilies`…) compensa.
+**4. `NoNewPrivileges` debe seguir en `false`, y declararlo no basta.**
+Sudo es setuid: con la bandera puesta no puede escalar al helper, así que el
+panel arranca y no emite, no revoca y ni siquiera lista certificados — se rompe
+justo aquello para lo que existe, y con un error que no señala la causa.
+
+Lo que costó descubrir en el primer despliegue real es que **`NoNewPrivileges=false`
+se puede ignorar**. De `systemd.exec(5)`:
+
+> *"Defaults to false, but certain settings override this and ignore the value
+> of this setting."*
+
+Cualquier opción que instale un filtro seccomp la enciende igualmente, porque
+el kernel exige `no_new_privs` para cargar un filtro sin `CAP_SYS_ADMIN` y el
+servicio corre sin privilegios. Así que **no se puede añadir a la unidad**
+ninguna de estas, por mucho que las recomiende cualquier guía de endurecimiento:
+
+```
+SystemCallFilter        SystemCallArchitectures   RestrictAddressFamilies
+RestrictNamespaces      RestrictRealtime          RestrictSUIDSGID
+LockPersonality         MemoryDenyWriteExecute    PrivateDevices
+ProtectKernelTunables   ProtectKernelModules      ProtectKernelLogs
+ProtectClock            DynamicUser
+ProtectHostname         ProtectControlGroups
+```
+
+Las dos últimas no figuran en esa lista de la documentación de systemd, pero se
+comportan igual: medido en un servidor real, con las catorce anteriores
+desactivadas el proceso seguía con `no_new_privs=1`. Hay una prueba que rechaza
+las dieciséis.
+
+Lo que queda —`ProtectSystem=strict` con `ReadWritePaths` acotado a dos rutas,
+`PrivateTmp`, `ProtectHome`, `ProtectProc`, `PrivateMounts` y `UMask=0077`— va
+por espacios de nombres y no por seccomp. Es además el control de más valor: el
+confinamiento del sistema de archivos.
+
+La salida buena a medio plazo es que el panel deje de escalar con setuid —un
+servicio root escuchando en un socket Unix— y entonces se recuperarían las
+dieciséis.
 
 **5. `subprocess` siempre con lista de argumentos, jamás `shell=True`.**
 Comprobado sobre el árbol sintáctico de todo `app/` y del helper.

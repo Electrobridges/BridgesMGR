@@ -18,7 +18,38 @@ RestartSec=5
 # --- Aislamiento -------------------------------------------------------
 # NoNewPrivileges NO se puede activar: el panel llama a sudo para ejecutar
 # /usr/local/sbin/ovpn-web-helper, y sudo es setuid. Activarlo rompería toda
-# la gestión de certificados. El resto de restricciones compensan.
+# la gestión de certificados.
+#
+# PERO DECLARARLO EN 'false' NO BASTA, y esto costó un despliegue entero
+# descubrirlo. De systemd.exec(5), sobre NoNewPrivileges:
+#
+#   "Defaults to false, but certain settings override this and ignore the
+#    value of this setting."
+#
+# Cualquier opción que instale un filtro seccomp lo activa igualmente, porque
+# el kernel exige no_new_privs para cargar un filtro sin CAP_SYS_ADMIN, y este
+# servicio corre como 'ovpnweb'. Con la bandera puesta, sudo no puede escalar y
+# el panel no emite, revoca ni lista un solo certificado — mientras el archivo
+# parece decir lo contrario.
+#
+# Por eso NO se puede añadir aquí ninguna de estas, por mucho que las
+# recomiende cualquier guía de endurecimiento de systemd:
+#
+#   SystemCallFilter        SystemCallArchitectures   RestrictAddressFamilies
+#   RestrictNamespaces      RestrictRealtime          RestrictSUIDSGID
+#   LockPersonality         MemoryDenyWriteExecute    PrivateDevices
+#   ProtectKernelTunables   ProtectKernelModules      ProtectKernelLogs
+#   ProtectClock            DynamicUser
+#
+# Y tampoco ProtectHostname ni ProtectControlGroups, que no salen en esa lista
+# de la documentación pero se comportan igual: medido en un servidor real, con
+# las catorce de arriba desactivadas el proceso seguía con no_new_privs=1 y
+# tres filtros seccomp de más. Hay una prueba que lo impide.
+#
+# Lo que queda es lo que no usa seccomp, y es lo de más valor: el confinamiento
+# del sistema de archivos. La salida buena a medio plazo es que el panel no
+# escale con setuid —un servicio root escuchando en un socket Unix— y entonces
+# se podrían recuperar las catorce.
 NoNewPrivileges=false
 
 PrivateTmp=true
@@ -37,17 +68,11 @@ ProtectHome=true
 # Si mueves la PKI (openvpn.easyrsa_path en config.yaml), esta línea tiene que
 # seguirla. Hay una prueba que comprueba que cubre lo que declara el ejemplo.
 ReadWritePaths=/var/lib/ovpn-web /etc/openvpn
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-ProtectClock=true
-ProtectHostname=true
-RestrictNamespaces=true
-RestrictRealtime=true
-LockPersonality=true
-MemoryDenyWriteExecute=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-SystemCallArchitectures=native
+
+# ProtectProc y PrivateMounts sí se pueden: van por espacio de nombres, no por
+# seccomp, así que no encienden no_new_privs.
+ProtectProc=invisible
+PrivateMounts=true
 
 # 0077 para que la base de datos y lo que escriba el panel nazcan cerrados.
 # Ojo: lo hereda todo lo que el panel lance, helper y easyrsa incluidos, así

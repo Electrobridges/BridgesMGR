@@ -299,6 +299,70 @@ def test_el_servicio_puede_escribir_en_la_pki():
     )
 
 
+# Todo lo que enciende no_new_privs, y con ello deja al panel sin poder llamar
+# al helper. Las catorce primeras las documenta systemd.exec(5) bajo
+# NoNewPrivileges; las dos últimas no salen ahí pero se comportan igual, medido
+# en un servidor real.
+FUERZAN_NO_NEW_PRIVS = (
+    "SystemCallFilter", "SystemCallArchitectures", "RestrictAddressFamilies",
+    "RestrictNamespaces", "PrivateDevices", "ProtectClock",
+    "ProtectKernelTunables", "ProtectKernelModules", "ProtectKernelLogs",
+    "MemoryDenyWriteExecute", "RestrictRealtime", "RestrictSUIDSGID",
+    "DynamicUser", "LockPersonality",
+    "ProtectHostname", "ProtectControlGroups",
+)
+
+
+def test_la_unidad_no_puede_encender_no_new_privs():
+    """
+    El fallo que costó el primer despliegue entero, y que ninguna prueba veía.
+
+    La unidad declaraba NoNewPrivileges=false con un comentario explicando por
+    qué hacía falta —sudo es setuid— y systemd lo ignoraba: de systemd.exec(5),
+    "certain settings override this and ignore the value of this setting".
+    Cualquier opción que instale un filtro seccomp enciende la bandera, porque
+    el kernel la exige para cargar un filtro sin CAP_SYS_ADMIN.
+
+    Con la bandera puesta el panel no puede llamar al helper, así que no emite,
+    no revoca y ni siquiera lista certificados: se rompe justo aquello para lo
+    que existe, mientras el archivo parece decir lo contrario.
+
+    Es de las pruebas que más dan por menos: una lista fija contra el texto del
+    archivo, y habría cazado el fallo antes de salir del repositorio.
+    """
+    fuente = _leer(SERVICIO)
+
+    assert re.search(r"^NoNewPrivileges=false\s*$", fuente, re.M), (
+        "La unidad tiene que declarar NoNewPrivileges=false: el panel llama a "
+        "sudo, que es setuid"
+    )
+
+    culpables = [d for d in FUERZAN_NO_NEW_PRIVS
+                 if re.search(r"^%s=" % re.escape(d), fuente, re.M)]
+
+    assert not culpables, (
+        "ovpn-web.service declara NoNewPrivileges=false pero usa %s, que lo "
+        "anula: systemd enciende no_new_privs igualmente para poder cargar el "
+        "filtro seccomp, y entonces sudo no puede escalar al helper. El panel "
+        "arranca y no puede tocar la PKI." % ", ".join(culpables)
+    )
+
+
+def test_la_unidad_conserva_el_confinamiento_que_si_puede():
+    """
+    Lo que queda tras quitar las de seccomp no es un residuo: es el control
+    fuerte. Si alguien vaciara la unidad creyendo que ya no protege nada, esto
+    lo para.
+    """
+    fuente = _leer(SERVICIO)
+
+    for directiva in ("ProtectSystem=strict", "ProtectHome=true",
+                      "PrivateTmp=true", "UMask=0077"):
+        assert re.search(r"^%s\s*$" % re.escape(directiva), fuente, re.M), (
+            "Falta %s: es de las que no usan seccomp y sí se pueden tener" % directiva
+        )
+
+
 def test_el_helper_llama_a_easyrsa_en_modo_desatendido():
     """
     easy-rsa 3.2 empezó a pedir confirmación también en build-client-full. Sin
