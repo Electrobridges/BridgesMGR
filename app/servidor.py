@@ -47,6 +47,13 @@ def main():
     if not usa_tls:
         print("AVISO: TLS desactivado. Las credenciales viajarán en claro.", file=sys.stderr)
 
+    # Aquí y no en crear_app(): las pruebas construyen la aplicación cientos de
+    # veces y no deben levantar un hilo cada vez. Vigila lo que nadie provoca
+    # —que la CRL caduque, que OpenVPN se caiga— y solo avisa si la categoría
+    # 'salud del servicio' está encendida.
+    from . import vigilante
+    vigilante.arrancar(cfg)
+
     uvicorn.run("app.main:crear_app", **opciones)
 
 
