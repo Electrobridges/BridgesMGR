@@ -140,6 +140,59 @@ def _estado_notificaciones(c):
     }
 
 
+@router.post("/configuracion/notificaciones/probar")
+def probar_notificaciones(
+    request: Request,
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Manda un aviso de prueba por cada canal que tenga destino en el YAML.
+
+    Existe para no tener que provocar un incidente real para descubrir que el
+    SMTP estaba mal escrito. Prueba los canales **configurados**, no los
+    activados: lo normal es querer comprobarlo antes de encenderlos.
+
+    Va en el hilo y no por la cola, porque lo único que se pide aquí es saber
+    si llegó, y para eso hay que esperar la respuesta.
+    """
+    c = cfg(request)
+    canales = {n: notificar.configurado(c, n) for n in ("correo", "discord")}
+
+    if not any(canales.values()):
+        return aviso(request, tipo="error", status_code=400, mensaje=(
+            "No hay ningún canal con destino configurado. Rellena "
+            "'notificaciones' en /etc/ovpn-web/config.yaml y reinicia el panel."
+        ))
+
+    enviados, fallos = notificar.avisar_ahora(
+        c, canales,
+        "[%s] Aviso de prueba" % c.servidor.host_bind,
+        "\n".join([
+            "Esto es una prueba lanzada desde el panel. No ha pasado nada.",
+            "",
+            "Usuario: %s" % sesion["usuario"],
+            "Desde:   %s" % (ip_cliente(request) or "?"),
+            "",
+            "Si lo estás leyendo, este canal funciona.",
+        ]),
+    )
+
+    auditar(request, sesion, "probar_notificaciones", None,
+            resultado="ok" if enviados and not fallos else "error",
+            detalle="ok=%s fallos=%s" % (",".join(enviados) or "ninguno",
+                                         "; ".join(fallos) or "ninguno"))
+
+    if enviados and not fallos:
+        return aviso(request, "Enviado por %s. Si no llega, el problema está en "
+                              "el destino, no en el panel." % " y ".join(enviados))
+    if enviados:
+        return aviso(request, tipo="aviso", mensaje=(
+            "Enviado por %s, pero falló %s." % (" y ".join(enviados), "; ".join(fallos))))
+    return aviso(request, tipo="error", status_code=400,
+                 mensaje="No salió por ningún canal: %s" % "; ".join(fallos))
+
+
 @router.post("/configuracion/notificaciones")
 def guardar_notificaciones(
     request: Request,

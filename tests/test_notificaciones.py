@@ -266,3 +266,72 @@ def test_el_cuerpo_no_lleva_secretos(con_destinos, enviados, como_admin,
            " ".join(c for _, c in enviados["discord"])
     assert "secreto-larguisimo" not in todo
     assert "BEGIN" not in todo
+
+
+# --------------------------------------------------- el aviso de prueba
+
+def test_la_prueba_usa_los_canales_configurados_aunque_esten_apagados(
+        como_admin, csrf_admin, con_destinos, enviados):
+    """
+    Lo normal es querer comprobar el destino ANTES de encender el canal. Si la
+    prueba solo usara los activos, habría que encenderlo a ciegas primero.
+    """
+    notificar.guardar_ajustes(con_destinos.seguridad.db_path, False, False, set())
+
+    respuesta = como_admin.post("/configuracion/notificaciones/probar",
+                                headers={"X-CSRF-Token": csrf_admin})
+
+    assert respuesta.status_code == 200
+    assert len(enviados["correo"]) == 1
+    assert len(enviados["discord"]) == 1
+    assert "prueba" in enviados["discord"][0][1].lower()
+
+
+def test_sin_destinos_la_prueba_dice_donde_configurarlos(como_admin, csrf_admin,
+                                                         cfg, usuarios, enviados):
+    respuesta = como_admin.post("/configuracion/notificaciones/probar",
+                                headers={"X-CSRF-Token": csrf_admin})
+
+    assert respuesta.status_code == 400
+    assert "config.yaml" in respuesta.text
+
+
+def test_la_prueba_enseña_el_error_del_canal(como_admin, csrf_admin,
+                                             con_destinos, enviados):
+    """El motivo exacto, no un 'no se pudo': es lo que permite arreglarlo"""
+    enviados["fallar"] = {"correo", "discord"}
+
+    respuesta = como_admin.post("/configuracion/notificaciones/probar",
+                                headers={"X-CSRF-Token": csrf_admin})
+
+    assert respuesta.status_code == 400
+    assert "SMTP" in respuesta.text or "Discord" in respuesta.text
+
+
+def test_un_canal_bien_y_otro_mal_se_distinguen(como_admin, csrf_admin,
+                                                con_destinos, enviados):
+    enviados["fallar"] = {"correo"}
+
+    respuesta = como_admin.post("/configuracion/notificaciones/probar",
+                                headers={"X-CSRF-Token": csrf_admin})
+
+    assert respuesta.status_code == 200
+    assert "discord" in respuesta.text
+    assert "SMTP" in respuesta.text
+
+
+def test_la_prueba_queda_auditada(como_admin, csrf_admin, con_destinos, enviados, ):
+    como_admin.post("/configuracion/notificaciones/probar",
+                    headers={"X-CSRF-Token": csrf_admin})
+
+    entradas = db.listar_auditoria(con_destinos.seguridad.db_path)
+    assert any(e["accion"] == "probar_notificaciones" for e in entradas)
+
+
+def test_un_supervisor_no_puede_lanzarla(como_supervisor, csrf_supervisor,
+                                         con_destinos, enviados):
+    respuesta = como_supervisor.post("/configuracion/notificaciones/probar",
+                                     headers={"X-CSRF-Token": csrf_supervisor})
+
+    assert respuesta.status_code == 403
+    assert enviados["discord"] == []

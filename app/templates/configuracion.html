@@ -114,5 +114,21 @@
        saber si llegó a su destino. #}
     <button type="submit" class="boton boton-principal">Guardar notificaciones</button>
   </form>
+
+  {# Prueba los canales CONFIGURADOS, no los activados: lo normal es querer
+     comprobar que el destino es correcto antes de encenderlo. Y existe para no
+     tener que esperar a un incidente real para descubrir que el servidor SMTP
+     estaba mal escrito. #}
+  <p class="tenue">
+    Comprueba que los destinos responden. Manda un mensaje de prueba por cada
+    canal que tenga destino en <code>config.yaml</code>, esté activado o no.
+  </p>
+  <button class="boton"
+          hx-disabled-elt="this"
+          hx-post="/configuracion/notificaciones/probar"
+          hx-target="#avisos"
+          hx-swap="innerHTML">
+    Enviar aviso de prueba
+  </button>
 </section>
 {% endblock %}
