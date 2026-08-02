@@ -29,6 +29,39 @@
   </button>
   {% endif %}
 
+{% elif pendiente and not secreto %}
+
+  {# Alta empezada, y sin enseñar el secreto: ya se mostró una vez y no se
+     repite. Antes aquí se caía al estado inicial y reaparecía el botón de
+     activar, que al pulsarlo generaba un secreto nuevo y dejaba muerta la
+     cuenta ya guardada en el móvil. #}
+  <p>
+    <span class="etiqueta etiqueta-mal">sin confirmar</span>
+    Tienes un alta a medias. Escribe el código de tu aplicación para terminarla.
+  </p>
+
+  <form class="formulario en-fila"
+        hx-post="/perfil/totp/confirmar"
+        hx-target="#totp-panel" hx-swap="innerHTML">
+    <label for="codigo-pendiente">Código de la aplicación</label>
+    <input type="text" id="codigo-pendiente" name="codigo" required
+           inputmode="numeric" pattern="[0-9 ]*" maxlength="9"
+           autocomplete="off" placeholder="000000">
+    <button type="submit" class="boton boton-principal">Confirmar</button>
+  </form>
+
+  <p class="tenue">
+    ¿Perdiste la clave o no llegaste a guardarla? Descarta este alta y empieza
+    otra. La clave anterior dejará de valer.
+  </p>
+  <button class="boton"
+          hx-post="/perfil/totp/descartar"
+          hx-target="#totp-panel" hx-swap="innerHTML"
+          hx-disabled-elt="this"
+          hx-confirm="Se descartará el alta en curso y tendrás que empezar de nuevo. La clave que tengas guardada en la aplicación dejará de servir. ¿Continuar?">
+    Descartar y empezar de nuevo
+  </button>
+
 {% elif secreto %}
 
   <p>
@@ -101,9 +134,13 @@
   </p>
   {% endif %}
 
+  {# hx-disabled-elt lo desactiva mientras la petición está en vuelo: dos clics
+     seguidos generaban dos secretos, y el segundo dejaba muerto al primero. Lo
+     hace HTMX por atributo, sin JavaScript propio. #}
   <button class="boton boton-principal"
           hx-post="/perfil/totp/iniciar"
-          hx-target="#totp-panel" hx-swap="innerHTML">
+          hx-target="#totp-panel" hx-swap="innerHTML"
+          hx-disabled-elt="this">
     Activar verificación en dos pasos
   </button>
 

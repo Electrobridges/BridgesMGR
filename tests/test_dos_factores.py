@@ -395,3 +395,71 @@ def test_una_base_antigua_se_migra_sola(tmp_path):
     registro = db.obtener_usuario(ruta, "antiguo")
     assert registro["totp_activado"] == 0
     assert registro["totp_secret"] is None
+
+
+# --------------------------------- no pisar un alta que ya está en curso
+
+def test_volver_a_pulsar_activar_no_genera_otro_secreto(como_admin, csrf_admin, cfg):
+    """
+    El fallo: el secreto solo se enseña una vez, así que al recargar la página
+    reaparecía el botón de activar. Pulsarlo generaba un secreto nuevo y dejaba
+    muerta la cuenta que el usuario ya había guardado en el móvil, sin que nada
+    lo explicara.
+    """
+    como_admin.post("/perfil/totp/iniciar", headers={"X-CSRF-Token": csrf_admin})
+    primero = db.obtener_usuario(cfg.seguridad.db_path, "jefa")["totp_secret"]
+
+    respuesta = como_admin.post("/perfil/totp/iniciar",
+                                headers={"X-CSRF-Token": csrf_admin})
+    segundo = db.obtener_usuario(cfg.seguridad.db_path, "jefa")["totp_secret"]
+
+    assert segundo == primero, "el segundo clic no puede pisar el alta en curso"
+    assert "alta en curso" in respuesta.text
+
+
+def test_el_codigo_del_alta_original_sigue_valiendo(como_admin, csrf_admin, cfg):
+    """La consecuencia que importa: lo escaneado antes tiene que seguir sirviendo"""
+    como_admin.post("/perfil/totp/iniciar", headers={"X-CSRF-Token": csrf_admin})
+    secreto = db.obtener_usuario(cfg.seguridad.db_path, "jefa")["totp_secret"]
+
+    como_admin.post("/perfil/totp/iniciar", headers={"X-CSRF-Token": csrf_admin})
+
+    respuesta = como_admin.post(
+        "/perfil/totp/confirmar",
+        data={"codigo": totp.codigo(secreto)},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert db.obtener_usuario(cfg.seguridad.db_path, "jefa")["totp_activado"]
+
+
+def test_al_recargar_no_reaparece_el_boton_de_activar(como_admin, csrf_admin):
+    """Con un alta a medias hay que ver el formulario de confirmar, no el botón"""
+    como_admin.post("/perfil/totp/iniciar", headers={"X-CSRF-Token": csrf_admin})
+
+    texto = como_admin.get("/perfil").text
+
+    assert "Activar verificación en dos pasos" not in texto
+    assert "alta a medias" in texto
+    assert "Descartar y empezar de nuevo" in texto
+
+
+def test_descartar_permite_empezar_de_nuevo(como_admin, csrf_admin, cfg):
+    """La salida para quien perdió la clave, pero como acto deliberado"""
+    como_admin.post("/perfil/totp/iniciar", headers={"X-CSRF-Token": csrf_admin})
+    primero = db.obtener_usuario(cfg.seguridad.db_path, "jefa")["totp_secret"]
+
+    como_admin.post("/perfil/totp/descartar", headers={"X-CSRF-Token": csrf_admin})
+    assert db.obtener_usuario(cfg.seguridad.db_path, "jefa")["totp_secret"] is None
+
+    como_admin.post("/perfil/totp/iniciar", headers={"X-CSRF-Token": csrf_admin})
+    segundo = db.obtener_usuario(cfg.seguridad.db_path, "jefa")["totp_secret"]
+
+    assert segundo and segundo != primero
+
+
+def test_descartar_sin_alta_en_curso_lo_dice(como_admin, csrf_admin):
+    respuesta = como_admin.post("/perfil/totp/descartar",
+                                headers={"X-CSRF-Token": csrf_admin})
+
+    assert "No hay ningún alta en curso" in respuesta.text

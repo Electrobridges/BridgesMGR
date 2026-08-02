@@ -45,6 +45,12 @@ def _estado(request, sesion, secreto_pendiente=None, mensaje=None, error=None):
     return {
         "activado": bool(registro["totp_activado"]),
         "obligatorio": db.totp_obligatorio(ruta, registro["rol"]),
+        # Hay un alta empezada y sin confirmar. Hace falta distinguirlo del
+        # estado inicial aunque el secreto no se enseñe: si no, al recargar la
+        # página reaparecía el botón de activar y pulsarlo generaba un secreto
+        # nuevo, dejando muerto el que el usuario ya había guardado en el móvil
+        # sin que nada lo explicara.
+        "pendiente": bool(registro["totp_secret"]) and not registro["totp_activado"],
         "secreto": secreto,
         "secreto_legible": totp.formatear_secreto(secreto) if secreto else None,
         "uri": uri,
@@ -77,6 +83,16 @@ def iniciar_alta(request: Request, sesion=Depends(verificar_csrf)):
     if registro["totp_activado"]:
         return _panel(request, sesion,
                       error="El segundo factor ya está activo en esta cuenta.")
+
+    # Un alta en curso NO se pisa. Antes se generaba un secreto nuevo cada vez
+    # que se pulsaba, así que recargar la página y volver a darle dejaba muerta
+    # la cuenta que el usuario ya había añadido en el móvil, sin decir por qué.
+    # Empezar de cero es ahora un acto explícito: /totp/descartar.
+    if registro["totp_secret"]:
+        return _panel(request, sesion, error=(
+            "Ya tienes un alta en curso. Escribe el código de la aplicación para "
+            "terminarla. Si perdiste la clave, descarta el alta y empieza otra."
+        ))
 
     secreto = totp.generar_secreto()
     db.guardar_secreto_totp(ruta, sesion["usuario"], secreto)
@@ -123,6 +139,36 @@ def confirmar_alta(
         request, sesion,
         mensaje="Segundo factor activado. A partir de ahora se te pedirá el código al entrar.",
     )
+
+
+@router.post("/totp/descartar")
+def descartar_alta(request: Request, sesion=Depends(verificar_csrf)):
+    """
+    Tira el alta a medias para poder empezar otra.
+
+    Existe porque iniciar_alta ya no pisa un alta en curso: quien perdió la
+    clave necesita una salida, pero tiene que ser un acto deliberado y no el
+    efecto secundario de volver a pulsar un botón.
+    """
+    ruta = cfg(request).seguridad.db_path
+    registro = db.obtener_usuario(ruta, sesion["usuario"])
+    ip = request.client.host if request.client else None
+
+    if registro["totp_activado"]:
+        return _panel(request, sesion,
+                      error="El segundo factor ya está activo: aquí no hay nada que descartar.")
+    if not registro["totp_secret"]:
+        return _panel(request, sesion, error="No hay ningún alta en curso.")
+
+    # Reutiliza la baja: deja el secreto a nulo, que es justo lo que hace falta.
+    db.desactivar_totp(ruta, sesion["usuario"])
+    db.registrar(ruta, sesion["usuario"], "totp_alta", sesion["usuario"], "descartada",
+                 ip=ip)
+
+    return _panel(request, sesion, mensaje=(
+        "Alta descartada. Borra la cuenta antigua de tu aplicación antes de "
+        "empezar otra: la clave anterior ya no vale."
+    ))
 
 
 @router.post("/totp/desactivar")
