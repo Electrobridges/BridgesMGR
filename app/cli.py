@@ -166,6 +166,23 @@ def cmd_cambiar_password(cfg, args):
     print("Contraseña de '%s' actualizada y sesiones cerradas." % args.usuario)
 
 
+def cmd_marcar_reparto(cfg, args):
+    """
+    Deja el aviso de perfiles pendientes de repartir en la base del panel.
+
+    Lo llama deploy/reconstruir-ca.sh al terminar, con `sudo -u ovpnweb`. Que
+    lo escriba ovpnweb y no root no es un detalle: si root tocara la base,
+    SQLite dejaría archivos -wal y -shm de root en /var/lib/ovpn-web y las
+    escrituras siguientes del panel fallarían con un permiso denegado que no
+    menciona a root por ningún lado.
+    """
+    reparto = db.abrir_reparto(cfg.seguridad.db_path, args.motivo, args.cn,
+                               detalle=args.detalle)
+    print("Aviso de reparto #%d abierto para %d cliente(s)."
+          % (reparto, len(set(args.cn))))
+    print("Aparecerá en Clientes VPN hasta que alguien lo dé por hecho.")
+
+
 def cmd_purgar_sesiones(cfg, args):
     db.purgar_sesiones(cfg.seguridad.db_path)
     db.purgar_logins_pendientes(cfg.seguridad.db_path)
@@ -197,6 +214,15 @@ def main(argv=None):
 
     p = subs.add_parser("purgar-sesiones", help="Borra las sesiones caducadas")
     p.set_defaults(func=cmd_purgar_sesiones)
+
+    p = subs.add_parser(
+        "marcar-reparto",
+        help="Anota que estos clientes necesitan un perfil nuevo",
+    )
+    p.add_argument("motivo", choices=sorted(db.MOTIVOS))
+    p.add_argument("cn", nargs="+")
+    p.add_argument("--detalle", default=None)
+    p.set_defaults(func=cmd_marcar_reparto)
 
     p = subs.add_parser(
         "designar-superusuario",

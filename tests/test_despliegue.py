@@ -645,3 +645,100 @@ def test_el_comprobador_no_usa_checkend_sobre_una_crl():
             )
 
     assert "-nextupdate" in fuente, "sigue haciendo falta mirar la caducidad de la CRL"
+
+
+# ------------------------------------------- reconstrucción de la CA
+
+RECONSTRUIR = DEPLOY / "reconstruir-ca.sh"
+
+
+def test_reconstruir_ca_no_esta_autorizado_en_sudoers():
+    """
+    La pieza que sostiene la decisión de sacarlo del panel.
+
+    La regla de sudo autoriza el BINARIO del helper, no sus subcomandos: si la
+    reconstrucción viviera ahí, un panel comprometido podría invocarla aunque
+    no hubiera botón — y ese es justo el escenario que motiva la función.
+    Estando en un script aparte y ausente del sudoers, el proceso del panel no
+    lo alcanza.
+    """
+    assert "reconstruir-ca" not in _leer(SUDOERS)
+
+    # Y que nadie lo cuele como subcomando del helper por la puerta de atrás
+    fuente = _leer(HELPER)
+    for nombre in ("reconstruir", "build-ca", "init-pki"):
+        assert nombre not in fuente, (
+            "'%s' en el helper: eso lo haría alcanzable por sudo desde el panel"
+            % nombre
+        )
+
+
+def test_reconstruir_ca_respalda_antes_de_tocar_nada():
+    """Sin respaldo no hay vuelta atrás, y esto destruye la PKI entera"""
+    fuente = _leer(RECONSTRUIR)
+
+    assert "cp -a \"$PKI\" \"$COPIA/pki\"" in fuente, "debe copiar la PKI completa"
+    # El respaldo va antes del init-pki, que es el punto de no retorno
+    assert fuente.index("$COPIA/pki") < fuente.index("init-pki"), (
+        "el respaldo tiene que ocurrir ANTES de init-pki"
+    )
+
+
+def test_reconstruir_ca_deshace_si_openvpn_no_levanta():
+    """Dejar la VPN caída con una CA nueva es el peor resultado posible"""
+    fuente = _leer(RECONSTRUIR)
+
+    assert "restaurar()" in fuente
+    assert re.search(r'is-active --quiet "\$SERVICIO"', fuente)
+    assert fuente.count("restaurar;") + fuente.count("restaurar\n") >= 2, (
+        "cada paso que puede fallar debe deshacer"
+    )
+
+
+def test_reconstruir_ca_conserva_el_cn_del_servidor():
+    """
+    Cambiarlo rompería el verify-x509-name de las plantillas de cliente que
+    generan los instaladores al uso.
+    """
+    fuente = _leer(RECONSTRUIR)
+    assert 'build-server-full "$CN_SERVIDOR"' in fuente
+
+
+def test_reconstruir_ca_refresca_las_copias_del_server_conf():
+    """
+    El paso que no se puede olvidar: hay instalaciones cuyo server.conf apunta
+    a copias en /etc/openvpn/ y no a la PKI. Sin refrescarlas, OpenVPN seguiría
+    cargando la CA vieja y la VPN quedaría caída con una PKI nueva que nadie
+    usa.
+    """
+    fuente = _leer(RECONSTRUIR)
+    assert "COPIAS" in fuente
+    assert '$PKI/issued/$CN_SERVIDOR.crt' in fuente
+    assert '$PKI/private/$CN_SERVIDOR.key' in fuente
+
+
+def test_reconstruir_ca_exige_confirmacion_escrita():
+    """Un [s/N] no basta para algo que deja a todos los clientes fuera"""
+    assert 'RECONSTRUIR' in _leer(RECONSTRUIR)
+
+
+def test_reconstruir_ca_deja_la_pki_legible_para_openvpn():
+    """
+    Mismo problema que costó una noche: OpenVPN suelta privilegios a 'nobody' y
+    tiene que atravesar pki/ y leer la CRL. easyrsa las deja cerradas.
+    """
+    fuente = _leer(RECONSTRUIR)
+    assert 'chmod 0755 "$EASYRSA" "$PKI"' in fuente
+    assert 'chmod 0700 "$PKI/private"' in fuente
+    assert 'chmod 0644 "$PKI/crl.pem"' in fuente
+
+
+def test_reconstruir_ca_avisa_al_panel_como_ovpnweb():
+    """
+    Si root escribiera la base, SQLite dejaría archivos -wal y -shm suyos en
+    /var/lib/ovpn-web y las escrituras posteriores del panel fallarían con un
+    permiso denegado que no menciona a root por ningún lado.
+    """
+    fuente = _leer(RECONSTRUIR)
+    assert 'sudo -u "$USUARIO_PANEL"' in fuente
+    assert "marcar-reparto" in fuente
