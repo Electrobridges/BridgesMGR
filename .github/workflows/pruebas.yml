@@ -53,7 +53,10 @@ jobs:
           python-version: "3.11"
 
       - name: Instalar uv
-        run: pip install uv
+        # Fijada: 'pip install uv' a secas dejaba el resultado a merced de
+        # cuándo corre la CI, que es justo lo que este trabajo dejó de
+        # comprobar bien.
+        run: pip install 'uv==0.12.1'
 
       - name: El lock está al día con requirements.in
         # Si alguien toca un rango y no regenera el lock, lo que se instala en
@@ -64,13 +67,28 @@ jobs:
         # sesgada hacia el sistema de quien la generó. Un lock hecho en Windows
         # se queda sin uvloop, porque uvicorn[standard] lo excluye allí, y el
         # servidor Linux acabaría sin él sin que nada avisara.
+        #
+        # --exclude-newer es lo que hace que esta comprobación signifique algo.
+        # Sin ella, 'uv pip compile' resolvía a lo más nuevo que hubiera en PyPI
+        # EN EL MOMENTO de correr la CI, así que el trabajo fallaba solo cada
+        # vez que FastAPI publicaba una versión, sin que nadie hubiera tocado
+        # nada. Confundía "el lock no refleja los rangos" —que es un fallo— con
+        # "el lock no es lo último de PyPI", que es precisamente para lo que
+        # existe un lock. Y una CI que falla por motivos ajenos al cambio
+        # enseña a ignorarla, así que el día que falle de verdad nadie mirará.
+        #
+        # Con la fecha fija, actualizar dependencias es un acto deliberado: se
+        # sube requirements.fecha y se regenera. Ver CONTRIBUTING.
         run: |
+          CORTE=$(tr -d '[:space:]' < requirements.fecha)
+          echo "Fecha de corte: $CORTE"
           for base in requirements requirements-dev; do
             uv pip compile "$base.in" --universal --python-version 3.9 \
-              --generate-hashes --no-header -o "/tmp/$base.check" -q
+              --generate-hashes --no-header --exclude-newer "$CORTE" \
+              -o "/tmp/$base.check" -q
             if ! diff -q "$base.txt" "/tmp/$base.check" >/dev/null; then
-              echo "::error::$base.txt no coincide con $base.in. Regenera el lock:"
-              echo "  uv pip compile $base.in --universal --python-version 3.9 --generate-hashes --no-header -o $base.txt"
+              echo "::error::$base.txt no coincide con $base.in a fecha $CORTE. Regenera el lock:"
+              echo "  uv pip compile $base.in --universal --python-version 3.9 --generate-hashes --no-header --exclude-newer $CORTE -o $base.txt"
               diff "$base.txt" "/tmp/$base.check" | head -30
               exit 1
             fi

@@ -7,6 +7,30 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Corregido
+
+- **La CI se rompía sola cada vez que FastAPI publicaba una versión.** El
+  trabajo que comprueba el lock lo regeneraba y lo comparaba, pero sin fijar
+  una fecha de corte: `uv pip compile` resolvía a lo más nuevo que hubiera en
+  PyPI **en el instante de ejecutarse**, así que el resultado dependía del
+  calendario de otros y no de nada del repositorio.
+  - Confundía dos cosas: «el lock no refleja los rangos», que es un fallo real,
+    con «el lock no es lo último de PyPI», que es precisamente para lo que
+    existe un lock.
+  - Ahora la fecha vive en `requirements.fecha` y se pasa con `--exclude-newer`,
+    de modo que la comprobación solo salta cuando alguien cambia de verdad un
+    `.in`. Actualizar dependencias pasa a ser deliberado: subir la fecha y
+    regenerar, en el mismo commit.
+  - La CI instala además una versión **fijada** de `uv`, por el mismo motivo: su
+    formato de salida cambia entre versiones.
+  - Una CI que falla por motivos ajenos al cambio enseña a ignorarla, y el día
+    que falle por algo de verdad nadie la mirará.
+
+### Cambiado
+
+- Dependencias actualizadas a fecha 2026-08-02: FastAPI 0.141.1, Starlette
+  1.3.1, uvicorn 0.52.1 y websockets 17 para Python 3.11+.
+
 ## [0.2.0] — 2026-08-02
 
 Los cinco fallos corregidos que más importan salieron del primer despliegue en

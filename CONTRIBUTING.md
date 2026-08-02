@@ -62,14 +62,19 @@ lleva a que «funciona en mi máquina».
 `requirements.in` y cualquier cambio directo se pierde en el siguiente compile.
 
 ```bash
+CORTE=$(cat requirements.fecha)
+
 uv pip compile requirements.in --universal --python-version 3.9 \
-    --generate-hashes --no-header -o requirements.txt
+    --generate-hashes --no-header --exclude-newer "$CORTE" -o requirements.txt
 
 uv pip compile requirements-dev.in --universal --python-version 3.9 \
-    --generate-hashes --no-header -o requirements-dev.txt
+    --generate-hashes --no-header --exclude-newer "$CORTE" -o requirements-dev.txt
 ```
 
-Cuatro decisiones que conviene entender antes de tocarlo:
+**Para actualizar dependencias**, sube la fecha de `requirements.fecha` a hoy y
+vuelve a ejecutar eso. Los tres archivos van en el mismo commit.
+
+Cinco decisiones que conviene entender antes de tocarlo:
 
 **`--python-version 3.9`, y no la que tengas.** El mínimo que declara
 `pyproject.toml`, y lo que trae Debian 11. Resolviendo contra la **mínima** el
@@ -97,10 +102,29 @@ contenedor o la propia máquina de pruebas:
 
 ```bash
 # desde WSL o cualquier Linux, en la raíz del repo
-python3 -m venv /tmp/uv && /tmp/uv/bin/pip install -q uv
+python3 -m venv /tmp/uv && /tmp/uv/bin/pip install -q 'uv==0.12.1'
 /tmp/uv/bin/uv pip compile requirements.in --universal --python-version 3.9 \
-    --generate-hashes --no-header -o requirements.txt
+    --generate-hashes --no-header --exclude-newer "$(cat requirements.fecha)" \
+    -o requirements.txt
 ```
+
+La versión de `uv` va fijada y es la misma que instala la CI: el formato de
+salida cambia entre versiones, y con una distinta el lock generado aquí no
+coincidiría con el que ella regenera para comparar.
+
+**`--exclude-newer`, con la fecha en `requirements.fecha`.** Sin ella la
+resolución depende de qué haya en PyPI en el instante en que se ejecuta, así
+que la CI —que regenera el lock y lo compara— fallaba sola cada vez que FastAPI
+publicaba una versión, sin que nadie hubiera tocado nada.
+
+Confundía dos cosas: «el lock no refleja los rangos», que es un fallo real, con
+«el lock no es lo último de PyPI», que es precisamente para lo que existe un
+lock. Con la fecha fija, esa comprobación solo salta cuando alguien cambia de
+verdad un `.in`, y actualizar dependencias pasa a ser un acto deliberado en
+lugar de algo impuesto por el calendario de otros.
+
+Por el mismo motivo la CI instala una versión **fijada** de `uv`: si no, el
+formato de salida podría cambiar y volveríamos al mismo problema.
 
 **`--generate-hashes`, siempre.** Sin hashes el lock da reproducibilidad pero
 no integridad: un espejo de PyPI que devuelva otro artefacto con la misma
