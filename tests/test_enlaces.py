@@ -224,3 +224,28 @@ def test_las_paginas_sin_sesion_tambien_cargan_el_script(cliente, ruta):
 
     assert 'src="/static/confirmar.js"' in texto
     assert "<form" in texto
+
+
+def test_el_formulario_del_dialogo_no_lo_desactiva_el_script():
+    """
+    Regresión: el <dialog> de confirmación usa <form method="dialog">, y el
+    manejador de submit lo trataba como un formulario normal y desactivaba sus
+    botones. Bastaba usar el diálogo una vez para que la siguiente acción
+    abriera un cuadro con "Continuar" y "Cancelar" muertos.
+
+    Un method="dialog" no navega: solo cierra el diálogo. No hay doble envío
+    del que protegerse.
+    """
+    script = (Path(__file__).resolve().parents[1] /
+              "app" / "static" / "confirmar.js").read_text(encoding="utf-8")
+
+    assert '"dialog"' in script, (
+        "confirmar.js debe dejar fuera los <form method=\"dialog\"> o desactiva "
+        "los botones de su propio diálogo de confirmación"
+    )
+
+    # Y el diálogo tiene que seguir usando method="dialog": es lo que le da el
+    # returnValue y el cierre nativo con Escape.
+    base = (PLANTILLAS / "base.html").read_text(encoding="utf-8")
+    dialogo = re.search(r'<dialog id="dialogo-confirmar".*?</dialog>', base, re.S)
+    assert dialogo and 'method="dialog"' in dialogo.group(0)

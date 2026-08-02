@@ -73,9 +73,21 @@
    */
   document.addEventListener("submit", function (evt) {
     var formulario = evt.target;
+    if (!formulario) {
+      return;
+    }
 
     // Los de HTMX van por su cuenta con hx-disabled-elt
-    if (!formulario || formulario.hasAttribute("hx-post")) {
+    if (formulario.hasAttribute("hx-post")) {
+      return;
+    }
+
+    /* Y method="dialog" NO se toca. Ese formulario no navega: solo cierra el
+     * <dialog> y deja el returnValue. Desactivar sus botones dejaba muerto el
+     * propio diálogo de confirmación en cuanto se usaba una vez, así que la
+     * siguiente acción abría un cuadro con "Continuar" y "Cancelar" que no
+     * respondían. No hay doble envío del que protegerse aquí. */
+    if ((formulario.getAttribute("method") || "").toLowerCase() === "dialog") {
       return;
     }
 
