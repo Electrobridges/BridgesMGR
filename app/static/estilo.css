@@ -354,6 +354,14 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
   background: rgba(16, 196, 216, .08);
 }
 
+/* Un control desactivado tiene que parecerlo, o el doble clic se convierte en
+   un botón que no responde y nadie sabe por qué. Se apaga sin cambiar de
+   tamaño: mover el botón bajo el cursor sería peor que no avisar. */
+.boton:disabled, button:disabled, input[type="submit"]:disabled {
+  opacity: .45;
+  cursor: progress;
+}
+
 /* --------------------------------------------- diálogo de confirmación */
 /* Un escalón tonal por encima de la página, no una tarjeta flotante: la
    separación la hace la línea de 1px, como en todo el sistema. La única

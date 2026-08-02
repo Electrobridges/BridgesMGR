@@ -168,3 +168,59 @@ def test_el_objetivo_desactivado_es_el_correcto(plantilla, url, etiqueta, bloque
             "%s: hx-disabled-elt=\"%s\" en un <form> no desactiva nada. "
             "Usa \"find button\"." % (plantilla, m.group(1))
         )
+
+
+# ------------------------------- formularios planos, sin HTMX de por medio
+
+def _formularios_planos():
+    """<form> sin hx-post: el navegador los envía por su cuenta"""
+    encontrados = []
+    for archivo in sorted(PLANTILLAS.rglob("*.html")):
+        texto = archivo.read_text(encoding="utf-8")
+        for m in re.finditer(r'<form\b[^>]*>', texto, re.S):
+            bloque = m.group(0)
+            if "hx-post" in bloque or 'method="dialog"' in bloque:
+                continue
+            accion = re.search(r'action="([^"]*)"', bloque)
+            encontrados.append((archivo.name, accion.group(1) if accion else "(propia URL)"))
+    return encontrados
+
+
+PLANOS = _formularios_planos()
+
+
+def test_los_formularios_planos_estan_cubiertos_por_el_script():
+    """
+    hx-disabled-elt no llega a los formularios de HTML corriente —entrar, el
+    código de dos pasos, salir— y ahí el doble envío no es cosmético: en
+    /login quema dos de los cinco intentos antes del bloqueo, y en
+    /login/codigo el segundo encuentra el paso del TOTP ya consumido, cuenta un
+    fallo y responde "Código incorrecto" a un código que era correcto.
+
+    Los cubre confirmar.js escuchando el submit, así que lo que se comprueba es
+    que ese manejador siga existiendo y que las páginas donde viven esos
+    formularios carguen el script.
+    """
+    assert PLANOS, "el barrido no encuentra formularios planos: ¿cambió el marcado?"
+
+    script = (Path(__file__).resolve().parents[1] /
+              "app" / "static" / "confirmar.js").read_text(encoding="utf-8")
+
+    assert 'addEventListener("submit"' in script
+    assert "pageshow" in script, (
+        "sin reactivar al volver con el botón de atrás, el navegador puede "
+        "restaurar la página con el botón muerto"
+    )
+
+
+@pytest.mark.parametrize("ruta", ["/login"])
+def test_las_paginas_sin_sesion_tambien_cargan_el_script(cliente, ruta):
+    """
+    El login se ve sin haber entrado, así que hereda de base.html igual que el
+    resto. Si algún día dejara de heredar, su formulario se quedaría sin
+    protección justo donde más duele.
+    """
+    texto = cliente.get(ruta).text
+
+    assert 'src="/static/confirmar.js"' in texto
+    assert "<form" in texto

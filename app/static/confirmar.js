@@ -55,4 +55,55 @@
     dialogo.returnValue = "";
     dialogo.showModal();
   });
+
+  /* Un solo envío por formulario plano.
+   *
+   * Los formularios con hx-post ya se protegen con hx-disabled-elt, pero los
+   * de HTML corriente —entrar, el código de dos pasos, salir— no tenían nada, y
+   * ahí el doble clic no es cosmético:
+   *
+   *   /login        una contraseña mal tecleada y pulsada dos veces quema dos
+   *                 de los cinco intentos antes del bloqueo.
+   *   /login/codigo peor: el primero consume el paso del TOTP y el segundo lo
+   *                 encuentra gastado, así que cuenta un fallo y responde
+   *                 "Código incorrecto" a un código que era correcto.
+   *
+   * Si este archivo no cargara se vuelve al comportamiento de antes: molesto,
+   * nunca inseguro.
+   */
+  document.addEventListener("submit", function (evt) {
+    var formulario = evt.target;
+
+    // Los de HTMX van por su cuenta con hx-disabled-elt
+    if (!formulario || formulario.hasAttribute("hx-post")) {
+      return;
+    }
+
+    var botones = formulario.querySelectorAll(
+      'button:not([type="button"]):not([disabled]), input[type="submit"]:not([disabled])'
+    );
+
+    /* En el siguiente tick y no ahora: desactivar un botón dentro del propio
+     * manejador de submit puede dejar fuera su valor de los datos enviados, y
+     * en algún navegador cancela el envío entero. */
+    window.setTimeout(function () {
+      for (var i = 0; i < botones.length; i++) {
+        botones[i].disabled = true;
+        botones[i].setAttribute("aria-busy", "true");
+      }
+    }, 0);
+  });
+
+  /* Al volver con el botón de atrás, el navegador puede restaurar la página
+   * desde su caché tal como quedó: con el botón muerto. Se reactiva. */
+  window.addEventListener("pageshow", function (evt) {
+    if (!evt.persisted) {
+      return;
+    }
+    var botones = document.querySelectorAll("button[aria-busy], input[aria-busy]");
+    for (var i = 0; i < botones.length; i++) {
+      botones[i].disabled = false;
+      botones[i].removeAttribute("aria-busy");
+    }
+  });
 })();
