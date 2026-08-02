@@ -11,6 +11,7 @@
    sin unsafe-eval. Aflojar la CSP por un reset() sería un mal cambio. #}
 <form id="form-crear-cliente" class="formulario en-fila"
       {% if oob %}hx-swap-oob="true"{% endif %}
+      hx-disabled-elt="find button"
       hx-post="/clientes"
       hx-target="#avisos"
       hx-swap="innerHTML">

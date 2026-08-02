@@ -10,6 +10,7 @@
 </p>
 
 <button class="boton {{ 'boton-peligro' if exigir_totp_supervisor else 'boton-principal' }}"
+        hx-disabled-elt="this"
         hx-post="/admin/politica/totp-supervisor"
         hx-vals='{"exigir": {{ 0 if exigir_totp_supervisor else 1 }}}'
         hx-target="#avisos" hx-swap="innerHTML"

@@ -12,6 +12,7 @@
 <section class="panel-accion">
   <h2>Nuevo usuario</h2>
   <form class="formulario en-fila"
+        hx-disabled-elt="find button"
         hx-post="/admin/usuarios"
         hx-target="#avisos"
         hx-swap="innerHTML">

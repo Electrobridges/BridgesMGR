@@ -45,7 +45,8 @@
     </p>
 
     {% if manda %}
-    <form hx-post="/clientes/reparto/{{ reparto.id }}/aceptar"
+    <form hx-disabled-elt="find button"
+          hx-post="/clientes/reparto/{{ reparto.id }}/aceptar"
           hx-target="#avisos"
           hx-swap="innerHTML">
       <button type="submit" class="boton">Aceptar: ya los he repartido</button>

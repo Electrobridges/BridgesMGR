@@ -22,6 +22,7 @@
   </p>
   {% else %}
   <button class="boton boton-peligro"
+          hx-disabled-elt="this"
           hx-post="/perfil/totp/desactivar"
           hx-target="#totp-panel" hx-swap="innerHTML"
           hx-confirm="¿Desactivar la verificación en dos pasos de tu cuenta?">
@@ -41,6 +42,7 @@
   </p>
 
   <form class="formulario en-fila"
+        hx-disabled-elt="find button"
         hx-post="/perfil/totp/confirmar"
         hx-target="#totp-panel" hx-swap="innerHTML">
     <label for="codigo-pendiente">Código de la aplicación</label>
@@ -111,6 +113,7 @@
   </p>
 
   <form class="formulario en-fila"
+        hx-disabled-elt="find button"
         hx-post="/perfil/totp/confirmar"
         hx-target="#totp-panel" hx-swap="innerHTML">
     <label for="codigo-alta">Código de la aplicación</label>

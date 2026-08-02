@@ -110,3 +110,61 @@ def test_las_confirmaciones_siguen_en_las_plantillas(cliente):
         destructivas += archivo.read_text(encoding="utf-8").count("hx-confirm")
 
     assert destructivas >= 8
+
+
+# ------------------------------------------- doble disparo de una acción
+
+def _controles_que_mutan():
+    """Cada <button> o <form> con hx-post, con su plantilla"""
+    encontrados = []
+    for archivo in sorted(PLANTILLAS.rglob("*.html")):
+        texto = archivo.read_text(encoding="utf-8")
+        for m in re.finditer(r'<(button|form)\b[^>]*hx-post="([^"]+)"[^>]*>', texto, re.S):
+            encontrados.append((archivo.name, m.group(2), m.group(1), m.group(0)))
+    return encontrados
+
+
+CONTROLES = _controles_que_mutan()
+
+
+def test_hay_controles_que_comprobar():
+    assert len(CONTROLES) > 15
+
+
+@pytest.mark.parametrize("plantilla,url,etiqueta,bloque", CONTROLES,
+                         ids=["%s %s" % (p, u) for p, u, _, _ in CONTROLES])
+def test_ninguna_accion_se_puede_disparar_dos_veces(plantilla, url, etiqueta, bloque):
+    """
+    Todo control que mute tiene que desactivarse mientras la petición vuela.
+
+    No es cosmético. El alta de segundo factor generaba un secreto por clic, y
+    el segundo dejaba muerta la cuenta ya guardada en el móvil. 'restaurar' es
+    igual de grave: reemite el certificado con una clave privada NUEVA, así que
+    un segundo disparo mata el .ovpn que el panel acaba de decirte que
+    descargues. hx-confirm no basta —se puede confirmar dos veces.
+
+    Se comprueba en la plantilla y no en el navegador porque es donde se
+    olvida: al añadir un botón nuevo copiando otro.
+    """
+    assert "hx-disabled-elt" in bloque, (
+        "%s: el control de %s puede dispararse dos veces seguidas. "
+        "Añade hx-disabled-elt=\"%s\"."
+        % (plantilla, url, "this" if etiqueta == "button" else "find button")
+    )
+
+
+@pytest.mark.parametrize("plantilla,url,etiqueta,bloque", CONTROLES,
+                         ids=["%s %s" % (p, u) for p, u, _, _ in CONTROLES])
+def test_el_objetivo_desactivado_es_el_correcto(plantilla, url, etiqueta, bloque):
+    """
+    En un <form>, desactivar el propio form no hace nada: el atributo disabled
+    no existe para <form>. Hay que apuntar a su botón de envío.
+    """
+    m = re.search(r'hx-disabled-elt="([^"]*)"', bloque)
+    assert m, plantilla
+
+    if etiqueta == "form":
+        assert "button" in m.group(1), (
+            "%s: hx-disabled-elt=\"%s\" en un <form> no desactiva nada. "
+            "Usa \"find button\"." % (plantilla, m.group(1))
+        )

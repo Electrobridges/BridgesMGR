@@ -34,6 +34,7 @@
         {% if f.estado == 'valido' %}
         <a class="boton pequeno" href="/clientes/{{ f.cn }}/ovpn">Descargar .ovpn</a>
         <button class="boton boton-peligro pequeno"
+                hx-disabled-elt="this"
                 hx-post="/clientes/{{ f.cn }}/revocar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"
@@ -42,6 +43,7 @@
         </button>
         {% else %}
         <button class="boton pequeno"
+                hx-disabled-elt="this"
                 hx-post="/clientes/{{ f.cn }}/restaurar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"
@@ -52,6 +54,7 @@
            router lo comprueba igualmente, que un botón que no se pinta no es
            una barrera. #}
         <button class="boton pequeno"
+                hx-disabled-elt="this"
                 hx-post="/clientes/{{ f.cn }}/archivar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"
@@ -61,6 +64,7 @@
         {% endif %}
         {% if f.conectado %}
         <button class="boton boton-peligro pequeno"
+                hx-disabled-elt="this"
                 hx-post="/clientes/{{ f.cn }}/desconectar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"

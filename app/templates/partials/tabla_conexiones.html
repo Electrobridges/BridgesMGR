@@ -31,6 +31,7 @@
       {% if puede_desconectar %}
       <td>
         <button class="boton boton-peligro pequeno"
+                hx-disabled-elt="this"
                 hx-post="/clientes/{{ c.user }}/desconectar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"

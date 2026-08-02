@@ -42,6 +42,7 @@
         {% if manda %}
         <td class="acciones">
           <button class="boton pequeno"
+                  hx-disabled-elt="this"
                   hx-post="/clientes/{{ a.cn }}/desarchivar"
                   hx-target="#avisos"
                   hx-swap="innerHTML">

@@ -50,6 +50,7 @@
         {# El botón sale del flujo hasta que el desplegable deja de mostrar el
            rol vigente; lo hace el CSS con :has(), sin nada de JavaScript. #}
         <form class="en-linea cambio-rol"
+              hx-disabled-elt="find button"
               hx-post="/admin/usuarios/{{ u.usuario }}/rol"
               hx-target="#avisos" hx-swap="innerHTML">
           <select name="rol" aria-label="Rol de {{ u.usuario }}">
@@ -62,7 +63,8 @@
         </form>
         {% endif %}
 
-        <form class="en-linea" hx-post="/admin/usuarios/{{ u.usuario }}/password"
+        <form class="en-linea" hx-disabled-elt="find button"
+          hx-post="/admin/usuarios/{{ u.usuario }}/password"
               hx-target="#avisos" hx-swap="innerHTML">
           <input type="password" name="password" required minlength="12"
                  placeholder="nueva contraseña" autocomplete="new-password"
@@ -72,6 +74,7 @@
 
         {% if not soy_yo %}
         <button class="boton pequeno"
+                hx-disabled-elt="this"
                 hx-post="/admin/usuarios/{{ u.usuario }}/activo"
                 hx-vals='{"activo": {{ 0 if u.activo else 1 }}}'
                 hx-target="#avisos" hx-swap="innerHTML">
@@ -81,6 +84,7 @@
 
         {% if u.totp_activado %}
         <button class="boton pequeno"
+                hx-disabled-elt="this"
                 hx-post="/admin/usuarios/{{ u.usuario }}/totp/restablecer"
                 hx-target="#avisos" hx-swap="innerHTML"
                 hx-confirm="¿Quitarle el segundo factor a {{ u.usuario }}? Se cerrarán sus sesiones y tendrá que volver a darlo de alta.">
@@ -90,6 +94,7 @@
 
         {% if not soy_yo %}
         <button class="boton boton-peligro pequeno"
+                hx-disabled-elt="this"
                 hx-post="/admin/usuarios/{{ u.usuario }}/borrar"
                 hx-target="#avisos" hx-swap="innerHTML"
                 hx-confirm="¿Borrar la cuenta de panel de {{ u.usuario }}?">
