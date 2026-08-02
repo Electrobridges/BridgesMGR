@@ -201,6 +201,32 @@ def test_lo_que_monta_el_script_es_lo_que_espera_el_panel(clave):
     )
 
 
+def test_el_cifrado_del_perfil_es_el_primario_del_servidor():
+    """
+    No vale la comprobación genérica de paridad, y por eso va aparte: el
+    instalador escribe 'data-ciphers AES-256-GCM:AES-128-GCM' y
+    'data-ciphers-fallback AES-256-CBC', así que los DOS valores aparecen en el
+    archivo y "está mencionado" no distingue el primario del de respaldo.
+
+    El fallo real: config.ejemplo.yaml declaraba AES-256-CBC, así que cada
+    perfil que emitía el panel pedía el cifrado que el servidor solo acepta
+    como último recurso. Lo destapó el comprobador en un servidor de pruebas,
+    no la suite.
+    """
+    fuente = _leer(INSTALA_VPN)
+
+    m = re.search(r"^data-ciphers\s+([A-Za-z0-9:_-]+)\s*$", fuente, re.M)
+    assert m, "instalar-openvpn.sh ya no declara data-ciphers"
+    primario = m.group(1).split(":")[0]
+
+    declarado = _config_ejemplo()["cipher"]
+    assert declarado == primario, (
+        "config.ejemplo.yaml declara cipher=%s y el servidor negocia %s como "
+        "primario. Los perfiles pedirían un cifrado que no es el que el "
+        "servidor prefiere." % (declarado, primario)
+    )
+
+
 def test_el_script_escribe_el_formato_de_status_que_se_parsea():
     """
     parse_status_text() solo entiende el v3. Con cualquier otro el panel lee un

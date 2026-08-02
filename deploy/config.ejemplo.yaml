@@ -49,7 +49,10 @@ cliente_ovpn:
   remote_host: "vpn.ejemplo.com"
   remote_puerto: 1194
   proto: "udp"
-  cipher: "AES-256-CBC"
+  # El primario que negocia instalar-openvpn.sh, no el de respaldo. Declarar
+  # aquí AES-256-CBC dejaba a los perfiles pidiendo un cifrado que el servidor
+  # solo acepta como último recurso. Hay prueba de paridad.
+  cipher: "AES-256-GCM"
   # Si tu server.conf usa tls-crypt, apunta aquí a la clave para embeberla
   # en los .ovpn. Déjalo vacío si no usas tls-crypt.
   tls_crypt: "/etc/openvpn/tls-crypt.key"
