@@ -40,6 +40,38 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ### Corregido
 
+Los cinco primeros salieron del primer despliegue en producción y del repaso
+que provocó. Ninguno lo habría encontrado la suite tal como estaba.
+
+- **El certificado del servidor aparecía como un cliente más**, con sus botones
+  de revocar y de descargar el `.ovpn`. El filtro comparaba exacto contra
+  `{'server', 'ca'}` y los instaladores al uso generan el nombre con un sufijo
+  aleatorio (`server_SU1O2eUJ8SUV0x2W`). Ahora el helper deduce el CN del
+  certificado que declara el `server.conf` —resolviendo las rutas relativas— y
+  lo excluye al listar, además de rechazarlo en las cuatro operaciones que
+  reciben un CN: no salir en la lista no impide invocarlas a mano.
+- **El alta del segundo factor se pisaba a sí misma.** El secreto solo se
+  enseña una vez, así que al recargar la página reaparecía el botón de activar;
+  pulsarlo generaba un secreto nuevo y dejaba muerta la cuenta ya guardada en
+  el móvil, sin que nada lo explicara. Ahora no se pisa un alta en curso, y
+  empezar de cero es un acto deliberado con su propio botón.
+- **Ninguna acción se podía disparar dos veces seguidas.** Diecinueve controles
+  no se desactivaban mientras su petición estaba en vuelo. El peor era
+  *restaurar*, que reemite el certificado con una clave privada nueva: un
+  segundo disparo mataba el `.ovpn` que el panel acababa de decir que
+  descargaras. `hx-confirm` no protegía —se puede confirmar dos veces—, y los
+  formularios que no usan HTMX tampoco: en `/login` un doble envío quemaba dos
+  de los cinco intentos, y en el código de dos pasos el segundo encontraba el
+  paso ya consumido y respondía *"Código incorrecto"* a un código correcto.
+- **El formulario de alta no se vaciaba al crear un cliente**, así que la
+  contraseña del certificado se quedaba a la vista en el navegador y el botón
+  invitaba a crear el mismo CN otra vez.
+- **Enlaces rotos entre plantillas y rutas.** Las pestañas de Auditoría
+  apuntaban a `/auditoria` cuando el router lleva prefijo `/admin`. Ahora una
+  prueba recorre las trece plantillas y comprueba contra la aplicación que
+  ninguno de sus destinos da 404 — algo que no verifica ni Python, ni Jinja, ni
+  el navegador hasta que alguien pulsa.
+
 - **El hash de HTMX no estaba versionado.** `deploy/htmx.sha256` existía solo en
   la máquina de quien instaló la primera vez, así que cualquier instalación
   desde un clon limpio descargaba HTMX del CDN y guardaba lo que le dieran sin
@@ -99,6 +131,87 @@ rompían el panel entero.
   verificado en el servidor de pruebas. Ahora se asegura de dejarla legible.
 
 ### Añadido
+
+- **Avisos de sucesos por correo y por Discord.** Cuatro categorías que se
+  eligen por separado: seguridad del panel, certificados y CA, salud del
+  servicio y rechazos de conexión. Sin dependencias nuevas: `smtplib` y
+  `urllib.request` son de la biblioteca estándar.
+  - **Es lo único que hace que el panel salga a internet.** Hasta ahora solo
+    hablaba con `127.0.0.1`, el disco y `sudo`. Si se deja sin configurar, no
+    sale nada y no hay canal de salida que comprometer.
+  - Los **destinos y las credenciales** van en `config.yaml`, que es
+    root:ovpnweb 0640: el panel lo lee y no lo escribe, así que quien lo
+    comprometa **no puede redirigir las alertas a su propio buzón**. Los
+    **interruptores** viven en la base y se cambian desde el panel, para no
+    exigir SSH cada vez.
+  - El hueco que eso deja lo cierra la **regla del aviso previo**: apagar un
+    canal o quitar una categoría manda primero el aviso de que se está
+    reduciendo la vigilancia, por los canales que todavía estaban activos, y
+    solo después guarda. El último mensaje que sale por ahí es el que delata
+    que lo callaron. La interfaz no lo anuncia, a propósito.
+  - Un botón de prueba comprueba los canales configurados —estén activados o
+    no— y enseña el error exacto de cada uno. Sin él, la única forma de
+    descubrir un SMTP mal escrito era esperar a un incidente y no recibir nada.
+  - El envío va en un hilo aparte, y nunca tumba la acción que lo provocó: se
+    revoca un certificado aunque el correo esté caído. Los fallos de entrega
+    quedan en la auditoría.
+
+- **Auditoría de la VPN, en su propia pestaña.** Conexiones establecidas y
+  rechazadas, con su IP y su hora, leídas del log de OpenVPN. Aparte de la
+  auditoría del panel porque son cosas distintas: aquella registra acciones de
+  una cuenta, esta conexiones de un certificado.
+  - Reconoce certificados revocados o caducados, handshakes fallidos y claves
+    `tls-crypt` que no coinciden —este último con mensaje propio, porque es el
+    síntoma de un cliente con el perfil anterior a una rotación.
+  - Ata cada rechazo con el CN que lo provocó agrupando por `ip:puerto`, que es
+    como OpenVPN marca las líneas de una misma sesión. Cuando la conexión muere
+    antes de presentar certificado **la columna queda vacía en vez de
+    inventarlo**: en una auditoría, rellenarla sería mentir.
+  - Avisa de por qué no hay nada que enseñar. Los tres motivos se parecen y
+    solo uno es normal: que no haya pasado nada, que el panel no pueda leer el
+    archivo, o que el `verb` del servidor sea demasiado bajo.
+
+- **Filtros y paginación en las dos pestañas de Auditoría**, con tamaño de
+  página elegible entre 50, 100 y 200. Del lado del panel se filtra y se pagina
+  en SQL: la tabla crece sin límite y traerla entera para descartar la mayor
+  parte sería leer todo el historial en cada visita.
+
+- **Histórico de perfiles eliminados.** Un desplegable al final de *Clientes
+  VPN* con los retirados de la lista, y un botón que los manda ahí.
+  - **No se borran de la PKI, y eso es lo que hace segura la función.** La CRL
+    no se guarda: se regenera desde `index.txt` cada vez que se revoca a
+    alguien, así que quitar de ahí un certificado le devolvería la validez en
+    esa siguiente regeneración, en silencio. Archivado sigue revocado y
+    bloqueado; solo deja de estorbar.
+  - Solo se admiten certificados ya revocados: ocultar uno válido escondería un
+    acceso vivo.
+
+- **Aviso de perfiles pendientes de repartir.** Cuando una operación invalida
+  todos los `.ovpn` de golpe, queda una banda en *Clientes VPN* con la lista de
+  quién necesita uno nuevo, marcando los ya descargados, hasta que alguien la
+  da por cerrada. Vive en el servidor: uno que se fuera al recargar no serviría.
+
+- **`deploy/comprobar-servidor.sh`**, para instalar sobre un OpenVPN que ya
+  existía. Contrasta el `server.conf` con la configuración del panel
+  —resolviendo las rutas relativas como lo hace OpenVPN— y ordena los hallazgos
+  en críticos y avisos, con el comando exacto de arreglo para cada uno. Solo
+  lee; hay una prueba que lo mantiene así. `install.sh` lo llama solo cuando
+  detecta que la VPN ya estaba montada.
+  - Dos de sus comprobaciones existen porque fallan en silencio: que el usuario
+    al que OpenVPN suelta privilegios **pueda leer de verdad la CRL** —se
+    intenta, no se deduce de los permisos— y que la CRL no esté caducada, que
+    hace rechazar todas las conexiones y no solo las revocadas.
+
+- **Rotación de `openvpn.log`.** Con `log-append` y sin ella el archivo crecía
+  sin límite. Va con `copytruncate`: rotar renombrando obligaría a avisar a
+  OpenVPN con SIGHUP, que reinicia el túnel y desconecta a todo el mundo.
+
+- **Diálogo de confirmación propio** en vez del `confirm()` del navegador, con
+  `<dialog>` nativo —foco atrapado, cierre con Escape y papel de modal ante el
+  lector de pantalla, sin reimplementar nada. El foco arranca en *Cancelar*:
+  casi todo lo que pasa por ahí es destructivo y un Intro de más no puede ser
+  lo que revoque un certificado. Si el script no carga, vuelve el `confirm`
+  nativo: la guarda no depende de que funcione.
 
 - **Dependencias fijadas y verificadas.** `requirements.txt` pasa a ser un lock
   generado de `requirements.in`, con versiones exactas y el SHA-256 de cada
