@@ -577,3 +577,46 @@ def test_sin_crlf_en_deploy(archivo):
     assert b"\r\n" not in archivo.read_bytes(), (
         "%s tiene finales de línea CRLF" % archivo.name
     )
+
+
+def test_el_instalador_no_depende_del_bit_de_ejecucion():
+    """
+    Regresión de un despliegue real: install.sh comprobaba con -x si existía
+    comprobar-servidor.sh antes de lanzarlo, y ese script está en git como
+    100644 porque se creó desde Windows, donde el bit de ejecución no existe.
+    La condición fallaba en el servidor y el comprobador NO se ejecutaba, sin
+    decir nada.
+
+    Los scripts de deploy/ se invocan siempre con 'bash', así que basta con que
+    existan. Comprobar -x añade una dependencia de algo que no sobrevive al
+    clon.
+    """
+    fuente = _leer(INSTALADOR)
+
+    # Línea a línea y no con un regex sobre el archivo entero: la ruta lleva
+    # comillas anidadas —"$(dirname "$0")/..."— y un patrón que las persiga se
+    # corta en la primera y no encuentra nada. Una prueba que no puede fallar
+    # no sirve; esta versión sí lo hace.
+    malas = [
+        linea.strip() for linea in fuente.splitlines()
+        if re.search(r'(?:\[\[|\[|&&|\|\|)\s*-x\s', linea) and ".sh" in linea
+    ]
+
+    assert not malas, (
+        "install.sh comprueba con -x un script de deploy/: %s. El bit de "
+        "ejecución no sobrevive a un clon desde Windows, así que la condición "
+        "falla en silencio. Usa -f, que para 'bash script.sh' es lo que hace "
+        "falta." % malas
+    )
+
+
+def test_el_instalador_llama_al_comprobador_si_la_vpn_ya_existia():
+    """Sin esto, quien instale sobre un OpenVPN ajeno no ve ninguno de los avisos"""
+    fuente = _leer(INSTALADOR)
+
+    assert "comprobar-servidor.sh" in fuente, (
+        "install.sh debe lanzar el comprobador cuando detecta una VPN previa"
+    )
+    assert re.search(r'VPN_PREEXISTENTE.*comprobar-servidor', fuente, re.S), (
+        "el comprobador debe ir condicionado a que la VPN ya existiera"
+    )

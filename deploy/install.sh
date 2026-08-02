@@ -327,7 +327,10 @@ echo "Y ábrelo en:  https://<IP_DEL_SERVIDOR>:55443"
 # relativas, la CRL duplicada, otro nombre de unidad, los logs sin permisos. Y
 # varios de esos desajustes no dan la cara hasta que hace falta —revocar y que
 # no surta efecto. Mejor decirlo aquí que descubrirlo el día malo.
-if [[ "$VPN_PREEXISTENTE" == "1" && -x "$(dirname "$0")/comprobar-servidor.sh" ]]; then
+# -f y no -x: el bit de ejecución no sobrevive a un clon hecho desde Windows,
+# donde no existe. instalar-openvpn.sh tampoco lo tiene y nunca hizo falta,
+# porque los dos se invocan con 'bash'. Con -x esto se saltaba en silencio.
+if [[ "$VPN_PREEXISTENTE" == "1" && -f "$(dirname "$0")/comprobar-servidor.sh" ]]; then
   echo
   info "Tu servidor OpenVPN ya existía: comprobando que encaja con el panel"
   echo
