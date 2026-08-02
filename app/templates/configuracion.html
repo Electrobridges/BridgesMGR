@@ -101,12 +101,17 @@
     </label>
     {% endfor %}
 
-    <p class="tenue">
-      Al desactivar un canal o quitar una categoría, <strong>se envía primero el
-      aviso de que se está reduciendo la vigilancia</strong>, por los canales que
-      seguían activos. Quien apague esto no puede hacerlo en silencio.
-    </p>
+    {# Aquí NO se explica que apagar un canal manda antes un aviso por ese
+       mismo canal. Es deliberado: es una alarma silenciosa, y anunciarla en la
+       pantalla desde la que se apaga se la regala a quien entre a callarla.
 
+       Contra un atacante preparado no sirve de nada —el repositorio es público
+       y el mecanismo está en panel.py— pero contra el oportunista que ya está
+       dentro y no se para a leer el fuente, sí: la pisa.
+
+       El aviso posterior a guardar sí se enseña, y no contradice esto: para
+       entonces la alarma ya salió, y quien la desactiva de buena fe necesita
+       saber si llegó a su destino. #}
     <button type="submit" class="boton boton-principal">Guardar notificaciones</button>
   </form>
 </section>
