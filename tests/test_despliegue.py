@@ -620,3 +620,28 @@ def test_el_instalador_llama_al_comprobador_si_la_vpn_ya_existia():
     assert re.search(r'VPN_PREEXISTENTE.*comprobar-servidor', fuente, re.S), (
         "el comprobador debe ir condicionado a que la VPN ya existiera"
     )
+
+
+def test_el_comprobador_no_usa_checkend_sobre_una_crl():
+    """
+    Regresión encontrada en el primer servidor real: el comprobador anunciaba
+    "La CRL caducó" sobre una válida durante seis meses más.
+
+    La causa era '-checkend', que es una opción de 'openssl x509' y no existe
+    para 'openssl crl'. El comando fallaba por opción desconocida y la
+    condición lo leía como caducidad.
+
+    Confundir "el comando no existe" con "ha caducado" es peor que no
+    comprobarlo: manda a regenerar en pánico algo que está sano, y en el
+    informe sale como CRÍTICO.
+    """
+    fuente = _leer(COMPROBADOR)
+
+    for linea in fuente.splitlines():
+        if "openssl crl" in linea:
+            assert "-checkend" not in linea, (
+                "-checkend no existe para 'openssl crl'. Compara la fecha de "
+                "-nextupdate con 'date' en su lugar: %s" % linea.strip()
+            )
+
+    assert "-nextupdate" in fuente, "sigue haciendo falta mirar la caducidad de la CRL"

@@ -189,14 +189,30 @@ else
 
   # Caducada rechaza a TODOS, no solo a los revocados. Se mira antes que los
   # permisos porque el síntoma es idéntico y la causa, distinta.
+  #
+  # Comparando fechas con 'date' y NO con 'openssl -checkend': esa opción es de
+  # 'openssl x509' y no existe para 'crl'. Usarla ahí falla por opción
+  # desconocida, y una comprobación que confunde "el comando no existe" con "ha
+  # caducado" manda a regenerar en pánico una CRL sana.
   if [[ -f ${CRL_REAL:-} ]]; then
-    if openssl crl -in "$CRL_REAL" -noout -nextupdate >/dev/null 2>&1; then
-      FIN=$(openssl crl -in "$CRL_REAL" -noout -nextupdate | cut -d= -f2)
-      if ! openssl crl -in "$CRL_REAL" -noout -checkend 0 >/dev/null 2>&1; then
-        critico "La CRL caducó el $FIN" \
-                "Una CRL vencida hace que OpenVPN rechace TODAS las conexiones. Regenérala"
+    FIN=$(openssl crl -in "$CRL_REAL" -noout -nextupdate 2>/dev/null | cut -d= -f2)
+    FIN_TS=$(date -d "$FIN" +%s 2>/dev/null || echo 0)
+    AHORA=$(date +%s)
+
+    if [[ -z $FIN || $FIN_TS -eq 0 ]]; then
+      aviso "No se pudo leer la fecha de caducidad de la CRL" \
+            "Compruébalo a mano: openssl crl -in $CRL_REAL -noout -nextupdate"
+    elif [[ $FIN_TS -le $AHORA ]]; then
+      critico "La CRL caducó el $FIN" \
+              "Una CRL vencida hace que OpenVPN rechace TODAS las conexiones. Regenérala"
+    else
+      DIAS=$(( (FIN_TS - AHORA) / 86400 ))
+      if [[ $DIAS -lt 30 ]]; then
+        # easyrsa la emite con 180 días por defecto, así que esto llega solo.
+        aviso "La CRL caduca en $DIAS día(s), el $FIN" \
+              "Cuando caduque, OpenVPN rechazará TODAS las conexiones. Se regenera revocando o restaurando cualquier cliente desde el panel"
       else
-        bien "La CRL es válida hasta $FIN"
+        bien "La CRL es válida hasta $FIN ($DIAS días)"
       fi
     fi
   fi
