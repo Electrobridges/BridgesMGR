@@ -335,3 +335,97 @@ def test_un_supervisor_no_puede_lanzarla(como_supervisor, csrf_supervisor,
 
     assert respuesta.status_code == 403
     assert enviados["discord"] == []
+
+
+# ------------------------------------------------ rotación de tls-crypt
+
+@pytest.fixture
+def helper_rotacion(monkeypatch):
+    """Sustituye el helper: rotar de verdad exige root y un OpenVPN"""
+    from app.core import easyrsa
+    import app.routers.panel as rp
+
+    estado = {"llamadas": 0, "fallar": False}
+
+    def rotar(cfg_):
+        estado["llamadas"] += 1
+        if estado["fallar"]:
+            raise easyrsa.ErrorHelper(
+                "openvpn@server no volvió a levantar. Se ha restaurado la anterior")
+        return {"ok": True, "huella": "abc123", "respaldo": "/etc/openvpn/tls-crypt.key.bak",
+                "servicio": "openvpn@server"}
+
+    monkeypatch.setattr(rp.easyrsa, "rotar_tls_crypt", rotar)
+    monkeypatch.setattr(rp, "listar_certificados",
+                        lambda c: {"validos": ["daniel", "portatil"], "revocados": []})
+    return estado
+
+
+def test_sin_escribir_la_palabra_no_rota(como_admin, csrf_admin, helper_rotacion):
+    """
+    Un hx-confirm se acepta sin leer. Esto deja fuera a todos los clientes de
+    golpe, así que hay que teclear algo.
+    """
+    respuesta = como_admin.post("/configuracion/tls-crypt/rotar",
+                                data={"confirmacion": "si"},
+                                headers={"X-CSRF-Token": csrf_admin})
+
+    assert respuesta.status_code == 400
+    assert helper_rotacion["llamadas"] == 0
+    assert "No se ha tocado nada" in respuesta.text
+
+
+def test_rota_y_abre_el_reparto(como_admin, csrf_admin, helper_rotacion, cfg):
+    respuesta = como_admin.post("/configuracion/tls-crypt/rotar",
+                                data={"confirmacion": "ROTAR"},
+                                headers={"X-CSRF-Token": csrf_admin})
+
+    assert respuesta.status_code == 200
+    assert helper_rotacion["llamadas"] == 1
+
+    reparto = db.reparto_abierto(cfg.seguridad.db_path)
+    assert reparto["motivo"] == db.MOTIVO_TLS_CRYPT
+    assert [c["cn"] for c in reparto["clientes"]] == ["daniel", "portatil"]
+
+
+def test_la_rotacion_queda_auditada_con_su_huella(como_admin, csrf_admin,
+                                                  helper_rotacion, cfg):
+    como_admin.post("/configuracion/tls-crypt/rotar",
+                    data={"confirmacion": "ROTAR"},
+                    headers={"X-CSRF-Token": csrf_admin})
+
+    entradas = db.listar_auditoria(cfg.seguridad.db_path)
+    fila = next(e for e in entradas if e["accion"] == "rotar_tls_crypt")
+    assert "huella=abc123" in fila["detalle"]
+    assert "afectados=2" in fila["detalle"]
+
+
+def test_si_falla_no_abre_reparto_y_lo_audita(como_admin, csrf_admin,
+                                              helper_rotacion, cfg):
+    """
+    Si el helper restauró la clave anterior, los perfiles siguen valiendo: un
+    aviso de reparto ahí mandaría a repartir lo que no hace falta.
+    """
+    helper_rotacion["fallar"] = True
+
+    respuesta = como_admin.post("/configuracion/tls-crypt/rotar",
+                                data={"confirmacion": "ROTAR"},
+                                headers={"X-CSRF-Token": csrf_admin})
+
+    assert respuesta.status_code == 400
+    assert "restaurado" in respuesta.text
+    assert db.reparto_abierto(cfg.seguridad.db_path) is None
+
+    entradas = db.listar_auditoria(cfg.seguridad.db_path)
+    assert any(e["accion"] == "rotar_tls_crypt" and e["resultado"] == "error"
+               for e in entradas)
+
+
+def test_un_supervisor_no_puede_rotar(como_supervisor, csrf_supervisor,
+                                      helper_rotacion):
+    respuesta = como_supervisor.post("/configuracion/tls-crypt/rotar",
+                                     data={"confirmacion": "ROTAR"},
+                                     headers={"X-CSRF-Token": csrf_supervisor})
+
+    assert respuesta.status_code == 403
+    assert helper_rotacion["llamadas"] == 0

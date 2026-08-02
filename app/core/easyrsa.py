@@ -147,3 +147,18 @@ def generar_ovpn(cfg, cn):
 def estado_servicio(cfg):
     """Devuelve {'activo': bool, 'estado': str} del servicio OpenVPN"""
     return _ejecutar(cfg, ["estado-servicio"], timeout=30)
+
+
+def rotar_tls_crypt(cfg):
+    """
+    Genera una clave tls-crypt nueva y reinicia OpenVPN.
+
+    Deja fuera a TODOS los clientes hasta que reciban un .ovpn nuevo: la clave
+    va embebida en cada perfil. El helper deshace y restaura la anterior si el
+    servicio no vuelve a levantar.
+
+    Timeout largo a propósito: dentro hay un reinicio del servicio y una espera
+    para comprobar que volvió. Con el de por defecto se cortaría a mitad y no
+    sabríamos si quedó bien.
+    """
+    return _ejecutar(cfg, ["rotar-tls-crypt"], timeout=90)

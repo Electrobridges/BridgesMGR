@@ -24,14 +24,23 @@ Uso:
     ovpn-web-helper crear <CN>
     ovpn-web-helper ovpn <CN>
     ovpn-web-helper estado-servicio
+    ovpn-web-helper rotar-tls-crypt
+
+Lo que NO está aquí y no debe estarlo: reconstruir la CA. Necesitaría escribir
+en server.conf, y quien pueda hacerlo mete un 'script-security 2' con un script
+'up' y ejecuta código como root. Como el sudoers autoriza este binario entero y
+no sus subcomandos, tenerlo aquí lo pondría al alcance de un panel comprometido.
+Vive en deploy/reconstruir-ca.sh, que se lanza a mano y no está en el sudoers.
 """
 
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 
 try:
@@ -522,6 +531,114 @@ def cmd_estado_servicio(cfg):
     return {"activo": estado == "active", "estado": estado, "servicio": servicio}
 
 
+def _nombre_servicio(cfg):
+    servicio = (cfg.get("openvpn") or {}).get("servicio", "openvpn@server")
+    if not re.match(r'^[A-Za-z0-9@._-]+$', servicio):
+        error("Nombre de servicio no válido en la configuración")
+    return servicio
+
+
+def cmd_rotar_tls_crypt(cfg):
+    """
+    Genera una clave tls-crypt nueva y reinicia OpenVPN.
+
+    La ruta sale de config.yaml, nunca por argumento (regla 1): si viniera del
+    panel, un panel comprometido apuntaría a un archivo cualquiera y lo pisaría
+    con esto, como root.
+
+    Esto SÍ puede vivir en el helper, a diferencia de la reconstrucción de la
+    CA. Aquella necesitaría escribir en server.conf, y quien pueda hacerlo mete
+    un 'script-security 2' con un script 'up' y ejecuta código como root. Rotar
+    la clave no toca server.conf: la directiva ya apunta al archivo y solo se
+    reemplaza su contenido. Y dejar clientes fuera ya está al alcance de quien
+    controle el panel, que puede revocarlos.
+
+    Nunca devuelve material de clave: solo una huella recortada, que es lo que
+    permite comprobar que cambió sin exponerla.
+    """
+    ruta = (cfg.get("cliente_ovpn") or {}).get("tls_crypt") or ""
+    if not ruta:
+        error("No hay cliente_ovpn.tls_crypt en la configuración: nada que rotar")
+    if not os.path.isfile(ruta):
+        error("No existe %s" % ruta)
+
+    servicio = _nombre_servicio(cfg)
+
+    sello = datetime.now().strftime("%Y%m%d-%H%M%S")
+    respaldo = "%s.bak.%s" % (ruta, sello)
+    try:
+        shutil.copy2(ruta, respaldo)
+        os.chmod(respaldo, 0o600)
+    except OSError as e:
+        error("No se pudo respaldar la clave actual (%s): %s" % (respaldo, e))
+
+    temporal = "%s.nueva.%s" % (ruta, sello)
+    try:
+        proc = subprocess.run(
+            ["openvpn", "--genkey", "secret", temporal],
+            capture_output=True, text=True, timeout=TIMEOUT,
+        )
+        if proc.returncode != 0:
+            error("openvpn --genkey falló: %s" % (proc.stderr or proc.stdout).strip())
+
+        # Se comprueba lo generado ANTES de pisar lo que funciona: una clave a
+        # medias dejaría la VPN sin admitir a nadie.
+        with open(temporal, "r", encoding="utf-8", errors="replace") as f:
+            contenido = f.read()
+        lineas = [l for l in contenido.splitlines()
+                  if re.match(r'^[0-9a-f]{32}$', l.strip())]
+        if "OpenVPN Static key V1" not in contenido or len(lineas) != 16:
+            error("La clave generada no tiene el formato esperado")
+
+        # 0600 explícito y no fiado al umask: la unidad lleva UMask=0077 y lo
+        # heredan los hijos, pero eso es una coincidencia afortunada, no una
+        # garantía de este archivo.
+        os.replace(temporal, ruta)
+        os.chmod(ruta, 0o600)
+        os.chown(ruta, 0, 0)
+    except OSError as e:
+        error("No se pudo instalar la clave nueva: %s" % e)
+    finally:
+        if os.path.exists(temporal):
+            try:
+                os.unlink(temporal)
+            except OSError:
+                pass
+
+    def _activo():
+        try:
+            p = subprocess.run(["systemctl", "is-active", servicio],
+                               capture_output=True, text=True, timeout=15)
+            return p.stdout.strip() == "active"
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+    subprocess.run(["systemctl", "restart", servicio],
+                   capture_output=True, timeout=TIMEOUT)
+    time.sleep(3)
+
+    if not _activo():
+        # Dejar la VPN caída con una clave nueva es el peor resultado posible.
+        shutil.copy2(respaldo, ruta)
+        os.chmod(ruta, 0o600)
+        subprocess.run(["systemctl", "restart", servicio],
+                       capture_output=True, timeout=TIMEOUT)
+        time.sleep(2)
+        error("%s no volvió a levantar con la clave nueva. Se ha restaurado la "
+              "anterior desde %s" % (servicio, respaldo))
+
+    with open(ruta, "rb") as f:
+        huella = hashlib.sha256(f.read()).hexdigest()[:16]
+
+    return {
+        "ok": True,
+        "accion": "rotar-tls-crypt",
+        "respaldo": respaldo,
+        "huella": huella,
+        "servicio": servicio,
+    }
+
+
 COMANDOS_CON_CN = {
     "revocar": cmd_revocar,
     "restaurar": cmd_restaurar,
@@ -532,6 +649,7 @@ COMANDOS_CON_CN = {
 COMANDOS_SIN_CN = {
     "listar": cmd_listar,
     "estado-servicio": cmd_estado_servicio,
+    "rotar-tls-crypt": cmd_rotar_tls_crypt,
 }
 
 # Los únicos que emiten una clave privada nueva y, por tanto, los únicos que
@@ -544,7 +662,7 @@ def main():
         error("Este helper debe ejecutarse como root (vía sudo)")
 
     if len(sys.argv) < 2:
-        error("Uso: ovpn-web-helper <listar|revocar|restaurar|crear|ovpn|estado-servicio> [CN]")
+        error("Uso: ovpn-web-helper <listar|revocar|restaurar|crear|ovpn|estado-servicio|rotar-tls-crypt> [CN]")
 
     sub = sys.argv[1]
     cfg = cargar_config()

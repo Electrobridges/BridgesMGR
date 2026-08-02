@@ -4,12 +4,13 @@ from typing import List
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 
-from .. import notificar
 from ..auth import ip_cliente, solo_admin, usuario_actual, verificar_csrf
 from ..core import logs as core_logs
 from ..core.conexiones import obtener_conexiones, resumen_trafico, top_por_trafico
+from .. import db, notificar
+from ..core import easyrsa
 from ..core.easyrsa import ErrorHelper, estado_servicio, listar_certificados
-from .comun import auditar, aviso, cfg, render
+from .comun import auditar, aviso, cfg, error_htmx, render
 
 router = APIRouter()
 
@@ -138,6 +139,71 @@ def _estado_notificaciones(c):
         },
         "destinatarios": [d for d in (c.notificaciones.correo.destinatarios or []) if d],
     }
+
+
+CONFIRMA_ROTAR = "ROTAR"
+
+
+@router.post("/configuracion/tls-crypt/rotar")
+def rotar_tls_crypt(
+    request: Request,
+    confirmacion: str = Form(""),
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Rota la clave tls-crypt del servidor.
+
+    Deja fuera a TODOS los clientes de golpe: esa clave va embebida en cada
+    .ovpn, así que ninguno de los repartidos vuelve a servir. Por eso no está
+    en Clientes VPN junto a las acciones del día a día, exige escribir una
+    palabra en vez de un [s/N], y al terminar abre el aviso de perfiles
+    pendientes de repartir con todos los clientes válidos.
+
+    El helper hace el trabajo delicado —respaldo, verificar el formato de lo
+    generado antes de pisar lo que funciona, y restaurar si OpenVPN no vuelve a
+    levantar—, porque la clave es de root y el panel no la alcanza.
+    """
+    c = cfg(request)
+
+    if confirmacion.strip() != CONFIRMA_ROTAR:
+        return error_htmx(request, "Escribe %s para confirmar. No se ha tocado nada."
+                          % CONFIRMA_ROTAR)
+
+    # Se pregunta antes de rotar: después, los certificados siguen siendo los
+    # mismos, pero conviene tener la lista para el aviso de reparto aunque la
+    # PKI falle luego.
+    try:
+        validos = listar_certificados(c)["validos"]
+    except ErrorHelper as e:
+        return error_htmx(request, "No se pudo consultar la PKI: %s" % e)
+
+    try:
+        resultado = easyrsa.rotar_tls_crypt(c)
+    except ErrorHelper as e:
+        auditar(request, sesion, "rotar_tls_crypt", None, "error", str(e))
+        return error_htmx(request, "No se pudo rotar la clave: %s" % e)
+
+    auditar(request, sesion, "rotar_tls_crypt", None,
+            detalle="huella=%s respaldo=%s afectados=%d"
+                    % (resultado.get("huella", "?"), resultado.get("respaldo", "?"),
+                       len(validos)))
+
+    if validos:
+        db.abrir_reparto(
+            c.seguridad.db_path, db.MOTIVO_TLS_CRYPT, validos,
+            detalle="Clave tls-crypt rotada. Los .ovpn anteriores ya no sirven.",
+        )
+
+    mensaje = ("Clave tls-crypt rotada (huella %s) y %s reiniciado. "
+               % (resultado.get("huella", "?"), resultado.get("servicio", "OpenVPN")))
+    if validos:
+        mensaje += ("Los %d clientes necesitan un perfil nuevo: tienes la lista en "
+                    "Clientes VPN." % len(validos))
+    else:
+        mensaje += "No hay clientes a los que repartir."
+
+    return aviso(request, mensaje, tipo="aviso")
 
 
 @router.post("/configuracion/notificaciones/probar")

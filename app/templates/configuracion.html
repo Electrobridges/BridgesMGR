@@ -51,6 +51,37 @@
 </table>
 </div>
 
+<h2>Clave <code>tls-crypt</code></h2>
+
+{# Aquí y no en Clientes VPN: esto deja fuera a TODOS de golpe, y no puede estar
+   al lado de las acciones del día a día. La confirmación es escribir una
+   palabra y no un hx-confirm, por el mismo motivo. #}
+<section class="panel-accion">
+  <p>
+    Protege el canal de control de la VPN y va <strong>embebida en cada
+    <code>.ovpn</code></strong>. Rotarla es lo que toca si se filtra un perfil
+    completo: invalida de golpe todos los repartidos.
+  </p>
+  <p class="tenue">
+    Se hace copia de la anterior, se comprueba el formato de la nueva antes de
+    sustituirla, y si OpenVPN no vuelve a levantar se restaura sola.
+    <strong>Ningún cliente podrá conectar hasta que reciba un perfil nuevo</strong>:
+    al terminar aparecerá la lista en Clientes VPN.
+  </p>
+
+  <form class="formulario en-fila"
+        hx-disabled-elt="find button"
+        hx-post="/configuracion/tls-crypt/rotar"
+        hx-target="#avisos"
+        hx-swap="innerHTML">
+    <label for="confirmar-rotar">Escribe <code>ROTAR</code> para confirmar</label>
+    <input type="text" id="confirmar-rotar" name="confirmacion" required
+           autocomplete="off" placeholder="ROTAR" pattern="ROTAR"
+           title="Escribe ROTAR en mayúsculas">
+    <button type="submit" class="boton boton-peligro">Rotar la clave tls-crypt</button>
+  </form>
+</section>
+
 <h2>Notificaciones</h2>
 
 <p class="tenue">

@@ -35,6 +35,28 @@ def _leer(ruta):
     return ruta.read_text(encoding="utf-8")
 
 
+def _cadenas_del_helper():
+    """
+    Las cadenas que el helper usa como datos, sin docstrings ni comentarios.
+
+    Buscar una palabra en el texto del archivo confunde el código con la
+    explicación de por qué ese código no está: el docstring del helper dice
+    justamente "reconstruir la CA" para señalar que vive en otro sitio.
+    """
+    arbol = ast.parse(_leer(HELPER), str(HELPER))
+
+    docstrings = set()
+    for nodo in ast.walk(arbol):
+        if isinstance(nodo, (ast.Module, ast.FunctionDef, ast.ClassDef)):
+            cuerpo = getattr(nodo, "body", [])
+            if cuerpo and isinstance(cuerpo[0], ast.Expr) and                     isinstance(cuerpo[0].value, ast.Constant) and                     isinstance(cuerpo[0].value.value, str):
+                docstrings.add(id(cuerpo[0].value))
+
+    return {n.value for n in ast.walk(arbol)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+            and id(n) not in docstrings}
+
+
 # ---------------------------------------------------------------- el helper
 
 def test_el_helper_compila():
@@ -664,13 +686,12 @@ def test_reconstruir_ca_no_esta_autorizado_en_sudoers():
     """
     assert "reconstruir-ca" not in _leer(SUDOERS)
 
-    # Y que nadie lo cuele como subcomando del helper por la puerta de atrás
-    fuente = _leer(HELPER)
-    for nombre in ("reconstruir", "build-ca", "init-pki"):
-        assert nombre not in fuente, (
-            "'%s' en el helper: eso lo haría alcanzable por sudo desde el panel"
-            % nombre
-        )
+    # Y que nadie lo cuele como subcomando del helper por la puerta de atrás.
+    # Se miran las cadenas del árbol sintáctico y no el texto: los comentarios
+    # que explican por qué esto NO está aquí contienen las mismas palabras, y
+    # una prueba que los confunda con código no vale nada.
+    assert "build-ca" not in _cadenas_del_helper()
+    assert "init-pki" not in _cadenas_del_helper()
 
 
 def test_reconstruir_ca_respalda_antes_de_tocar_nada():
@@ -742,3 +763,93 @@ def test_reconstruir_ca_avisa_al_panel_como_ovpnweb():
     fuente = _leer(RECONSTRUIR)
     assert 'sudo -u "$USUARIO_PANEL"' in fuente
     assert "marcar-reparto" in fuente
+
+
+def test_el_helper_rota_la_clave_sin_aceptar_su_ruta():
+    """
+    Regla 1 también aquí: la ruta de la clave sale de config.yaml. Si viniera
+    del panel, un panel comprometido apuntaría a un archivo cualquiera y esto
+    lo pisaría como root.
+    """
+    fuente = _leer(HELPER)
+    assert 'cfg.get("cliente_ovpn") or {}).get("tls_crypt")' in fuente
+
+
+def test_el_helper_verifica_la_clave_antes_de_instalarla():
+    """
+    Una clave a medias deja la VPN sin admitir a nadie. Se comprueba lo
+    generado ANTES de pisar lo que funciona.
+    """
+    fuente = _leer(HELPER)
+    cuerpo = fuente[fuente.index("def cmd_rotar_tls_crypt"):]
+    cuerpo = cuerpo[:cuerpo.index("COMANDOS_CON_CN")]
+
+    assert "OpenVPN Static key V1" in cuerpo
+    assert "len(lineas) != 16" in cuerpo
+    assert cuerpo.index("len(lineas) != 16") < cuerpo.index("os.replace"), (
+        "la verificación tiene que ir antes de sustituir la clave en uso"
+    )
+
+
+def test_el_helper_restaura_si_openvpn_no_vuelve():
+    """Dejar la VPN caída con una clave nueva es el peor resultado posible"""
+    fuente = _leer(HELPER)
+    cuerpo = fuente[fuente.index("def cmd_rotar_tls_crypt"):]
+
+    assert "shutil.copy2(respaldo, ruta)" in cuerpo
+    assert "Se ha restaurado la" in cuerpo
+
+
+def test_el_helper_no_devuelve_material_de_clave():
+    """
+    Solo una huella. El JSON del helper acaba en la auditoría y en la pantalla,
+    y ahí no puede aparecer una clave que ni el panel debería poder leer.
+    """
+    fuente = _leer(HELPER)
+    cuerpo = fuente[fuente.index("def cmd_rotar_tls_crypt"):]
+    cuerpo = cuerpo[:cuerpo.index("COMANDOS_CON_CN")]
+
+    assert 'hashlib.sha256' in cuerpo and '[:16]' in cuerpo
+    assert '"contenido"' not in cuerpo
+    assert "contenido," not in cuerpo.split("return {")[-1]
+
+
+def test_reconstruir_la_ca_sigue_fuera_del_helper():
+    """
+    El límite entre lo que puede vivir en el helper y lo que no.
+
+    Rotar la clave sí puede: no toca server.conf. Reconstruir la CA no, porque
+    necesitaría escribirlo, y quien pueda hacerlo mete un 'script-security 2'
+    con un script 'up' y ejecuta código como root. Como el sudoers autoriza el
+    binario entero, tenerlo aquí lo pondría al alcance de un panel comprometido.
+    """
+    assert "rotar-tls-crypt" in _leer(HELPER)
+
+    cadenas = _cadenas_del_helper()
+    assert "build-ca" not in cadenas
+    assert "init-pki" not in cadenas
+
+    # El helper LEE el server.conf para deducir el CN del servidor, y eso está
+    # bien. Lo que no puede es escribirlo: quien pueda mete un
+    # 'script-security 2' con un script 'up' y ejecuta código como root.
+    #
+    # El invariante no es "no escribe" —escribe en index.txt al restaurar un
+    # cliente, y debe— sino "solo escribe dentro de la PKI", cuyas rutas salen
+    # todas de rutas_pki().
+    arbol = ast.parse(_leer(HELPER), str(HELPER))
+    for nodo in ast.walk(arbol):
+        if not (isinstance(nodo, ast.Call) and getattr(nodo.func, "id", "") == "open"):
+            continue
+        modo = nodo.args[1].value if len(nodo.args) > 1 and isinstance(
+            nodo.args[1], ast.Constant) else "r"
+        if not any(c in modo for c in "wa+"):
+            continue
+
+        destino = nodo.args[0]
+        es_de_la_pki = (isinstance(destino, ast.Subscript)
+                        and getattr(destino.value, "id", "") == "rutas")
+        assert es_de_la_pki, (
+            "El helper abre en escritura algo que no sale de rutas_pki() "
+            "(línea %d). Si acabara siendo el server.conf, sería ejecución de "
+            "código como root." % nodo.lineno
+        )
