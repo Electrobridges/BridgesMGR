@@ -33,7 +33,7 @@
   {% endfor %}
 
   <nav class="filtros" aria-label="Filtro de sucesos">
-    {% for clave, texto in [('todo', 'Todo'), ('conexiones', 'Conexiones'), ('fallos', 'Rechazos')] %}
+    {% for clave, texto in [('todo', 'Todo'), ('conexiones', 'Conexiones'), ('fallos', 'Rechazos'), ('sesiones', 'Sesiones')] %}
     <a class="{{ 'activa' if filtro == clave }}"
        {% if filtro == clave %}aria-current="true"{% endif %}
        href="/admin/auditoria?fuente=vpn&amp;filtro={{ clave }}">{{ texto }}</a>
@@ -41,6 +41,62 @@
   </nav>
 
   {% include "partials/paginacion.html" %}
+
+  {% if filtro == 'sesiones' %}
+
+  <p class="tenue">
+    Cada fila empareja una conexión con su desconexión. Lo que no consta
+    <strong>no se rellena</strong>: una sesión sin salida registrada se dice,
+    en vez de darle una duración que nadie ha medido.
+  </p>
+
+  {% if sesiones_vpn %}
+  <div class="tabla-scroll">
+  <table class="tabla">
+    <thead>
+      <tr><th>Cliente</th><th>IP de origen</th><th>Entrada</th><th>Salida</th><th>Duración</th></tr>
+    </thead>
+    <tbody>
+      {% for s in sesiones_vpn %}
+      <tr>
+        <td class="destacado">{{ s.cn or '—' }}</td>
+        <td class="tenue">{{ s.ip or '—' }}{% if s.puerto %}:{{ s.puerto }}{% endif %}</td>
+        {# Guion y no una fecha inventada: si la entrada quedó fuera del tramo
+           de log que se lee, no hay nada que poner. #}
+        <td class="tenue">{{ s.inicio or '—' }}</td>
+        <td class="tenue">
+          {% if s.estado == 'abierta' %}
+            <span class="etiqueta etiqueta-ok">sigue conectado</span>
+          {% elif s.estado == 'interrumpida' %}
+            <span class="etiqueta">sin registro</span>
+          {% else %}
+            {{ s.fin }}
+          {% endif %}
+        </td>
+        <td>
+          {% if s.segundos is not none %}
+            {{ formatear_duracion(s.segundos) }}
+          {% elif s.estado == 'abierta' %}
+            <span class="tenue">en curso</span>
+          {% elif s.estado == 'interrumpida' %}
+            <span class="tenue">el servidor arrancó sin que constara la salida</span>
+          {% else %}
+            <span class="tenue">no consta su entrada</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% include "partials/paginacion.html" %}
+
+  {% elif not avisos %}
+  <p class="tenue">No hay sesiones que mostrar.</p>
+  {% endif %}
+
+  {% else %}
 
   {% if eventos %}
   <div class="tabla-scroll">
@@ -86,6 +142,8 @@
 
   {% elif not avisos %}
   <p class="tenue">No hay sucesos que mostrar con este filtro.</p>
+  {% endif %}
+
   {% endif %}
 
 {% else %}

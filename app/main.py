@@ -23,6 +23,7 @@ from .auth import (
     sesion_opcional,
 )
 from .config import cargar_config
+from .core.eventos_vpn import formatear_duracion
 from .core.parsers import format_bytes
 from .routers import administracion, clientes, panel, perfil, sesion
 
@@ -50,6 +51,7 @@ def crear_app(cfg=None):
 
     plantillas = Jinja2Templates(directory=os.path.join(BASE, "templates"))
     plantillas.env.globals["format_bytes"] = format_bytes
+    plantillas.env.globals["formatear_duracion"] = formatear_duracion
     app.state.plantillas = plantillas
 
     app.mount("/static", StaticFiles(directory=os.path.join(BASE, "static")), name="static")

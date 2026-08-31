@@ -333,6 +333,12 @@ FILTROS_VPN = {
     "fallos": lambda e: e["fallo"],
 }
 
+# Las sesiones no son un filtro más sobre los sucesos: emparejan dos de ellos en
+# una sola fila, así que la tabla tiene otras columnas y se atiende aparte. Se
+# valida junto a los filtros para que una URL escrita a mano no cuele.
+VISTA_SESIONES = "sesiones"
+VISTAS_VPN = set(FILTROS_VPN) | {VISTA_SESIONES}
+
 
 @router.get("/auditoria")
 def pagina_auditoria(
@@ -355,17 +361,31 @@ def pagina_auditoria(
     - 'vpn' sale del log de OpenVPN, son conexiones de un certificado y no
       tienen cuenta del panel. Se leen en vivo, acotadas por la cola del
       archivo, y se paginan en memoria porque ya vienen acotadas.
+
+    Dentro de 'vpn', la vista de sesiones empareja cada conexión con su
+    desconexión para poder dar la duración. Va aquí y no en una página aparte
+    porque es el mismo log mirado de otra manera, no otra fuente.
     """
     c = cfg(request)
     fuente = "vpn" if fuente == "vpn" else "panel"
-    validos = FILTROS_VPN if fuente == "vpn" else db.FILTROS_AUDITORIA
+    validos = VISTAS_VPN if fuente == "vpn" else db.FILTROS_AUDITORIA
     if filtro not in validos:
         filtro = "todo"
 
     base = "/admin/auditoria?fuente=%s&filtro=%s" % (fuente, filtro)
     contexto = {"fuente": fuente, "filtro": filtro}
 
-    if fuente == "vpn":
+    if fuente == "vpn" and filtro == VISTA_SESIONES:
+        sesiones_vpn, avisos = eventos_vpn.leer_sesiones(c)
+        pg = paginar(len(sesiones_vpn), pagina, por_pagina, base)
+        contexto.update({
+            "sesiones_vpn": sesiones_vpn[
+                pg["desplazamiento"]:pg["desplazamiento"] + pg["por_pagina"]
+            ],
+            "avisos": avisos,
+            "pg": pg,
+        })
+    elif fuente == "vpn":
         eventos, avisos = eventos_vpn.leer_eventos(c)
         eventos = [e for e in eventos if FILTROS_VPN[filtro](e)]
         pg = paginar(len(eventos), pagina, por_pagina, base)

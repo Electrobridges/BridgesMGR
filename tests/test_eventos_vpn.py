@@ -249,3 +249,202 @@ def test_si_no_se_puede_leer_el_log_se_dice(como_admin, cfg):
     texto = como_admin.get("/admin/auditoria?fuente=vpn").text
 
     assert "log-append" in texto
+
+
+# ------------------------------------------------------------ sesiones
+
+def _conecta(ts, cn, ip, puerto):
+    return ("%s %s:%s [%s] Peer Connection Initiated with [AF_INET]%s:%s\n"
+            % (ts, ip, puerto, cn, ip, puerto))
+
+
+def _desconecta(ts, cn, ip, puerto):
+    return ("%s %s/%s:%s SIGTERM[soft,remote-exit] received, client-instance "
+            "exiting\n" % (ts, cn, ip, puerto))
+
+
+def _ses(texto):
+    return ev.emparejar_sesiones(ev.parse_eventos(texto.splitlines()))
+
+
+def test_una_sesion_cerrada_dice_cuando_entro_cuando_salio_y_cuanto_duro():
+    """Es justo lo que el log tenía repartido en dos líneas sin relación"""
+    sesiones = _ses(
+        _conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711")
+        + _desconecta("2026-07-30 12:33:00", "daniel", "192.168.1.50", "49711")
+    )
+
+    assert len(sesiones) == 1
+    s = sesiones[0]
+    assert s["estado"] == ev.CERRADA
+    assert s["cn"] == "daniel"
+    assert s["inicio"] == "2026-07-30 10:00:00"
+    assert s["fin"] == "2026-07-30 12:33:00"
+    assert s["segundos"] == 9180
+
+
+def test_una_sesion_sin_desconexion_sigue_abierta():
+    sesiones = _ses(_conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711"))
+
+    assert sesiones[0]["estado"] == ev.ABIERTA
+    assert sesiones[0]["fin"] == ""
+    assert sesiones[0]["segundos"] is None
+
+
+def test_un_arranque_del_servidor_no_deja_sesiones_en_curso():
+    """
+    Si OpenVPN arrancó después, lo de antes no puede seguir conectado. Sin
+    esto, una sesión de hace semanas se enseñaría como 'en curso' para siempre.
+    """
+    sesiones = _ses(
+        _conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711")
+        + "2026-07-30 15:00:00 Initialization Sequence Completed\n"
+    )
+
+    assert sesiones[0]["estado"] == ev.INTERRUMPIDA
+    assert sesiones[0]["segundos"] is None
+
+
+def test_una_salida_sin_su_entrada_no_inventa_la_duracion():
+    """
+    Pasa en cuanto la conexión queda por detrás del tramo de log que se lee.
+    Consta que salió; no consta cuánto estuvo, y eso no se rellena.
+    """
+    sesiones = _ses(_desconecta("2026-07-30 12:33:00", "daniel", "192.168.1.50", "49711"))
+
+    s = sesiones[0]
+    assert s["estado"] == ev.SIN_INICIO
+    assert s["inicio"] == ""
+    assert s["fin"] == "2026-07-30 12:33:00"
+    assert s["segundos"] is None
+    assert s["cn"] == "daniel"
+
+
+def test_dos_clientes_a_la_vez_no_se_mezclan():
+    sesiones = _ses(
+        _conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711")
+        + _conecta("2026-07-30 10:10:00", "marta", "192.168.1.77", "51001")
+        + _desconecta("2026-07-30 10:20:00", "marta", "192.168.1.77", "51001")
+        + _desconecta("2026-07-30 11:00:00", "daniel", "192.168.1.50", "49711")
+    )
+
+    por_cn = {s["cn"]: s for s in sesiones}
+    assert por_cn["daniel"]["segundos"] == 3600
+    assert por_cn["marta"]["segundos"] == 600
+
+
+def test_una_reconexion_es_una_sesion_aparte():
+    """El mismo cliente dos veces son dos filas, no una con la suma"""
+    sesiones = _ses(
+        _conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711")
+        + _desconecta("2026-07-30 10:30:00", "daniel", "192.168.1.50", "49711")
+        + _conecta("2026-07-30 11:00:00", "daniel", "192.168.1.50", "49712")
+        + _desconecta("2026-07-30 11:15:00", "daniel", "192.168.1.50", "49712")
+    )
+
+    assert len(sesiones) == 2
+    assert [s["segundos"] for s in sesiones] == [900, 1800]
+
+
+def test_volver_a_ver_el_mismo_puerto_cierra_la_sesion_anterior():
+    """
+    El puerto de origen no se reutiliza mientras la sesión vive, así que verlo
+    conectar otra vez significa que la anterior acabó sin dejar constancia.
+    """
+    sesiones = _ses(
+        _conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711")
+        + _conecta("2026-07-30 14:00:00", "daniel", "192.168.1.50", "49711")
+    )
+
+    assert len(sesiones) == 2
+    assert sesiones[0]["estado"] == ev.ABIERTA          # la de las 14:00
+    assert sesiones[1]["estado"] == ev.INTERRUMPIDA     # la de las 10:00
+
+
+def test_no_se_da_una_duracion_negativa():
+    """
+    Si al servidor le cambian la hora entre las dos líneas, sale una diferencia
+    negativa. Un hueco declarado es mejor que un número imposible.
+    """
+    sesiones = _ses(
+        _conecta("2026-07-30 12:00:00", "daniel", "192.168.1.50", "49711")
+        + _desconecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711")
+    )
+
+    assert sesiones[0]["estado"] == ev.CERRADA
+    assert sesiones[0]["segundos"] is None
+
+
+def test_la_sesion_mas_reciente_va_primero():
+    sesiones = _ses(
+        _conecta("2026-07-30 08:00:00", "antigua", "192.168.1.50", "1111")
+        + _desconecta("2026-07-30 08:30:00", "antigua", "192.168.1.50", "1111")
+        + _conecta("2026-07-30 20:00:00", "reciente", "192.168.1.50", "2222")
+        + _desconecta("2026-07-30 20:30:00", "reciente", "192.168.1.50", "2222")
+    )
+
+    assert [s["cn"] for s in sesiones] == ["reciente", "antigua"]
+
+
+@pytest.mark.parametrize("segundos, esperado", [
+    (0, "0 s"),
+    (45, "45 s"),
+    (60, "1 min"),
+    (90, "1 min 30 s"),
+    (3600, "1 h"),
+    (9180, "2 h 33 min"),
+    (86400, "1 d"),
+    (100800, "1 d 4 h"),
+    (None, ""),
+])
+def test_formatear_duracion(segundos, esperado):
+    assert ev.formatear_duracion(segundos) == esperado
+
+
+def test_leer_sesiones_avisa_si_el_log_no_llega_al_principio(tmp_path):
+    """Una duración ausente tiene que explicarse, no quedarse en un guion"""
+    log = tmp_path / "openvpn.log"
+    log.write_text(
+        _desconecta("2026-07-30 12:33:00", "daniel", "192.168.1.50", "49711"),
+        encoding="utf-8",
+    )
+
+    sesiones, avisos = ev.leer_sesiones(_Cfg(str(log)))
+
+    assert sesiones[0]["estado"] == ev.SIN_INICIO
+    assert avisos and "solo consta la salida" in avisos[0]
+
+
+# ------------------------------------------------- la vista de sesiones
+
+@pytest.fixture
+def log_con_sesiones(cfg):
+    """Una sesión cerrada de 2 h 33 min y otra que sigue abierta"""
+    with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
+        f.write(_conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711"))
+        f.write(_desconecta("2026-07-30 12:33:00", "daniel", "192.168.1.50", "49711"))
+        f.write(_conecta("2026-07-30 13:00:00", "marta", "192.168.1.77", "51001"))
+    return cfg.openvpn.log_path
+
+
+def test_la_vista_de_sesiones_da_la_duracion(como_admin, log_con_sesiones):
+    texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=sesiones").text
+
+    assert "2 h 33 min" in texto
+    assert "2026-07-30 10:00:00" in texto
+    assert "2026-07-30 12:33:00" in texto
+
+
+def test_la_vista_de_sesiones_distingue_a_quien_sigue_dentro(como_admin, log_con_sesiones):
+    texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=sesiones").text
+
+    assert "sigue conectado" in texto
+    assert "marta" in texto
+
+
+def test_un_filtro_inventado_cae_en_todo(como_admin, log_con_sesiones):
+    """La vista sale de la URL, así que cualquiera puede escribir lo que quiera"""
+    texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=loquesea").text
+
+    assert "conexión establecida" in texto
+    assert "Duración" not in texto
