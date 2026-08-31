@@ -46,3 +46,8 @@ RESUMEN_SESION.md
 *.swp
 .DS_Store
 Thumbs.db
+
+
+# IAs 
+CLAUDE.md 
+.claude
