@@ -448,3 +448,85 @@ def test_un_filtro_inventado_cae_en_todo(como_admin, log_con_sesiones):
 
     assert "conexión establecida" in texto
     assert "Duración" not in texto
+
+
+# ------------------------------------------ logs sin marca de tiempo
+
+# La unidad que Debian empaqueta para OpenVPN arranca el servidor con
+# '--suppress-timestamps', así que ninguna línea lleva fecha. No es un caso
+# raro: es lo que sale de un 'apt install openvpn' sin tocar nada, y el
+# server.conf no puede desactivarlo. Estas líneas son literales de un servidor
+# Debian 13 con la unidad de paquete.
+SIN_FECHA = """\
+127.0.0.1:57176 TLS: Initial packet from [AF_INET]127.0.0.1:57176
+127.0.0.1:57176 VERIFY OK: depth=0, CN=alfa2
+127.0.0.1:57176 [alfa2] Peer Connection Initiated with [AF_INET]127.0.0.1:57176
+alfa2/127.0.0.1:57176 SIGTERM[soft,remote-exit] received, client-instance exiting
+"""
+
+
+def test_una_linea_sin_fecha_se_reconoce_igual():
+    """
+    Exigir la fecha como prefijo dejaba fuera el log entero de una Debian de
+    paquete: cero sucesos con el log lleno de conexiones.
+    """
+    eventos = _ev(SIN_FECHA)
+
+    assert [e["tipo"] for e in eventos] == [ev.DESCONEXION, ev.CONEXION]
+    assert eventos[1]["cn"] == "alfa2"
+    assert eventos[1]["ip"] == "127.0.0.1"
+    assert eventos[1]["puerto"] == "57176"
+    assert eventos[1]["ts"] == ""
+
+
+def test_una_sesion_sin_fechas_se_empareja_pero_no_inventa_la_duracion():
+    """
+    El emparejado va por 'ip:puerto', que sigue estando. La duración no: sin
+    fecha no hay resta posible, y aquí se dice en vez de rellenarla.
+    """
+    sesiones = _ses(SIN_FECHA)
+
+    assert len(sesiones) == 1
+    s = sesiones[0]
+    assert s["estado"] == ev.CERRADA
+    assert s["cn"] == "alfa2"
+    assert s["segundos"] is None
+
+
+def test_avisa_de_que_el_log_no_lleva_fecha_y_dice_como_arreglarlo(tmp_path):
+    """
+    El aviso de 'verb bajo' mandaba a mirar el server.conf, donde no está el
+    problema ni la solución. Con 'verb 3' puesto, el log se ve lleno y la culpa
+    parece del panel.
+    """
+    log = tmp_path / "openvpn.log"
+    log.write_text(SIN_FECHA, encoding="utf-8")
+
+    eventos, avisos = ev.leer_eventos(_Cfg(str(log)))
+
+    assert eventos, "los sucesos tienen que salir igual"
+    assert avisos and "suppress-timestamps" in avisos[0]
+
+
+def test_un_log_con_fechas_no_da_ese_aviso(tmp_path):
+    log = tmp_path / "openvpn.log"
+    log.write_text(CONEXION_OK, encoding="utf-8")
+
+    _, avisos = ev.leer_eventos(_Cfg(str(log)))
+
+    assert not any("suppress-timestamps" in a for a in avisos)
+
+
+def test_la_vista_de_sesiones_no_miente_con_un_log_sin_fechas(como_admin, cfg):
+    """
+    Sin fecha la sesión se empareja pero no tiene duración. Decir «no consta su
+    entrada» sería falso: consta, lo que falta es el cuándo.
+    """
+    with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
+        f.write(SIN_FECHA)
+
+    texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=sesiones").text
+
+    assert "alfa2" in texto
+    assert "sin fecha en el log" in texto
+    assert "no consta su entrada" not in texto

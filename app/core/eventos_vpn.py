@@ -28,8 +28,16 @@ _FECHA = r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
 # 2026-07-29 23:26:49 daniel/192.168.1.50:54321 SIGTERM[soft,...] received
 # 2026-07-29 23:26:49 192.168.1.50:54321 VERIFY OK: depth=0, CN=daniel
 # 2026-07-29 23:26:49 Initialization Sequence Completed
+#
+# La fecha es OPCIONAL, y no por tolerancia: la unidad que Debian empaqueta
+# arranca OpenVPN con '--suppress-timestamps', así que en una instalación de
+# paquete NINGUNA línea la lleva. Exigirla dejaba el log entero fuera —cero
+# sucesos con el archivo lleno de conexiones— y el server.conf no puede
+# desactivar esa bandera. Sin fecha se pierde el cuándo, no el qué: el resto
+# de la línea es idéntico, así que el suceso se reconoce igual y quien lea
+# 'ts' se encuentra una cadena vacía, no un None que reviente más adelante.
 _LINEA = re.compile(
-    r'^(?P<ts>' + _FECHA + r')\s+'
+    r'^(?:(?P<ts>' + _FECHA + r')\s+)?'
     r'(?:(?:(?P<cn>[^\s/]+)/)?(?P<ip>\d{1,3}(?:\.\d{1,3}){3}):(?P<puerto>\d+)\s+)?'
     r'(?P<msg>.*)$'
 )
@@ -163,7 +171,7 @@ def parse_eventos(lineas):
             cn = sesiones.get(clave)
 
         eventos.append({
-            "ts": m.group("ts"),
+            "ts": m.group("ts") or "",
             "tipo": tipo,
             "cn": cn or "",
             "ip": ip or "",
@@ -219,6 +227,20 @@ def leer_eventos(cfg, limite=None):
             "Hay log pero ningún suceso reconocible. Suele ser un 'verb' "
             "demasiado bajo en el server.conf: con 'verb 3' se registran las "
             "conexiones y los rechazos."
+        )
+
+    # Los sucesos salen igual sin fecha, pero todo lo que dependa del cuándo
+    # —las duraciones de la vista de sesiones— se queda sin poder calcularse.
+    # Se dice aquí, con el arreglo puesto: el server.conf no tiene manera de
+    # desactivar la bandera, así que buscarlo allí es perder la tarde.
+    if eventos and not any(e["ts"] for e in eventos):
+        avisos.append(
+            "El log no fecha sus líneas, así que no se puede decir cuánto "
+            "duró cada sesión. Lo causa el '--suppress-timestamps' con el que "
+            "la unidad de OpenVPN que empaqueta Debian arranca el servidor; no "
+            "se quita desde el server.conf, hace falta un añadido a la unidad: "
+            "'systemctl edit openvpn-server@server' y repetir su ExecStart sin "
+            "esa bandera."
         )
 
     return (eventos[:limite] if limite else eventos), avisos

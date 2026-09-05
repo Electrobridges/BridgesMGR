@@ -70,12 +70,14 @@
           {% elif s.estado == 'interrumpida' %}
             <span class="etiqueta">sin registro</span>
           {% else %}
-            {{ s.fin }}
+            {{ s.fin or '—' }}
           {% endif %}
         </td>
         <td>
           {% if s.segundos is not none %}
             {{ formatear_duracion(s.segundos) }}
+          {% elif s.estado == 'cerrada' %}
+            <span class="tenue">sin fecha en el log</span>
           {% elif s.estado == 'abierta' %}
             <span class="tenue">en curso</span>
           {% elif s.estado == 'interrumpida' %}
