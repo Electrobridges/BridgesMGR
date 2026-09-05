@@ -467,6 +467,37 @@ FIN
   fi
 fi
 
+# ---------------------------------------------------------- fechas del log
+# Debian arranca OpenVPN con '--suppress-timestamps' desde la unidad que
+# empaqueta, así que NINGUNA línea del log lleva fecha. El panel reconoce los
+# sucesos igual, pero sin el cuándo no puede decir cuánto duró una sesión. Esa
+# bandera no se quita desde el server.conf —no existe la opción contraria—: la
+# única vía es repetir el ExecStart de la unidad sin ella.
+#
+# El ExecStart se copia del que ya hay en vez de escribirlo a mano, para que una
+# actualización de OpenVPN que cambie sus argumentos no se quede congelada aquí
+# con los de hoy. Y el añadido va a la unidad CONCRETA y no a la plantilla
+# porque systemd devuelve %t y %i ya resueltos: escritos en la plantilla
+# valdrían para esta instancia y romperían cualquier otra.
+DROPIN_DIR="/etc/systemd/system/${UNIDAD}.service.d"
+EXEC_ACTUAL=$(systemctl show "$UNIDAD" -p ExecStart --value 2>/dev/null \
+              | sed -n 's/.*argv\[\]=\([^;]*\);.*/\1/p' | sed 's/[[:space:]]*$//')
+
+if [[ $EXEC_ACTUAL == *--suppress-timestamps* ]]; then
+  info "Quitando '--suppress-timestamps': sin fecha no hay duraciones"
+  mkdir -p "$DROPIN_DIR"
+  cat > "$DROPIN_DIR/fechas.conf" <<FIN
+# Escrito por instalar-openvpn.sh. Sin fecha en el log, el panel no puede
+# calcular cuánto duró cada sesión. El ExecStart se repite entero porque
+# systemd exige vaciarlo antes de volver a ponerlo.
+[Service]
+ExecStart=
+ExecStart=${EXEC_ACTUAL// --suppress-timestamps/}
+FIN
+  systemctl daemon-reload
+  verde "El log de OpenVPN llevará fecha"
+fi
+
 # --------------------------------------------------------------------- unidad
 if [[ "$SIN_ARRANCAR" == "1" ]]; then
   amar "Todo escrito, sin arrancar (--sin-arrancar). Cuando quieras:"

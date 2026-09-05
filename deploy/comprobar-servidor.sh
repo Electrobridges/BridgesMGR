@@ -332,6 +332,21 @@ else
     aviso "Sin logrotate: $LOG_REAL crecerá sin límite" \
           "Añádelo con 'copytruncate': rotar renombrando exige avisar a OpenVPN con SIGHUP, que reinicia el túnel y desconecta a todos"
   fi
+
+  # El 'verb 3' puede estar puesto y el log lleno, y aun así no haber fecha en
+  # ninguna línea: la unidad que empaqueta Debian arranca OpenVPN con
+  # '--suppress-timestamps'. Sin fecha el panel reconoce los sucesos pero no
+  # puede restar, así que la columna de duración se queda vacía. Se comprueba
+  # aquí porque en el server.conf no hay ni rastro del motivo.
+  EXEC_UNIDAD=$(systemctl show "$UNIDAD_ACTIVA" -p ExecStart --value 2>/dev/null)
+  if [[ -z $EXEC_UNIDAD ]]; then
+    : # sin unidad en marcha ya se avisó más arriba; no se repite aquí
+  elif [[ $EXEC_UNIDAD == *--suppress-timestamps* ]]; then
+    aviso "La unidad arranca OpenVPN con '--suppress-timestamps'" \
+          "El log sale sin fecha y no se puede decir cuánto duró cada sesión. No se quita desde el server.conf: 'systemctl edit $UNIDAD_ACTIVA' y repite su ExecStart sin esa bandera, precedido de un 'ExecStart=' vacío. O vuelve a pasar deploy/instalar-openvpn.sh, que ya lo hace"
+  else
+    bien "El log lleva marca de tiempo (hay duraciones de sesión)"
+  fi
 fi
 echo
 
