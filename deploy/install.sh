@@ -299,6 +299,22 @@ install -m 0644 deploy/ovpn-web.service /etc/systemd/system/ovpn-web.service
 systemctl daemon-reload
 systemctl enable ovpn-web >/dev/null
 
+# ---------------------------------------------------------- fechas del log
+# Esto es lo único que alcanza a un servidor ya instalado: instalar-openvpn.sh
+# solo pasa al montar la VPN, y el añadido hace falta en cualquier máquina
+# cuyo OpenVPN venga de un paquete. Es idempotente y solo reinicia si de
+# verdad ha cambiado algo, así que una actualización rutinaria no corta a
+# nadie: el corte ocurre una vez por servidor, la primera.
+#
+# -f y no -x: el bit de ejecución no sobrevive a un clon hecho desde Windows.
+if [[ -f "$(dirname "$0")/fechas-log.sh" ]]; then
+  if ! bash "$(dirname "$0")/fechas-log.sh" --reiniciar; then
+    amar "El log de OpenVPN se queda sin fecha: la vista de sesiones no podrá"
+    echo "  dar duraciones. Revísalo con:"
+    echo "      sudo bash deploy/comprobar-servidor.sh"
+  fi
+fi
+
 echo
 verde "Instalación completada."
 echo

@@ -27,6 +27,7 @@ SERVICIO = DEPLOY / "ovpn-web.service"
 INSTALADOR = DEPLOY / "install.sh"
 INSTALA_VPN = DEPLOY / "instalar-openvpn.sh"
 COMPROBADOR = DEPLOY / "comprobar-servidor.sh"
+FECHAS = DEPLOY / "fechas-log.sh"
 EJEMPLO = DEPLOY / "config.ejemplo.yaml"
 
 
@@ -879,3 +880,64 @@ def test_reconstruir_la_ca_sigue_fuera_del_helper():
             "(línea %d). Si acabara siendo el server.conf, sería ejecución de "
             "código como root." % nodo.lineno
         )
+
+
+# ------------------------------------------- las fechas del log de OpenVPN
+
+def test_la_logica_de_las_fechas_vive_en_un_solo_sitio():
+    """
+    La necesitan los dos instaladores. Con una copia en cada uno, arreglar un
+    caso raro en uno dejaría el otro escribiendo un ExecStart distinto, y el
+    síntoma —duraciones que no salen— no señala a ninguno de los dos.
+    """
+    for script in (INSTALADOR, INSTALA_VPN):
+        fuente = _leer(script)
+        assert "fechas-log.sh" in fuente, (
+            "%s tiene que delegar en fechas-log.sh" % script.name
+        )
+        assert "suppress-timestamps" not in fuente, (
+            "%s reimplementa la lógica de las fechas en vez de llamarla"
+            % script.name
+        )
+
+
+def test_el_anadido_copia_el_execstart_en_vez_de_escribirlo():
+    """
+    Escribir a mano el ExecStart lo congela con los argumentos de hoy: el día
+    que OpenVPN cambie los suyos, el añadido los pisa con los viejos y nadie
+    relaciona el fallo con esto.
+    """
+    fuente = _leer(FECHAS)
+
+    assert "systemctl show" in fuente and "ExecStart" in fuente
+    assert "${EXEC_ACTUAL// --suppress-timestamps/}" in fuente
+    assert "/usr/sbin/openvpn --status" not in fuente, (
+        "el ExecStart está escrito a mano en vez de copiado del que ya hay"
+    )
+
+
+def test_el_anadido_va_a_la_unidad_concreta_y_no_a_la_plantilla():
+    """
+    systemd devuelve %t y %i ya resueltos. Escritos en la plantilla '@.service'
+    valdrían para una instancia y romperían las demás.
+    """
+    fuente = _leer(FECHAS)
+
+    assert '"/etc/systemd/system/${UNIDAD_BASE}.service.d"' in fuente
+    assert "@.service.d" not in fuente, (
+        "el añadido se está escribiendo en la plantilla, no en la instancia"
+    )
+
+
+def test_no_se_reinicia_openvpn_sin_pedirlo_y_sin_hacer_falta():
+    """
+    Reiniciar corta a todos los clientes conectados. Solo puede pasar si lo
+    pide quien llama Y había algo que cambiar: si no, una actualización
+    rutinaria del panel echaría a todo el mundo de la VPN cada vez.
+    """
+    fuente = _leer(FECHAS)
+
+    # La salida temprana cuando ya está bien va antes de tocar nada.
+    assert fuente.index("El log de OpenVPN ya lleva fecha") < fuente.index("mkdir -p")
+    # Y el reinicio queda detrás de la bandera.
+    assert fuente.index('"$REINICIAR" != "1"') < fuente.index('systemctl restart')
