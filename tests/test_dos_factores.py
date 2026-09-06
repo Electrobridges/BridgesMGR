@@ -234,6 +234,57 @@ def test_los_codigos_fallidos_gastan_intentos(cliente, cfg, usuarios, como_admin
     assert "intentos" in r.text.lower()
 
 
+# ------------------------------------------------------------------ auditoría
+
+def test_un_login_con_segundo_factor_no_deja_ningun_fallo(cliente, cfg, usuarios,
+                                                          como_admin):
+    """
+    El paso de la contraseña se anotaba con resultado '2fa_pendiente', y la
+    pestaña de fallos recoge todo lo que no sea 'ok': cada login correcto
+    aparecía ahí, en rojo, como si algo hubiera salido mal.
+    """
+    secreto = dar_de_alta(como_admin, cfg, usuarios["admin"])
+    como_admin.post("/logout", headers={"X-CSRF-Token": csrf_de(como_admin, cfg)})
+
+    cliente.post("/login", data={"usuario": usuarios["admin"], "password": PASSWORD_ADMIN})
+    r = cliente.post(
+        "/login/codigo", data={"codigo": codigo_sin_usar(secreto)}, follow_redirects=False
+    )
+
+    assert r.status_code == 303, r.text
+    assert db.contar_auditoria(cfg.seguridad.db_path, "fallos") == 0
+
+
+def test_un_alta_de_segundo_factor_no_deja_ningun_fallo(como_admin, cfg, usuarios):
+    """
+    Empezar el alta y confirmarla son pasos que salen bien. Se anotaban con
+    resultado 'iniciada', que la pestaña de fallos recogía igual que el
+    '2fa_pendiente' del login: el mismo error en otro sitio.
+    """
+    dar_de_alta(como_admin, cfg, usuarios["admin"])
+
+    assert db.contar_auditoria(cfg.seguridad.db_path, "fallos") == 0
+
+
+def test_la_contrasena_acertada_sin_codigo_queda_registrada(cliente, cfg, usuarios,
+                                                            como_admin):
+    """
+    La fila del primer paso no sobra: sin ella no quedaría rastro de que
+    alguien acertó la contraseña y nunca completó el segundo factor, que es
+    justo la señal de que esa contraseña se ha filtrado.
+    """
+    dar_de_alta(como_admin, cfg, usuarios["admin"])
+    como_admin.post("/logout", headers={"X-CSRF-Token": csrf_de(como_admin, cfg)})
+
+    cliente.post("/login", data={"usuario": usuarios["admin"], "password": PASSWORD_ADMIN})
+
+    primer_paso = db.listar_auditoria(cfg.seguridad.db_path)[0]
+    assert primer_paso["accion"] == "login"
+    assert primer_paso["objetivo"] == usuarios["admin"]
+    assert primer_paso["resultado"] == "ok", "la contraseña sí fue correcta"
+    assert "segundo factor" in primer_paso["detalle"]
+
+
 # -------------------------------------------------------------------- política
 
 def test_por_defecto_no_se_exige_a_nadie(app, cfg, usuarios):

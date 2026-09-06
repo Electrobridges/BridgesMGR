@@ -89,8 +89,15 @@ def procesar_login(
     if registro["totp_activado"]:
         respuesta = render(request, "login_totp.html", {"error": None, "usuario": usuario})
         iniciar_pendiente(request, respuesta, registro)
+        # El resultado es 'ok' porque describe el paso que acaba de terminar
+        # —la contraseña— y no el login entero, que aún no ha pasado. Con un
+        # 'pendiente' aquí, cada login correcto acababa en la pestaña de
+        # fallos, que selecciona por resultado != 'ok'. La fila se queda porque
+        # una así SIN la de después es el rastro de una contraseña acertada que
+        # nunca completó el segundo factor.
         db.registrar(
-            c.seguridad.db_path, usuario, "login", usuario, "2fa_pendiente",
+            c.seguridad.db_path, usuario, "login", usuario, "ok",
+            detalle="contraseña correcta, falta el segundo factor",
             ip=ip_cliente(request),
         )
         return respuesta

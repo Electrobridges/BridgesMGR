@@ -180,7 +180,10 @@
         <td>{{ e.accion }}</td>
         <td>{{ e.objetivo or '—' }}</td>
         <td>
-          <span class="etiqueta etiqueta-{{ 'ok' if e.resultado == 'ok' else 'mal' }}">{{ e.resultado }}</span>
+          {# Quién es un fallo lo decide db.es_fallo, el mismo criterio que usa el
+             filtro: si la plantilla lo decidiera por su cuenta, los dos podrían
+             discrepar y una fila saldría en rojo fuera de la pestaña de fallos. #}
+          <span class="etiqueta etiqueta-{{ 'mal' if es_fallo(e.resultado) else 'ok' }}">{{ e.resultado }}</span>
         </td>
         <td class="tenue">{{ e.ip or '—' }}</td>
         <td class="tenue">{{ e.detalle or '' }}</td>

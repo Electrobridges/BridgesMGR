@@ -87,6 +87,31 @@ def test_filtro_de_fallos(historial):
     assert db.listar_auditoria(historial, filtro="fallos")[0]["resultado"] == "error"
 
 
+@pytest.mark.parametrize("resultado", ["2fa_pendiente", "iniciada", "descartada"])
+def test_los_estados_a_medias_heredados_no_cuentan_como_fallo(historial, resultado):
+    """
+    Las instalaciones que ya existen guardan estos valores en `resultado`, de
+    cuando los pasos a medias se anotaban ahí. La auditoría no se reescribe,
+    así que es el filtro el que tiene que dejarlos fuera: nunca fueron fallos.
+    """
+    db.registrar(historial, usuario="danieladm", accion="login",
+                 objetivo="danieladm", resultado=resultado)
+
+    assert db.contar_auditoria(historial, "fallos") == 1
+
+
+def test_la_etiqueta_y_el_filtro_usan_el_mismo_criterio():
+    """
+    La plantilla pinta en rojo lo que dice db.es_fallo, no lo que no sea 'ok':
+    si cada uno lo decidiera por su cuenta, una fila podría salir en rojo y no
+    aparecer en la pestaña de fallos.
+    """
+    for heredado in db.RESULTADOS_NO_FALLO:
+        assert not db.es_fallo(heredado)
+    for malo in ("fallo", "error", "bloqueado", "2fa_fallo", "denegada"):
+        assert db.es_fallo(malo)
+
+
 def test_filtro_de_certificados(historial):
     assert db.contar_auditoria(historial, "certificados") == 60
 

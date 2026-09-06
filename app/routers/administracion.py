@@ -373,7 +373,9 @@ def pagina_auditoria(
         filtro = "todo"
 
     base = "/admin/auditoria?fuente=%s&filtro=%s" % (fuente, filtro)
-    contexto = {"fuente": fuente, "filtro": filtro}
+    # es_fallo viaja al contexto para que la etiqueta de cada fila y el filtro
+    # de fallos respondan lo mismo: son la misma pregunta hecha dos veces.
+    contexto = {"fuente": fuente, "filtro": filtro, "es_fallo": db.es_fallo}
 
     if fuente == "vpn" and filtro == VISTA_SESIONES:
         sesiones_vpn, avisos = eventos_vpn.leer_sesiones(c)

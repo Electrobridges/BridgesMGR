@@ -97,7 +97,11 @@ def iniciar_alta(request: Request, sesion=Depends(verificar_csrf)):
     secreto = totp.generar_secreto()
     db.guardar_secreto_totp(ruta, sesion["usuario"], secreto)
 
-    db.registrar(ruta, sesion["usuario"], "totp_alta", sesion["usuario"], "iniciada",
+    # 'ok' porque generar la clave salió bien; que el alta esté a medias es
+    # estado, no resultado, y va en el detalle. Con 'iniciada' en la columna de
+    # resultado, empezar un alta salía en la pestaña de fallos y en rojo.
+    db.registrar(ruta, sesion["usuario"], "totp_alta", sesion["usuario"], "ok",
+                 detalle="alta iniciada, falta confirmar el código",
                  ip=request.client.host if request.client else None)
 
     return _panel(request, sesion, secreto_pendiente=secreto)
@@ -162,8 +166,8 @@ def descartar_alta(request: Request, sesion=Depends(verificar_csrf)):
 
     # Reutiliza la baja: deja el secreto a nulo, que es justo lo que hace falta.
     db.desactivar_totp(ruta, sesion["usuario"])
-    db.registrar(ruta, sesion["usuario"], "totp_alta", sesion["usuario"], "descartada",
-                 ip=ip)
+    db.registrar(ruta, sesion["usuario"], "totp_alta", sesion["usuario"], "ok",
+                 detalle="alta descartada antes de confirmar", ip=ip)
 
     return _panel(request, sesion, mensaje=(
         "Alta descartada. Borra la cuenta antigua de tu aplicación antes de "

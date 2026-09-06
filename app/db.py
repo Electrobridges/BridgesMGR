@@ -815,12 +815,31 @@ def registrar(ruta, usuario, accion, objetivo=None, resultado="ok", detalle=None
         )
 
 
+# Qué valores de `resultado` NO son un fallo. Aparte de 'ok' están los tres
+# heredados: así se anotaban los pasos a medias —el primer paso del login en
+# dos pasos, un alta de TOTP empezada, un alta descartada— antes de que cada
+# uno guardara su estado en `detalle` y su resultado real en esta columna.
+# Ninguno se escribe ya, pero la auditoría no se reescribe y las instalaciones
+# de antes los conservan: sin esta lista volverían a contarse como fallos.
+RESULTADOS_NO_FALLO = ("ok", "2fa_pendiente", "iniciada", "descartada")
+
+# Literal SQL de esa misma lista. Se arma aquí y no a mano para que el filtro y
+# la etiqueta de la tabla no puedan discrepar; son constantes del módulo, nunca
+# nada que venga de la petición.
+_NO_FALLO_SQL = ", ".join("'%s'" % r for r in RESULTADOS_NO_FALLO)
+
+
+def es_fallo(resultado):
+    """¿Esta entrada de la auditoría cuenta como algo que salió mal?"""
+    return resultado not in RESULTADOS_NO_FALLO
+
+
 # Filtros de la auditoría del panel. Se resuelven en SQL y no en Python: con la
 # tabla creciendo sin límite, traerse todo para descartar la mayor parte
 # convierte cada visita en una lectura completa del historial.
 FILTROS_AUDITORIA = {
     "todo": "",
-    "fallos": "resultado != 'ok'",
+    "fallos": "resultado NOT IN (%s)" % _NO_FALLO_SQL,
     "certificados": ("accion IN ('crear_cliente', 'revocar', 'restaurar',"
                      " 'descargar_ovpn', 'desconectar', 'archivar', 'desarchivar')"),
     "sesiones": "accion IN ('login', 'logout')",
