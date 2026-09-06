@@ -139,10 +139,19 @@ def paginar(total, pagina, por_pagina, base):
     }
 
 
-def auditar(request, sesion, accion, objetivo=None, resultado="ok", detalle=None):
+def auditar(request, sesion, accion, objetivo=None, resultado="ok", detalle=None,
+            actor=None):
+    """
+    Anota la acción en la auditoría y, si la política lo pide, la notifica.
+
+    'actor' nombra a quien actúa cuando todavía no hay sesión —el login, que se
+    audita antes de que exista—. Sin él esas entradas quedarían con la columna
+    de usuario vacía, que es justo la que se mira para saber contra qué cuenta
+    iba el intento.
+    """
     from .. import db, notificar
 
-    usuario = sesion["usuario"] if sesion else None
+    usuario = sesion["usuario"] if sesion else actor
     ip = ip_cliente(request)
     c = cfg(request)
 

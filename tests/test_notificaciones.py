@@ -17,6 +17,8 @@ import pytest
 from app import db, notificar
 from app.core import notificaciones
 
+from .conftest import PASSWORD_ADMIN
+
 
 @pytest.fixture
 def enviados(monkeypatch):
@@ -96,6 +98,39 @@ def test_un_login_correcto_no_avisa_pero_uno_fallido_si():
     """El correcto sería el grueso del ruido; el fallido es la primera señal"""
     assert notificar.categoria_de("login", "ok") is None
     assert notificar.categoria_de("login", "error") == notificar.SEGURIDAD
+
+
+def test_un_intento_de_login_fallido_avisa_de_verdad(cliente, con_destinos,
+                                                    enviados, usuarios):
+    """
+    La política lo decía desde siempre, pero no llegaba a aplicarse: los
+    sucesos de login se anotaban con db.registrar(), que solo escribe en la
+    auditoría, y la política de avisos cuelga de auditar(). El resultado era
+    que la primera señal de que alguien está probando contraseñas no salía por
+    ningún canal.
+    """
+    _todo_encendido(con_destinos)
+
+    cliente.post("/login", data={"usuario": usuarios["admin"], "password": "no-es-esta"})
+    if notificar._cola:
+        notificar._cola.join()
+
+    assert enviados["correo"], "un intento fallido tiene que avisar"
+    asunto, cuerpo = enviados["correo"][0]
+    assert "login" in asunto
+    assert usuarios["admin"] in cuerpo, "el aviso debe decir contra qué cuenta iba"
+
+
+def test_un_login_correcto_no_llena_el_buzon(cliente, con_destinos, enviados, usuarios):
+    """Entrar bien es el grueso del tráfico del panel: sería puro ruido."""
+    _todo_encendido(con_destinos)
+
+    cliente.post("/login", data={"usuario": usuarios["admin"], "password": PASSWORD_ADMIN})
+    if notificar._cola:
+        notificar._cola.join()
+
+    assert enviados["correo"] == []
+    assert enviados["discord"] == []
 
 
 # --------------------------------------------------- no tumbar la acción

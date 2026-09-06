@@ -8,6 +8,10 @@ sesión. Ese permiso no da acceso a nada por sí solo.
 Los códigos fallidos cuentan para el mismo contador de bloqueo que las
 contraseñas: si no, el segundo factor sería un campo de 6 dígitos con
 intentos ilimitados, que se agota en unas horas.
+
+Todo lo que pasa aquí se anota con auditar() y nunca con db.registrar(): la
+política de avisos cuelga de auditar(), y un intento fallido es la primera
+señal de que alguien está probando contraseñas contra el panel.
 """
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -20,7 +24,6 @@ from ..auth import (
     comprobar_bloqueo,
     iniciar_pendiente,
     iniciar_sesion,
-    ip_cliente,
     pendiente_actual,
     sesion_opcional,
     usuario_actual,
@@ -31,10 +34,21 @@ from .comun import auditar, cfg, render
 router = APIRouter()
 
 
+def _auditar_login(request, usuario, resultado, detalle=None):
+    """
+    Un suceso de login, con la cuenta en las dos columnas.
+
+    Todavía no hay sesión —de eso va la petición—, así que la cuenta se pasa
+    como 'actor' para que la auditoría no la deje vacía. Va como objetivo
+    además porque en un login quien actúa y a quién afecta son el mismo.
+    """
+    auditar(request, None, "login", usuario, resultado, detalle, actor=usuario)
+
+
 def _bloqueado(request, usuario, bloqueo):
     """Respuesta común cuando la clave usuario+IP está bloqueada"""
     minutos = max(1, bloqueo // 60)
-    auditar(request, None, "login", usuario, "bloqueado")
+    _auditar_login(request, usuario, "bloqueado")
     return render(
         request,
         "login.html",
@@ -72,9 +86,7 @@ def procesar_login(
             c.seguridad.max_intentos_login,
             c.seguridad.bloqueo_login_min,
         )
-        db.registrar(
-            c.seguridad.db_path, usuario, "login", usuario, "fallo", ip=ip_cliente(request)
-        )
+        _auditar_login(request, usuario, "fallo")
         # Mensaje genérico a propósito: no revelamos si el usuario existe
         return render(
             request,
@@ -95,20 +107,15 @@ def procesar_login(
         # fallos, que selecciona por resultado != 'ok'. La fila se queda porque
         # una así SIN la de después es el rastro de una contraseña acertada que
         # nunca completó el segundo factor.
-        db.registrar(
-            c.seguridad.db_path, usuario, "login", usuario, "ok",
-            detalle="contraseña correcta, falta el segundo factor",
-            ip=ip_cliente(request),
-        )
+        _auditar_login(request, usuario, "ok",
+                       "contraseña correcta, falta el segundo factor")
         return respuesta
 
     db.limpiar_intentos(c.seguridad.db_path, clave)
 
     respuesta = RedirectResponse("/", status_code=303)
     iniciar_sesion(request, respuesta, registro)
-    db.registrar(
-        c.seguridad.db_path, usuario, "login", usuario, "ok", ip=ip_cliente(request)
-    )
+    _auditar_login(request, usuario, "ok")
 
     return respuesta
 
@@ -159,10 +166,7 @@ def verificar_codigo(request: Request, codigo: str = Form(...)):
             c.seguridad.max_intentos_login,
             c.seguridad.bloqueo_login_min,
         )
-        db.registrar(
-            c.seguridad.db_path, usuario, "login", usuario, "2fa_fallo",
-            ip=ip_cliente(request),
-        )
+        _auditar_login(request, usuario, "2fa_fallo")
         return render(
             request,
             "login_totp.html",
@@ -177,10 +181,7 @@ def verificar_codigo(request: Request, codigo: str = Form(...)):
     respuesta = RedirectResponse("/", status_code=303)
     cerrar_pendiente(request, respuesta)
     iniciar_sesion(request, respuesta, pendiente)
-    db.registrar(
-        c.seguridad.db_path, usuario, "login", usuario, "ok", detalle="con segundo factor",
-        ip=ip_cliente(request),
-    )
+    _auditar_login(request, usuario, "ok", "con segundo factor")
 
     return respuesta
 
