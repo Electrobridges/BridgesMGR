@@ -143,6 +143,71 @@
   <p class="tenue">Cargando…</p>
 </div>
 
+<h2>Exportar y limpiar</h2>
+
+<section class="panel-accion">
+  <p>
+    <strong>Exportación</strong>: un ZIP con la auditoría del panel y los
+    perfiles archivados, en CSV, para abrirlos en una hoja de cálculo.
+  </p>
+  <p class="tenue">
+    No lleva contraseñas ni sus hashes, ni secretos de segundo factor, ni
+    tokens, ni certificados: no es un respaldo y no sirve para restaurar. Qué
+    columnas salen está escrito una a una en el código, así que una columna
+    nueva no se cuela sola.
+  </p>
+  {# Enlace normal y no hx-get: HTMX mete la respuesta en el DOM, y aquí lo que
+     se quiere es que el navegador se descargue el archivo. #}
+  <p><a class="boton" href="/configuracion/exportar">Descargar exportación</a></p>
+</section>
+
+<section class="panel-accion">
+  <p>
+    <strong>Limpieza</strong>: la auditoría es la única tabla que crece sin
+    techo. Borrarla destruye el registro de quién hizo qué, así que hay que
+    escribir una palabra para confirmarlo, como al rotar la clave.
+  </p>
+  <p class="tenue">
+    Los perfiles archivados no se tocan: son el historial de quién tuvo
+    certificado y ocupan tres columnas de texto. La propia limpieza queda
+    anotada en la auditoría que sobrevive, con cuántas filas se llevó.
+  </p>
+
+  <form class="formulario"
+        hx-disabled-elt="find button"
+        hx-post="/configuracion/limpieza"
+        hx-target="#avisos"
+        hx-swap="innerHTML">
+    <label class="casilla">
+      <input type="checkbox" name="auditoria" value="1">
+      Borrar auditoría de
+      <select name="dias">
+        {% for valor, texto in opciones_limpieza %}
+        <option value="{{ valor }}">{{ texto }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="casilla">
+      <input type="checkbox" name="sesiones" value="1">
+      Sesiones caducadas, logins a medias y contadores de intentos
+      <span class="tenue">(los bloqueos en vigor se respetan)</span>
+    </label>
+    <label class="casilla">
+      <input type="checkbox" name="compactar" value="1">
+      Compactar el archivo al terminar (<code>VACUUM</code>)
+      <span class="tenue">devuelve al disco el espacio de lo borrado</span>
+    </label>
+
+    <div class="formulario en-fila">
+      <label for="confirmar-limpiar">Escribe <code>LIMPIAR</code> para confirmar</label>
+      <input type="text" id="confirmar-limpiar" name="confirmacion" required
+             autocomplete="off" placeholder="LIMPIAR" pattern="LIMPIAR"
+             title="Escribe LIMPIAR en mayúsculas">
+      <button type="submit" class="boton boton-peligro">Limpiar la base</button>
+    </div>
+  </form>
+</section>
+
 <h2>Notificaciones</h2>
 
 <p class="tenue">

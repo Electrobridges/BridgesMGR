@@ -1,19 +1,22 @@
 """
-Respaldos de la base del panel.
+Respaldos de la base, exportación descargable y limpieza.
 
-La pregunta que hay detrás de todo esto: qué sale del servidor. Un respaldo es
-la base entera —hashes de contraseñas y secretos TOTP— así que se hace solo,
-se rota solo, y no baja por HTTP.
+Las tres cosas tienen la misma pregunta detrás: qué sale del servidor y qué se
+destruye. El respaldo es la base entera y no baja por HTTP; la exportación sí
+baja y por eso no lleva secretos; la limpieza borra y por eso se confirma y se
+anota.
 """
 
 import gzip
+import io
 import os
 import sqlite3
-from datetime import datetime
+import zipfile
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app import db, respaldar
+from app import db, exportacion, respaldar
 from app.core import respaldos
 
 
@@ -284,6 +287,40 @@ def test_el_vigilante_no_repite_el_respaldo_del_dia(cfg):
     assert segundo is None
 
 
+# --------------------------------------------------------------- exportación
+
+def test_la_exportacion_lleva_la_auditoria_y_el_historial(base):
+    db.archivar_cliente(base, "antiguo-becario", "daniel")
+
+    nombre, contenido = exportacion.construir(base)
+
+    with zipfile.ZipFile(io.BytesIO(contenido)) as zf:
+        assert sorted(zf.namelist()) == ["LEEME.txt", "auditoria.csv",
+                                         "clientes-archivados.csv"]
+        auditoria = zf.read("auditoria.csv").decode("utf-8-sig")
+        archivados = zf.read("clientes-archivados.csv").decode("utf-8-sig")
+
+    assert nombre.startswith("ovpn-web-export-") and nombre.endswith(".zip")
+    assert "crear_cliente" in auditoria
+    assert "antiguo-becario" in archivados
+
+
+def test_la_exportacion_no_lleva_ni_un_secreto(base):
+    """
+    Es lo único de la base que baja por HTTP. Si algún día alguien exporta la
+    tabla de usuarios 'para tener la lista', esta prueba se pone roja.
+    """
+    db.guardar_secreto_totp(base, "daniel", "JBSWY3DPEHPK3PXP")
+    hash_password = db.obtener_usuario(base, "daniel")["password_hash"]
+
+    _nombre, contenido = exportacion.construir(base)
+    crudo = contenido.decode("latin-1")
+
+    assert hash_password not in crudo
+    assert "JBSWY3DPEHPK3PXP" not in crudo
+    assert "$argon2" not in crudo
+
+
 # ---------------------------------------------------------- desde el panel
 
 def test_programar_el_respaldo_desde_la_web(como_admin, csrf_admin, cfg):
@@ -373,9 +410,145 @@ def test_la_prueba_de_arriba_ve_las_rutas_de_verdad(app):
     assert "/conexiones" in caminos
 
 
-def test_un_supervisor_no_respalda(como_supervisor, csrf_supervisor):
-    """Los respaldos viven en Configuración, que un supervisor no pisa"""
+def test_la_exportacion_se_descarga_como_zip(como_admin, cfg):
+    respuesta = como_admin.get("/configuracion/exportar")
+
+    assert respuesta.status_code == 200
+    assert respuesta.headers["content-type"] == "application/zip"
+    assert "attachment" in respuesta.headers["content-disposition"]
+
+    entradas = db.listar_auditoria(cfg.seguridad.db_path)
+    assert any(e["accion"] == "exportar_datos" for e in entradas)
+
+
+def _auditar_viejo(ruta, dias, accion="cosa_vieja"):
+    """Una entrada de auditoría fechada hace N días"""
+    ts = (datetime.now(timezone.utc) - timedelta(days=dias)).isoformat()
+    con = sqlite3.connect(ruta)
+    try:
+        con.execute(
+            "INSERT INTO auditoria (ts, usuario, accion, resultado) VALUES (?, ?, ?, 'ok')",
+            (ts, "daniel", accion),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_la_limpieza_sin_confirmar_no_borra_nada(como_admin, csrf_admin, cfg):
+    _auditar_viejo(cfg.seguridad.db_path, 400)
+    antes = db.contar_auditoria(cfg.seguridad.db_path)
+
+    respuesta = como_admin.post(
+        "/configuracion/limpieza",
+        data={"auditoria": "1", "dias": "30", "confirmacion": "limpiar"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 400
+    assert db.contar_auditoria(cfg.seguridad.db_path) == antes
+
+
+def test_la_limpieza_borra_lo_viejo_y_deja_lo_reciente(como_admin, csrf_admin, cfg):
+    ruta = cfg.seguridad.db_path
+    _auditar_viejo(ruta, 400, "muy_vieja")
+    _auditar_viejo(ruta, 10, "reciente")
+
+    respuesta = como_admin.post(
+        "/configuracion/limpieza",
+        data={"auditoria": "1", "dias": "30", "confirmacion": "LIMPIAR"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 200
+    acciones = [e["accion"] for e in db.listar_auditoria(ruta)]
+    assert "muy_vieja" not in acciones
+    assert "reciente" in acciones
+    # La limpieza se anota en la auditoría que sobrevive
+    assert "limpiar_base" in acciones
+
+
+def test_la_limpieza_puede_llevarse_el_historial_entero(como_admin, csrf_admin, cfg):
+    """
+    La opción 'todo': el corte cae en este instante, así que lo único que queda
+    es lo que se registre después. Y lo primero que se registra después es la
+    propia limpieza, que por eso siempre sobrevive.
+    """
+    ruta = cfg.seguridad.db_path
+    _auditar_viejo(ruta, 400, "muy_vieja")
+    _auditar_viejo(ruta, 10, "reciente")
+    _auditar_viejo(ruta, 0, "de_hoy")
+
+    respuesta = como_admin.post(
+        "/configuracion/limpieza",
+        data={"auditoria": "1", "dias": "0", "confirmacion": "LIMPIAR"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 200
+    assert "el historial entero" in respuesta.text
+    assert [e["accion"] for e in db.listar_auditoria(ruta)] == ["limpiar_base"]
+
+
+def test_un_corte_que_no_esta_en_la_lista_no_se_lleva_el_historial(como_admin,
+                                                                   csrf_admin, cfg):
+    """
+    'dias' llega de un formulario. Lo que no esté en la lista cae en el corte
+    más conservador, nunca en 'todo': al revés, un valor raro borraría el
+    historial entero sin que nadie lo hubiera pedido.
+    """
+    ruta = cfg.seguridad.db_path
+    _auditar_viejo(ruta, 10, "reciente")
+
+    respuesta = como_admin.post(
+        "/configuracion/limpieza",
+        data={"auditoria": "1", "dias": "7", "confirmacion": "LIMPIAR"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 200
+    assert "más de 30 días" in respuesta.text
+    assert "reciente" in [e["accion"] for e in db.listar_auditoria(ruta)]
+
+
+def test_la_limpieza_no_levanta_un_bloqueo_en_vigor(como_admin, csrf_admin, cfg):
+    """
+    Borrar los contadores de intentos desbloquearía a quien está bloqueado, que
+    es justo lo que querría un atacante de una 'limpieza'.
+    """
+    ruta = cfg.seguridad.db_path
+    db.registrar_fallo(ruta, "intruso@1.2.3.4", maximo=1, bloqueo_min=15)
+    assert db.esta_bloqueado(ruta, "intruso@1.2.3.4") > 0
+
+    como_admin.post(
+        "/configuracion/limpieza",
+        data={"sesiones": "1", "confirmacion": "LIMPIAR"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert db.esta_bloqueado(ruta, "intruso@1.2.3.4") > 0
+
+
+def test_una_limpieza_sin_nada_marcado_lo_dice(como_admin, csrf_admin):
+    respuesta = como_admin.post(
+        "/configuracion/limpieza",
+        data={"confirmacion": "LIMPIAR"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 400
+    assert "No has marcado nada" in respuesta.text
+
+
+def test_un_supervisor_no_respalda_ni_limpia_ni_exporta(como_supervisor, csrf_supervisor):
+    """Todo esto vive en Configuración, que un supervisor no pisa"""
+    assert como_supervisor.get("/configuracion/exportar").status_code == 403
     assert como_supervisor.post(
         "/configuracion/respaldos/ahora",
+        headers={"X-CSRF-Token": csrf_supervisor},
+    ).status_code == 403
+    assert como_supervisor.post(
+        "/configuracion/limpieza",
+        data={"auditoria": "1", "confirmacion": "LIMPIAR"},
         headers={"X-CSRF-Token": csrf_supervisor},
     ).status_code == 403

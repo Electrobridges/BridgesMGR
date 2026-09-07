@@ -27,6 +27,28 @@ el versionado es [SemVer](https://semver.org/lang/es/).
     el síntoma de que no se está respaldando es que no pasa nada, y eso se
     descubre el día que hace falta la copia.
   - Cómo restaurar uno está en [docs/instalacion.md](docs/instalacion.md).
+- **Exportación descargable de la auditoría.** Un ZIP con `auditoria.csv` y
+  `clientes-archivados.csv` para abrirlos en una hoja de cálculo. Las columnas
+  que salen están nombradas una a una en el código, así que una columna nueva
+  con algo delicado no se cuela sola; hay una prueba que busca hashes y
+  secretos dentro del ZIP.
+- **Limpieza de la base desde el panel.** Auditoría de más de 30/90/180/365
+  días —o **todo el historial, desde el primer registro**—, sesiones e intentos
+  caducados, y `VACUUM` opcional. Se elige con casillas y hay que escribir
+  `LIMPIAR`, como al rotar la clave tls-crypt: borrar auditoría destruye el
+  registro de quién hizo qué.
+  - «Todo» es una opción del desplegable, con su texto propio, para que sea una
+    elección y no un accidente. Un corte que no esté en la lista cae en el más
+    conservador y **nunca** en «todo»: al revés, un valor raro llegado del
+    formulario se llevaría el historial sin que nadie lo hubiera pedido.
+  - Los perfiles archivados no se tocan: son el historial de quién tuvo
+    certificado y ocupan tres columnas de texto.
+  - Los bloqueos de login **en vigor** se respetan aunque se pida limpiar los
+    contadores de intentos; levantarlos es justo lo que querría de una
+    «limpieza» quien está bloqueado.
+  - La propia limpieza queda anotada en la auditoría que sobrevive, con
+    cuántas filas se llevó por delante.
+
 - **La tabla de conexiones dice cuánto lleva dentro cada cliente.** Antes solo
   estaba la fecha de entrada, y saber si alguien llevaba diez minutos o tres
   días obligaba a restar de cabeza en cada fila.

@@ -682,8 +682,11 @@ def borrar_login_pendiente(ruta, token):
 
 
 def purgar_logins_pendientes(ruta):
+    """Quita los permisos a medio autenticar ya caducados. Devuelve cuántos."""
     with conexion(ruta) as con:
-        con.execute("DELETE FROM logins_pendientes WHERE expira <= ?", (_iso(_ahora()),))
+        return con.execute(
+            "DELETE FROM logins_pendientes WHERE expira <= ?", (_iso(_ahora()),)
+        ).rowcount
 
 
 # ------------------------------------------------------------------ sesiones
@@ -759,8 +762,11 @@ def borrar_sesiones_de(ruta, usuario_id):
 
 
 def purgar_sesiones(ruta):
+    """Quita las sesiones caducadas. Devuelve cuántas."""
     with conexion(ruta) as con:
-        con.execute("DELETE FROM sesiones WHERE expira <= ?", (_iso(_ahora()),))
+        return con.execute(
+            "DELETE FROM sesiones WHERE expira <= ?", (_iso(_ahora()),)
+        ).rowcount
 
 
 # ------------------------------------------------------- intentos de acceso
@@ -873,6 +879,70 @@ def listar_auditoria(ruta, limite=200, desplazamiento=0, filtro=None):
             (int(limite), int(desplazamiento)),
         ).fetchall()
     return [dict(f) for f in filas]
+
+
+def volcar_auditoria(ruta):
+    """
+    La auditoría entera, de la entrada más antigua a la más reciente.
+
+    Sin paginar y en orden cronológico porque esto no es para la pantalla, es
+    para la exportación: quien abra el CSV quiere leerlo de arriba abajo, y la
+    vista ya tiene listar_auditoria() para lo suyo.
+    """
+    with conexion(ruta) as con:
+        filas = con.execute("SELECT * FROM auditoria ORDER BY id").fetchall()
+    return [dict(f) for f in filas]
+
+
+def purgar_auditoria(ruta, dias):
+    """
+    Borra las entradas de auditoría con más de N días. Devuelve cuántas.
+
+    Con dias=0 se lleva el historial entero: el corte cae en este mismo
+    instante, así que lo único que queda es lo que se registre a partir de
+    ahora, empezando por la propia limpieza.
+
+    Es la única tabla que crece sin techo, y la única cuya limpieza destruye
+    historial. Por eso nadie la purga solo: hace falta que alguien lo pida y
+    diga el corte, y la purga queda anotada en la auditoría que sobrevive.
+    """
+    corte = _iso(_ahora() - timedelta(days=int(dias)))
+
+    with conexion(ruta) as con:
+        return con.execute("DELETE FROM auditoria WHERE ts < ?", (corte,)).rowcount
+
+
+def purgar_intentos(ruta):
+    """
+    Quita los contadores de intentos de login que ya no bloquean a nadie.
+
+    Los que siguen bloqueados se quedan: borrarlos levantaría el bloqueo, que
+    es justo lo que un atacante querría de una 'limpieza'.
+    """
+    with conexion(ruta) as con:
+        return con.execute(
+            "DELETE FROM intentos WHERE bloqueado_hasta IS NULL OR bloqueado_hasta <= ?",
+            (_iso(_ahora()),),
+        ).rowcount
+
+
+def compactar(ruta):
+    """
+    VACUUM: devuelve al disco el espacio de lo borrado.
+
+    Conexión propia con isolation_level=None porque VACUUM no puede correr
+    dentro de una transacción, y sqlite3 abre una implícita en cuanto ve un
+    DELETE. Devuelve los bytes que ha soltado el archivo.
+    """
+    antes = os.path.getsize(ruta)
+
+    con = sqlite3.connect(ruta, timeout=10, isolation_level=None)
+    try:
+        con.execute("VACUUM")
+    finally:
+        con.close()
+
+    return max(0, antes - os.path.getsize(ruta))
 
 
 # -------------------------------------------------------- perfiles archivados

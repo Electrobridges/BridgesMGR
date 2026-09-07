@@ -9,9 +9,10 @@ from fastapi.responses import Response
 from ..auth import ip_cliente, solo_admin, usuario_actual, verificar_csrf
 from ..core import logs as core_logs
 from ..core.conexiones import obtener_conexiones, resumen_trafico, top_por_trafico
-from .. import db, notificar, respaldar
+from .. import db, exportacion, notificar, respaldar
 from ..core import easyrsa, respaldos
 from ..core.easyrsa import ErrorHelper, estado_servicio, listar_certificados
+from ..core.parsers import format_bytes
 from .comun import auditar, aviso, cfg, error_htmx, render
 
 router = APIRouter()
@@ -121,6 +122,7 @@ def pagina_configuracion(request: Request, sesion=Depends(solo_admin)):
         "respaldo": respaldar.ajustes(c.seguridad.db_path),
         "frecuencias": respaldar.FRECUENCIAS,
         "dir_respaldos": respaldar.directorio(c),
+        "opciones_limpieza": OPCIONES_LIMPIEZA,
     })
 
 
@@ -332,6 +334,27 @@ def guardar_notificaciones(
 # ------------------------------------------------- respaldos y mantenimiento
 
 EVENTO_RESPALDOS = "respaldos-actualizados"
+CONFIRMA_LIMPIAR = "LIMPIAR"
+
+# Cortes que se ofrecen para la purga de auditoría. Lista cerrada y no un campo
+# libre: 'días' llega de un formulario.
+#
+# El 0 es «todo, desde el primer registro», y está en la lista con su propio
+# texto en pantalla justamente para que sea una elección y no un accidente: un
+# 0 escrito a mano en un campo libre pediría lo mismo creyendo pedir otra cosa.
+# Un valor que no esté aquí cae en CORTE_POR_DEFECTO, que es el más
+# conservador de todos y nunca «todo».
+TODO_EL_HISTORIAL = 0
+CORTE_POR_DEFECTO = 30
+
+OPCIONES_LIMPIEZA = (
+    (30, "más de 30 días"),
+    (90, "más de 90 días"),
+    (180, "más de 180 días"),
+    (365, "más de un año"),
+    (TODO_EL_HISTORIAL, "todo, desde el primer registro"),
+)
+DIAS_LIMPIEZA = tuple(d for d, _ in OPCIONES_LIMPIEZA)
 
 
 def _contexto_respaldos(request, errores=None):
@@ -451,3 +474,95 @@ def borrar_respaldo(
 
     auditar(request, sesion, "borrar_respaldo", nombre)
     return aviso(request, "Respaldo borrado: %s" % nombre, refrescar=EVENTO_RESPALDOS)
+
+
+@router.get("/configuracion/exportar")
+def exportar_datos(request: Request, sesion=Depends(solo_admin)):
+    """
+    Descarga un ZIP con la auditoría y los perfiles archivados, en CSV.
+
+    Esto NO es un respaldo y no sirve para restaurar: los respaldos llevan
+    hashes de contraseñas y secretos TOTP, y por eso se quedan en el servidor.
+    Aquí solo sale lo que se puede mirar en una hoja de cálculo. Qué columnas
+    entran está escrito una a una en app/exportacion.py.
+    """
+    c = cfg(request)
+    nombre, contenido = exportacion.construir(c.seguridad.db_path)
+
+    auditar(request, sesion, "exportar_datos", nombre,
+            detalle="%d bytes" % len(contenido))
+
+    return Response(
+        content=contenido,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": 'attachment; filename="%s"' % nombre,
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post("/configuracion/limpieza")
+def limpiar_base(
+    request: Request,
+    auditoria: str = Form(None),
+    dias: int = Form(CORTE_POR_DEFECTO),
+    sesiones: str = Form(None),
+    compactar: str = Form(None),
+    confirmacion: str = Form(""),
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Limpia la base: auditoría antigua, sesiones e intentos caducados, y VACUUM.
+
+    Pide escribir una palabra por lo mismo que la rotación de tls-crypt: borrar
+    auditoría destruye el registro de quién hizo qué, y eso no puede quedar a un
+    clic de distancia. La propia limpieza se anota en la auditoría que queda, y
+    esa entrada dice cuántas filas se llevó por delante.
+
+    Los perfiles archivados no se tocan: son el historial de quién tuvo
+    certificado, y ocupan tres columnas de texto.
+    """
+    c = cfg(request)
+    ruta = c.seguridad.db_path
+
+    if confirmacion.strip() != CONFIRMA_LIMPIAR:
+        return error_htmx(request, "Escribe %s para confirmar. No se ha tocado "
+                                   "nada." % CONFIRMA_LIMPIAR)
+
+    if dias not in DIAS_LIMPIEZA:
+        dias = CORTE_POR_DEFECTO
+
+    if not (auditoria or sesiones or compactar):
+        return error_htmx(request, "No has marcado nada que limpiar.")
+
+    hecho = []
+    detalle = []
+
+    if auditoria:
+        filas = db.purgar_auditoria(ruta, dias)
+        if dias == TODO_EL_HISTORIAL:
+            hecho.append("%d entrada(s) de auditoría, el historial entero" % filas)
+        else:
+            hecho.append("%d entrada(s) de auditoría de más de %d días" % (filas, dias))
+        detalle.append("auditoria=%d corte=%s"
+                       % (filas, "todo" if dias == TODO_EL_HISTORIAL else "%dd" % dias))
+
+    if sesiones:
+        caducadas = db.purgar_sesiones(ruta)
+        pendientes = db.purgar_logins_pendientes(ruta)
+        intentos = db.purgar_intentos(ruta)
+        hecho.append("%d sesión(es) caducadas, %d login(s) a medias y %d contador(es) "
+                     "de intentos" % (caducadas, pendientes, intentos))
+        detalle.append("sesiones=%s pendientes=%s intentos=%s"
+                       % (caducadas, pendientes, intentos))
+
+    if compactar:
+        liberado = db.compactar(ruta)
+        hecho.append("y se han devuelto %s al disco" % format_bytes(liberado))
+        detalle.append("vacuum=%d" % liberado)
+
+    auditar(request, sesion, "limpiar_base", None, detalle=" ".join(detalle))
+
+    return aviso(request, "Limpieza hecha: %s." % "; ".join(hecho))

@@ -55,9 +55,11 @@ ACCIONES = {
     "totp_restablecer": SEGURIDAD,
     "politica_totp_supervisor": SEGURIDAD,
 
-    # Los respaldos que desaparecen o dejan de hacerse. 'crear_respaldo' queda
-    # fuera aposta: es lo único que no resta nada, y avisar de cada copia sería
-    # el correo diario que enseña a ignorar los demás.
+    # Los datos del panel saliendo o desapareciendo. 'crear_respaldo' queda
+    # fuera aposta: es lo único de esta lista que no resta nada, y avisar de
+    # cada copia sería el correo diario que enseña a ignorar los demás.
+    "exportar_datos": SEGURIDAD,
+    "limpiar_base": SEGURIDAD,
     "borrar_respaldo": SEGURIDAD,
     "ajustar_respaldos": SEGURIDAD,
 
@@ -78,9 +80,9 @@ SOLO_SI_FALLA = {"login": SEGURIDAD}
 # Lo que se considera grave y sale en rojo
 GRAVES = {"revocar", "borrar_usuario_panel", "cambiar_rol_panel",
           "totp_restablecer", "designar_superusuario",
-          # Borrar una copia destruye registro: si alguien lo hace sin haberlo
-          # acordado, el aviso tiene que llegar como los demás graves.
-          "borrar_respaldo"}
+          # Destruyen registro o lo sacan del servidor: si alguien lo hace sin
+          # haberlo acordado, el aviso tiene que llegar como los demás graves.
+          "limpiar_base", "borrar_respaldo", "exportar_datos"}
 
 
 def categoria_de(accion, resultado):
