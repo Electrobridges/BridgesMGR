@@ -7,6 +7,8 @@ una misma sesión, y es lo único que permite atar un rechazo con el CN que lo
 provocó. Sin eso, un VERIFY ERROR es una IP suelta.
 """
 
+from datetime import datetime, timedelta
+
 import pytest
 
 from app.core import eventos_vpn as ev
@@ -467,6 +469,51 @@ def test_el_filtro_de_conexiones_deja_fuera_lo_que_no_es_del_cliente(como_admin,
     assert "servidor arrancado" not in texto
 
 
+def test_la_vista_de_sesiones_dice_cuanto_lleva_quien_sigue_dentro(como_admin, cfg):
+    """
+    'en curso' no responde a la pregunta que se hace mirando esa columna. El
+    tiempo desde la entrada sí es un hecho, aunque la sesión no haya terminado.
+    """
+    hace_dos_horas = datetime.now() - timedelta(hours=2, minutes=33)
+    with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
+        f.write(_conecta(hace_dos_horas.strftime(ev.FORMATO_TS),
+                         "daniel", "192.168.1.50", "49711"))
+
+    texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=sesiones").text
+
+    assert "sigue conectado" in texto
+    assert "lleva 2 h 33 min" in texto
+
+
+def test_el_tiempo_en_curso_solo_se_calcula_para_las_abiertas():
+    """
+    La duración de una sesión se mide entre dos líneas del log. Rellenar con el
+    reloj las que ya cerraron, o las que quedaron sin salida registrada, daría
+    un número con pinta de medido que nadie ha medido.
+    """
+    sesiones = ev.anotar_tiempo_en_curso(_ses(
+        _conecta("2026-07-30 10:00:00", "cerrada", "192.168.1.50", "49711")
+        + _desconecta("2026-07-30 12:33:00", "cerrada", "192.168.1.50", "49711")
+        + _conecta("2026-07-30 13:00:00", "abierta", "192.168.1.77", "51001")
+    ), ahora=datetime(2026, 7, 30, 14, 0, 0))
+
+    por_cn = {s["cn"]: s for s in sesiones}
+    assert por_cn["abierta"]["en_curso_segundos"] == 3600
+    assert por_cn["cerrada"]["en_curso_segundos"] is None
+    # Y la duración medida sigue siendo la del log, no la del reloj
+    assert por_cn["cerrada"]["segundos"] == 9180
+
+
+def test_sin_fecha_en_el_log_no_hay_tiempo_en_curso():
+    """Sin entrada fechada no hay resta posible, y no se inventa"""
+    sesiones = ev.anotar_tiempo_en_curso(
+        _ses(SIN_FECHA_ABIERTA), ahora=datetime(2026, 7, 30, 14, 0, 0)
+    )
+
+    assert sesiones[0]["estado"] == ev.ABIERTA
+    assert sesiones[0]["en_curso_segundos"] is None
+
+
 def test_un_filtro_inventado_cae_en_todo(como_admin, log_con_sesiones):
     """La vista sale de la URL, así que cualquiera puede escribir lo que quiera"""
     texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=loquesea").text
@@ -487,6 +534,13 @@ SIN_FECHA = """\
 127.0.0.1:57176 VERIFY OK: depth=0, CN=alfa2
 127.0.0.1:57176 [alfa2] Peer Connection Initiated with [AF_INET]127.0.0.1:57176
 alfa2/127.0.0.1:57176 SIGTERM[soft,remote-exit] received, client-instance exiting
+"""
+
+
+# La misma Debian de paquete, con el cliente todavía dentro
+SIN_FECHA_ABIERTA = """\
+127.0.0.1:57176 VERIFY OK: depth=0, CN=alfa2
+127.0.0.1:57176 [alfa2] Peer Connection Initiated with [AF_INET]127.0.0.1:57176
 """
 
 

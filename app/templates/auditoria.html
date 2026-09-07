@@ -79,7 +79,16 @@
           {% elif s.estado == 'cerrada' %}
             <span class="tenue">sin fecha en el log</span>
           {% elif s.estado == 'abierta' %}
-            <span class="tenue">en curso</span>
+            {# 'lleva' y no una duración a secas: la sesión no ha terminado, así
+               que esto es el tiempo desde que entró hasta ahora, no algo medido
+               entre dos líneas del log. #}
+            <span class="tenue">
+              {%- if s.en_curso_segundos is not none -%}
+                lleva {{ formatear_duracion(s.en_curso_segundos) }}
+              {%- else -%}
+                en curso
+              {%- endif -%}
+            </span>
           {% elif s.estado == 'interrumpida' %}
             <span class="tenue">el servidor arrancó sin que constara la salida</span>
           {% else %}

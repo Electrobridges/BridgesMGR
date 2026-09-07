@@ -325,6 +325,10 @@ def _sesion(evento):
         "inicio": "",
         "fin": "",
         "segundos": None,
+        # Siempre presente aunque nadie lo calcule: la plantilla pregunta por
+        # ella, y una clave ausente en Jinja no es None, es Undefined, que
+        # pasaría la comprobación de 'is not none' y llegaría a formatearse.
+        "en_curso_segundos": None,
         "estado": ABIERTA,
     }
 
@@ -401,6 +405,28 @@ def emparejar_sesiones(eventos):
     return sesiones
 
 
+def anotar_tiempo_en_curso(sesiones, ahora=None):
+    """
+    Dice cuánto lleva dentro cada sesión que aún no ha registrado su salida.
+
+    **No es la duración de la sesión**, y por eso va en una clave aparte: la
+    duración se mide entre dos líneas del log, y aquí una de las dos todavía no
+    existe. Es el tiempo transcurrido desde la entrada, que sí es un hecho.
+
+    Se calcula aquí y no en emparejar_sesiones() para que el emparejado siga
+    dependiendo solo del archivo y se pueda probar sin mirar el reloj.
+    """
+    marca = (ahora or datetime.now()).strftime(FORMATO_TS)
+
+    for s in sesiones:
+        if s["estado"] == ABIERTA:
+            # _segundos ya devuelve None si el log no fecha esa línea o si la
+            # resta sale negativa; no hay nada que añadir aquí.
+            s["en_curso_segundos"] = _segundos(s["inicio"], marca)
+
+    return sesiones
+
+
 def leer_sesiones(cfg, limite=None):
     """
     Punto de entrada único de las sesiones: devuelve (sesiones, avisos).
@@ -410,7 +436,7 @@ def leer_sesiones(cfg, limite=None):
     avisos merece el estado de las cosas.
     """
     eventos, avisos = leer_eventos(cfg)
-    sesiones = emparejar_sesiones(eventos)
+    sesiones = anotar_tiempo_en_curso(emparejar_sesiones(eventos))
 
     if any(s["estado"] == SIN_INICIO for s in sesiones):
         avisos.append(

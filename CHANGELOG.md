@@ -24,6 +24,11 @@ el versionado es [SemVer](https://semver.org/lang/es/).
     sesión de la auditoría.
   - La tabla ya se refrescaba sola cada diez segundos, así que el tiempo sube
     sin tocar nada.
+- **Las sesiones de la VPN que siguen abiertas dicen cuánto llevan.** La columna
+  de duración ponía «en curso», que no responde a la pregunta que se hace quien
+  la mira. Va en una clave aparte de la duración medida y con la palabra
+  «lleva» delante: la sesión no ha terminado, así que es el tiempo desde la
+  entrada, no algo medido entre dos líneas del log.
 
 ### Corregido
 
