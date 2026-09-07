@@ -58,6 +58,13 @@ CRL = "crl"
 # Qué cuenta como fallo al filtrar en pantalla
 FALLOS = {RECHAZO_REVOCADO, RECHAZO_CERTIFICADO, RECHAZO_TLS, RECHAZO_CLAVE}
 
+# Las dos caras del mismo hecho: quién entró y quién salió. El filtro de
+# 'Conexiones' las trata juntas porque seguir a un cliente exige ver el par;
+# enseñando solo las entradas, una sesión ya terminada parece seguir abierta y
+# la salida no aparece en ninguna pestaña salvo 'Todo', mezclada con arranques
+# y recargas de CRL.
+ENTRADAS_Y_SALIDAS = {CONEXION, DESCONEXION}
+
 
 def _clasificar(msg):
     """

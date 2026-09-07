@@ -442,6 +442,31 @@ def test_la_vista_de_sesiones_distingue_a_quien_sigue_dentro(como_admin, log_con
     assert "marta" in texto
 
 
+def test_el_filtro_de_conexiones_incluye_las_desconexiones(como_admin, log_con_sesiones):
+    """
+    Una desconexión es la otra mitad de la conexión que cierra. Enseñando solo
+    las entradas, una sesión terminada parece seguir abierta, y la salida no
+    aparecía en ninguna pestaña salvo 'Todo', mezclada con arranques y CRL.
+    """
+    texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=conexiones").text
+
+    assert "conexión establecida" in texto
+    assert "desconexión" in texto
+    assert "2026-07-30 12:33:00" in texto
+
+
+def test_el_filtro_de_conexiones_deja_fuera_lo_que_no_es_del_cliente(como_admin, cfg):
+    """Entradas y salidas, no el resto del log: un arranque no es una conexión"""
+    with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
+        f.write(_conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711"))
+        f.write("2026-07-30 09:00:00 Initialization Sequence Completed\n")
+
+    texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=conexiones").text
+
+    assert "conexión establecida" in texto
+    assert "servidor arrancado" not in texto
+
+
 def test_un_filtro_inventado_cae_en_todo(como_admin, log_con_sesiones):
     """La vista sale de la URL, así que cualquiera puede escribir lo que quiera"""
     texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=loquesea").text

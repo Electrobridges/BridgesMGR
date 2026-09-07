@@ -329,7 +329,9 @@ def politica_totp_supervisor(
 # porque allí son condiciones SQL.
 FILTROS_VPN = {
     "todo": lambda e: True,
-    "conexiones": lambda e: e["tipo"] == eventos_vpn.CONEXION,
+    # Entradas y salidas juntas: una desconexión es parte de la conexión que
+    # cierra, no otra cosa. El conjunto vive en core con los tipos de suceso.
+    "conexiones": lambda e: e["tipo"] in eventos_vpn.ENTRADAS_Y_SALIDAS,
     "fallos": lambda e: e["fallo"],
 }
 

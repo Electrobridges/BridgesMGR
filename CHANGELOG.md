@@ -27,6 +27,11 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **El filtro «Conexiones» de la auditoría de VPN se dejaba fuera las
+  desconexiones.** Solo listaba las entradas, así que una sesión ya terminada
+  parecía seguir abierta, y la salida no aparecía en ninguna pestaña salvo
+  «Todo», mezclada con arranques del servidor y recargas de la CRL. Una
+  desconexión es la otra mitad del mismo hecho y ahora salen juntas.
 - **La CI se rompía sola cada vez que FastAPI publicaba una versión.** El
   trabajo que comprueba el lock lo regeneraba y lo comparaba, pero sin fijar
   una fecha de corte: `uv pip compile` resolvía a lo más nuevo que hubiera en
