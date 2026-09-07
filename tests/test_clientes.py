@@ -6,6 +6,8 @@ por dobles. Lo que se comprueba aquí es el comportamiento del panel: validació
 auditoría y traducción de errores.
 """
 
+import time
+
 import pytest
 
 from app import db
@@ -210,6 +212,43 @@ def test_conexiones_informan_el_fallo_del_management(como_admin):
     assert respuesta.status_code == 200
     assert "Management interface" in respuesta.text
     assert "no disponible" in respuesta.text
+
+
+def _escribir_status(cfg, *lineas):
+    """Un archivo de status v3 de mentira, para no necesitar OpenVPN"""
+    with open(cfg.openvpn.status_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lineas + ("END",)))
+
+
+def test_la_tabla_de_conexiones_dice_cuanto_lleva_conectado(como_admin, cfg):
+    """
+    La fecha sola obliga a restar de cabeza. Se muestra además el tiempo, que
+    es lo que se mira para saber si alguien lleva ahí desde ayer.
+    """
+    hace_2h33 = int(time.time()) - 9180
+    _escribir_status(cfg,
+        "CLIENT_LIST\tdaniel\t192.168.1.50:54321\t10.8.0.2\t\t184320\t942080"
+        "\t2025-12-26 21:40:11\t%d" % hace_2h33)
+
+    respuesta = como_admin.get("/conexiones/tabla")
+
+    assert "Tiempo conectado" in respuesta.text
+    assert "2 h 33 min" in respuesta.text
+
+
+def test_un_status_sin_fecha_reconocible_no_finge_un_tiempo(como_admin, cfg):
+    """
+    Sin hora de conexión no se inventa una duración: se pone un guion que dice
+    a qué se debe, en vez de dejar la celda vacía como si el cliente acabara
+    de entrar.
+    """
+    _escribir_status(cfg,
+        "CLIENT_LIST\tdaniel\t192.168.1.50:54321\t10.8.0.2\t\t184320\t942080\tayer")
+
+    respuesta = como_admin.get("/conexiones/tabla")
+
+    assert "daniel" in respuesta.text
+    assert "formato reconocible" in respuesta.text
 
 
 # ------------------------------------- contraseña del certificado de cliente

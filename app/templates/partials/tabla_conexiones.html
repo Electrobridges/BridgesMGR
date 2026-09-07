@@ -16,6 +16,7 @@
       <th>Descarga</th>
       <th>Subida</th>
       <th>Conectado desde</th>
+      <th>Tiempo conectado</th>
       {% if puede_desconectar %}<th>Acciones</th>{% endif %}
     </tr>
   </thead>
@@ -28,6 +29,17 @@
       <td class="num">{{ format_bytes(c.bytes_recv) }}</td>
       <td class="num">{{ format_bytes(c.bytes_sent) }}</td>
       <td class="tenue">{{ c.connected_since }}</td>
+      {# Se recalcula en cada refresco de la tabla, así que sube solo. Cuando
+         no hay dato se dice por qué: un guion a secas parece una conexión rara,
+         y lo que pasa es que el status no fecha esa línea. #}
+      <td class="num">
+        {%- if c.connected_seconds is not none -%}
+          {{ formatear_duracion(c.connected_seconds) }}
+        {%- else -%}
+          <span class="tenue"
+                title="El status no da la hora de conexión en un formato reconocible">&mdash;</span>
+        {%- endif -%}
+      </td>
       {% if puede_desconectar %}
       <td>
         <button class="boton boton-peligro pequeno"

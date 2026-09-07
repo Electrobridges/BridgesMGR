@@ -7,6 +7,24 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Añadido
+
+- **La tabla de conexiones dice cuánto lleva dentro cada cliente.** Antes solo
+  estaba la fecha de entrada, y saber si alguien llevaba diez minutos o tres
+  días obligaba a restar de cabeza en cada fila.
+  - El dato sale de la columna `Connected Since (time_t)` del status v3, que es
+    un instante absoluto; solo cuando falta —status v3 antiguos, o el formato
+    v1— se lee la fecha escrita, que es hora local del servidor.
+  - La fecha se interpreta con una tabla de meses propia y no con `strptime`,
+    que mira el locale del proceso: un `LC_TIME` español habría vaciado la
+    columna sin decir por qué.
+  - **Si no hay hora de conexión no se inventa una duración**: la celda pone un
+    guion que explica la causa. Una diferencia negativa —al servidor le
+    cambiaron la hora— tampoco se muestra, mismo criterio que las duraciones de
+    sesión de la auditoría.
+  - La tabla ya se refrescaba sola cada diez segundos, así que el tiempo sube
+    sin tocar nada.
+
 ### Corregido
 
 - **La CI se rompía sola cada vez que FastAPI publicaba una versión.** El
