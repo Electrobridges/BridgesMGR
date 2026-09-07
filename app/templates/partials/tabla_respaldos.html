@@ -1,0 +1,51 @@
+{% for e in errores_respaldo %}
+<div class="aviso aviso-error">{{ e }}</div>
+{% endfor %}
+
+<p class="tenue">
+  {% if respaldo.ultimo %}
+  Último respaldo automático anotado: <code>{{ respaldo.ultimo[:19] | replace('T', ' ') }}</code> UTC.
+  {% else %}
+  Todavía no se ha anotado ningún respaldo automático.
+  {% endif %}
+</p>
+
+{% if copias %}
+<div class="tabla-scroll">
+<table class="tabla">
+  <thead>
+    <tr>
+      <th>Archivo</th>
+      <th>Tamaño</th>
+      <th>Creado</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in copias %}
+    <tr>
+      <td class="destacado">{{ r.nombre }}</td>
+      <td class="num">{{ format_bytes(r.bytes) }}</td>
+      <td class="tenue">{{ r.creado.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      <td>
+        {# No hay botón de descarga a propósito: un respaldo es la base entera,
+           con los hashes de las contraseñas y los secretos de segundo factor.
+           Se recoge por SSH del directorio de arriba. #}
+        <button class="boton boton-peligro pequeno"
+                hx-disabled-elt="this"
+                hx-post="/configuracion/respaldos/borrar"
+                hx-vals='{"nombre": {{ r.nombre | tojson }}}'
+                hx-target="#avisos"
+                hx-swap="innerHTML"
+                hx-confirm="¿Borrar {{ r.nombre }}? No se puede deshacer.">
+          Borrar
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% elif not errores_respaldo %}
+<p class="tenue">No hay ninguna copia todavía.</p>
+{% endif %}

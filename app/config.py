@@ -89,6 +89,11 @@ class SeguridadCfg:
     helper: str = "/usr/local/sbin/ovpn-web-helper"
     usar_sudo: bool = True
     db_path: str = "/var/lib/ovpn-web/ovpn-web.db"
+    # Vacío = junto a la base, en <dir de db_path>/respaldos. Va en el YAML y
+    # no en la tabla `ajustes` a propósito: el panel no puede escribir este
+    # archivo, así que quien entre en la web no puede mandar copias enteras de
+    # la base a una ruta de su elección.
+    respaldos_dir: str = ""
     duracion_sesion_min: int = 60
     max_intentos_login: int = 5
     bloqueo_login_min: int = 15

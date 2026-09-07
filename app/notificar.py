@@ -55,6 +55,12 @@ ACCIONES = {
     "totp_restablecer": SEGURIDAD,
     "politica_totp_supervisor": SEGURIDAD,
 
+    # Los respaldos que desaparecen o dejan de hacerse. 'crear_respaldo' queda
+    # fuera aposta: es lo único que no resta nada, y avisar de cada copia sería
+    # el correo diario que enseña a ignorar los demás.
+    "borrar_respaldo": SEGURIDAD,
+    "ajustar_respaldos": SEGURIDAD,
+
     # Certificados: cambia quién puede entrar en la VPN
     "crear_cliente": CERTIFICADOS,
     "revocar": CERTIFICADOS,
@@ -71,7 +77,10 @@ SOLO_SI_FALLA = {"login": SEGURIDAD}
 
 # Lo que se considera grave y sale en rojo
 GRAVES = {"revocar", "borrar_usuario_panel", "cambiar_rol_panel",
-          "totp_restablecer", "designar_superusuario"}
+          "totp_restablecer", "designar_superusuario",
+          # Borrar una copia destruye registro: si alguien lo hace sin haberlo
+          # acordado, el aviso tiene que llegar como los demás graves.
+          "borrar_respaldo"}
 
 
 def categoria_de(accion, resultado):

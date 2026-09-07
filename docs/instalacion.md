@@ -264,6 +264,52 @@ sudo systemctl restart ovpn-web
 Se conservan la base de datos (`/var/lib/ovpn-web/`), la configuración y el
 certificado TLS.
 
+## Respaldos de la base
+
+El panel copia su base a `/var/lib/ovpn-web/respaldos/` con la API de respaldo
+de SQLite, así que la copia es consistente aunque haya gente usando el panel.
+El horario se programa en **Configuración → Respaldos de la base**: cada día o
+cada semana, a la hora que elijas, conservando las N últimas. Lo comprueba el
+vigilante cada cinco minutos, y si el panel estuvo parado a esa hora respalda
+en cuanto vuelve.
+
+**Los respaldos no se descargan desde la web, y no es un olvido.** Un respaldo
+es la base entera: los hashes de todas las contraseñas y los secretos de
+segundo factor. Vale tanto como el original, así que se queda en el servidor y
+se recoge por SSH:
+
+```bash
+sudo cp /var/lib/ovpn-web/respaldos/ovpn-web-20260907-030000.db.gz /tmp/
+sudo chown $USER /tmp/ovpn-web-*.db.gz
+# y desde tu máquina:
+scp servidor:/tmp/ovpn-web-20260907-030000.db.gz .
+```
+
+Para mirar la auditoría fuera del servidor está **Configuración → Exportar**,
+que baja un ZIP con la auditoría y los perfiles archivados en CSV y **sin
+ningún secreto**.
+
+### Restaurar
+
+```bash
+sudo systemctl stop ovpn-web
+sudo cp /var/lib/ovpn-web/ovpn-web.db /var/lib/ovpn-web/ovpn-web.db.antes-de-restaurar
+sudo sh -c 'gunzip -c /var/lib/ovpn-web/respaldos/ovpn-web-20260907-030000.db.gz \
+    > /var/lib/ovpn-web/ovpn-web.db'
+sudo chown ovpnweb:ovpnweb /var/lib/ovpn-web/ovpn-web.db
+sudo chmod 0600 /var/lib/ovpn-web/ovpn-web.db
+sudo systemctl start ovpn-web
+```
+
+El `chown` no es opcional: el panel corre como `ovpnweb` y una base propiedad
+de root no la puede ni abrir. Restaurar devuelve también las **cuentas y las
+contraseñas** a como estaban ese día; las sesiones abiertas desde entonces
+dejan de valer, que es lo correcto.
+
+Lo que un respaldo **no** guarda: la PKI (`/etc/openvpn/easy-rsa`), la
+configuración (`/etc/ovpn-web/config.yaml`) ni los certificados. Eso es de
+root y el panel no lo alcanza; respáldalo aparte.
+
 ## Desinstalar
 
 ```bash

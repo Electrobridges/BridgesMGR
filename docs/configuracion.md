@@ -56,6 +56,7 @@ Datos con los que se arma el `.ovpn` que se descarga desde el panel.
 | `helper` | `/usr/local/sbin/ovpn-web-helper` | Ruta del helper privilegiado. Debe coincidir **exactamente** con la de `/etc/sudoers.d/ovpnweb` |
 | `usar_sudo` | `true` | Invocar el helper por sudo. Solo se pone en `false` para pruebas fuera del servidor |
 | `db_path` | `/var/lib/ovpn-web/ovpn-web.db` | SQLite con cuentas, sesiones y auditoría |
+| `respaldos_dir` | *(vacío)* | Dónde se guardan las copias de la base. Vacío = `<dir de db_path>/respaldos`. Va aquí y no en el panel para que quien lo comprometa no pueda mandar copias de la base a una ruta suya; si lo cambias, añade la ruta al `ReadWritePaths` de la unidad |
 | `duracion_sesion_min` | `60` | Minutos de validez de una sesión |
 | `max_intentos_login` | `5` | Intentos fallidos antes de bloquear |
 | `bloqueo_login_min` | `15` | Minutos de bloqueo. Se cuenta por usuario **+ IP**, para que un tercero no pueda dejar fuera al admin |

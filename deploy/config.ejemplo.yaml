@@ -87,6 +87,13 @@ seguridad:
   helper: "/usr/local/sbin/ovpn-web-helper"
   usar_sudo: true
   db_path: "/var/lib/ovpn-web/ovpn-web.db"
+  # Dónde van las copias de la base. Vacío = junto a ella, en
+  # /var/lib/ovpn-web/respaldos. Se configura aquí y no desde el panel porque
+  # este archivo es root:ovpnweb 0640: el panel lo lee y no lo escribe, así que
+  # quien lo comprometa no puede mandar copias enteras de la base a una ruta
+  # suya. Si lo cambias, la nueva ruta tiene que estar en el ReadWritePaths de
+  # la unidad de systemd; fuera de ahí ProtectSystem=strict no deja escribir.
+  respaldos_dir: ""
   duracion_sesion_min: 60
   max_intentos_login: 5
   bloqueo_login_min: 15

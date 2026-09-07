@@ -4,11 +4,13 @@ from typing import List
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 
+from fastapi.responses import Response
+
 from ..auth import ip_cliente, solo_admin, usuario_actual, verificar_csrf
 from ..core import logs as core_logs
 from ..core.conexiones import obtener_conexiones, resumen_trafico, top_por_trafico
-from .. import db, notificar
-from ..core import easyrsa
+from .. import db, notificar, respaldar
+from ..core import easyrsa, respaldos
 from ..core.easyrsa import ErrorHelper, estado_servicio, listar_certificados
 from .comun import auditar, aviso, cfg, error_htmx, render
 
@@ -116,6 +118,9 @@ def pagina_configuracion(request: Request, sesion=Depends(solo_admin)):
         "servicio": servicio,
         "tamano_log": core_logs.tamano_log(c.openvpn.log_path),
         "notif": _estado_notificaciones(c),
+        "respaldo": respaldar.ajustes(c.seguridad.db_path),
+        "frecuencias": respaldar.FRECUENCIAS,
+        "dir_respaldos": respaldar.directorio(c),
     })
 
 
@@ -322,3 +327,127 @@ def guardar_notificaciones(
 
     return aviso(request, mensaje,
                  tipo="aviso" if fallos_aviso else "ok")
+
+
+# ------------------------------------------------- respaldos y mantenimiento
+
+EVENTO_RESPALDOS = "respaldos-actualizados"
+
+
+def _contexto_respaldos(request, errores=None):
+    c = cfg(request)
+    directorio = respaldar.directorio(c)
+    errores = list(errores or [])
+    copias = []
+
+    try:
+        copias = respaldos.listar(directorio)
+    except respaldos.ErrorRespaldo as e:
+        errores.append(str(e))
+
+    return {
+        "copias": copias,
+        "dir_respaldos": directorio,
+        "respaldo": respaldar.ajustes(c.seguridad.db_path),
+        "errores_respaldo": errores,
+    }
+
+
+@router.get("/configuracion/respaldos/tabla")
+def tabla_respaldos(request: Request, sesion=Depends(solo_admin)):
+    """Fragmento con las copias que hay ahora mismo en el disco"""
+    return render(request, "partials/tabla_respaldos.html",
+                  _contexto_respaldos(request))
+
+
+@router.post("/configuracion/respaldos")
+def guardar_respaldos(
+    request: Request,
+    frecuencia: str = Form(respaldar.DESACTIVADO),
+    hora: str = Form(respaldar.HORA_POR_DEFECTO),
+    conservar: str = Form(""),
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Programa el respaldo automático.
+
+    El horario vive en la tabla `ajustes` y no en config.yaml porque el panel no
+    puede escribir ese archivo. El **directorio** sí está en el YAML, y no se
+    toca desde aquí: si se pudiera elegir, quien entrara en el panel podría
+    mandar copias enteras de la base a una ruta suya.
+    """
+    c = cfg(request)
+    puesto = respaldar.guardar_ajustes(c.seguridad.db_path, frecuencia, hora, conservar)
+
+    auditar(request, sesion, "ajustar_respaldos", None,
+            detalle="frecuencia=%s hora=%s conservar=%d"
+                    % (puesto["frecuencia"], puesto["hora"], puesto["conservar"]))
+
+    if puesto["frecuencia"] == respaldar.DESACTIVADO:
+        mensaje = ("Respaldo automático desactivado. No se hará ninguna copia "
+                   "nueva hasta que lo vuelvas a programar.")
+    else:
+        mensaje = ("Respaldo %s a las %s, conservando %d copias en %s."
+                   % (respaldar.FRECUENCIAS[puesto["frecuencia"]].lower(),
+                      puesto["hora"], puesto["conservar"], respaldar.directorio(c)))
+
+    return aviso(request, mensaje, refrescar=EVENTO_RESPALDOS)
+
+
+@router.post("/configuracion/respaldos/ahora")
+def respaldar_ahora(
+    request: Request,
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """Copia la base en el momento, sin esperar a la hora programada"""
+    c = cfg(request)
+
+    try:
+        nombre, borrados = respaldar.ejecutar(c)
+    except respaldos.ErrorRespaldo as e:
+        auditar(request, sesion, "crear_respaldo", None, "error", str(e))
+        return error_htmx(request, "No se pudo respaldar: %s" % e,
+                          refrescar=EVENTO_RESPALDOS)
+
+    auditar(request, sesion, "crear_respaldo", nombre,
+            detalle="rotados=%s" % (",".join(borrados) or "ninguno"))
+
+    mensaje = "Respaldo creado: %s (en %s)." % (nombre, respaldar.directorio(c))
+    if borrados:
+        mensaje += (" Se han rotado %d copia(s) antigua(s)." % len(borrados))
+    mensaje += " No se descarga desde aquí: lleva los hashes y los secretos TOTP."
+
+    return aviso(request, mensaje, refrescar=EVENTO_RESPALDOS)
+
+
+@router.post("/configuracion/respaldos/borrar")
+def borrar_respaldo(
+    request: Request,
+    nombre: str = Form(""),
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Borra una copia concreta.
+
+    El nombre llega del formulario, así que core/respaldos lo valida contra la
+    forma exacta que genera antes de tocar el disco: un '../..' saldría del
+    directorio sin que os.path.join se queje.
+    """
+    c = cfg(request)
+
+    try:
+        habia = respaldos.borrar(respaldar.directorio(c), nombre)
+    except respaldos.ErrorRespaldo as e:
+        auditar(request, sesion, "borrar_respaldo", nombre, "error", str(e))
+        return error_htmx(request, str(e), refrescar=EVENTO_RESPALDOS)
+
+    if not habia:
+        auditar(request, sesion, "borrar_respaldo", nombre, "error", "no existía")
+        return error_htmx(request, "Ese respaldo ya no estaba: %s" % nombre,
+                          refrescar=EVENTO_RESPALDOS)
+
+    auditar(request, sesion, "borrar_respaldo", nombre)
+    return aviso(request, "Respaldo borrado: %s" % nombre, refrescar=EVENTO_RESPALDOS)

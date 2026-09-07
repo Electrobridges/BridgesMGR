@@ -12,6 +12,10 @@ Corre en un hilo aparte y comprueba cada pocos minutos:
   easyrsa la regenera con 180 días cada vez que se revoca a alguien.
 - **Que el servicio siga en pie.** Solo se avisa al cambiar de estado, no en
   cada vuelta.
+- **Que toque respaldar.** El horario lo pone el administrador desde el panel;
+  aquí solo se mira si ha llegado la hora. Un respaldo correcto no avisa —sería
+  un correo diario que nadie lee—, pero uno que falla sí, y también cuando
+  vuelve a salir bien.
 
 Lo arranca app/servidor.py y no crear_app(): así las pruebas, que construyen la
 aplicación cientos de veces, no levantan un hilo cada vez.
@@ -20,8 +24,8 @@ aplicación cientos de veces, no levantan un hilo cada vez.
 import threading
 from datetime import datetime, timezone
 
-from . import db, notificar
-from .core import easyrsa, salud
+from . import db, notificar, respaldar
+from .core import easyrsa, respaldos, salud
 
 # Cada cuánto se mira. Cinco minutos: lo que vigila cambia en días o de golpe,
 # así que apurar más solo añade ruido y llamadas al helper.
@@ -31,6 +35,7 @@ INTERVALO = 300
 # reiniciar el panel volvería a avisar de lo mismo.
 AJUSTE_CRL = "vigilante_crl_umbral"
 AJUSTE_SERVICIO = "vigilante_servicio"
+AJUSTE_RESPALDO = "vigilante_respaldo"
 
 _hilo = None
 _parar = threading.Event()
@@ -144,8 +149,56 @@ def _revisar_servicio(cfg):
         )
 
 
+def _revisar_respaldo(cfg):
+    """
+    Respalda si ha llegado la hora programada.
+
+    Un respaldo que sale bien no avisa: sería un correo cada madrugada y el
+    ruido acaba enseñando a ignorar los que importan. Lo que sí avisa es el
+    fallo —el disco lleno, el directorio sin permisos— porque el síntoma de un
+    respaldo que no se hace es que no pasa nada, y eso se descubre el día que
+    hace falta la copia. Se avisa una vez por racha, como con el servicio, y se
+    vuelve a avisar cuando se recupera.
+    """
+    ruta_db = cfg.seguridad.db_path
+    anterior = db.obtener_ajuste(ruta_db, AJUSTE_RESPALDO, "")
+
+    try:
+        nombre = respaldar.revisar(cfg)
+    except respaldos.ErrorRespaldo as e:
+        if anterior != "fallo":
+            db.guardar_ajuste(ruta_db, AJUSTE_RESPALDO, "fallo")
+            notificar.avisar(
+                cfg, notificar.SERVICIO,
+                "[%s] El respaldo automático está fallando" % cfg.servidor.host_bind,
+                "\n".join([
+                    "No se pudo respaldar la base del panel.",
+                    "",
+                    "Motivo: %s" % e,
+                    "Destino: %s" % respaldar.directorio(cfg),
+                    "",
+                    "Mientras siga así no hay copias nuevas, y eso solo se nota",
+                    "el día que hace falta una.",
+                ]),
+                grave=True,
+            )
+        return
+
+    if nombre is None:
+        return
+
+    if anterior == "fallo":
+        notificar.avisar(
+            cfg, notificar.SERVICIO,
+            "[%s] El respaldo automático vuelve a funcionar" % cfg.servidor.host_bind,
+            "Se ha creado %s en %s." % (nombre, respaldar.directorio(cfg)),
+        )
+
+    db.guardar_ajuste(ruta_db, AJUSTE_RESPALDO, "ok")
+
+
 def _vuelta(cfg):
-    for revision in (_revisar_crl, _revisar_servicio):
+    for revision in (_revisar_crl, _revisar_servicio, _revisar_respaldo):
         try:
             revision(cfg)
         except Exception:  # noqa: BLE001

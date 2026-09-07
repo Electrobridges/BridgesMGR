@@ -82,6 +82,67 @@
   </form>
 </section>
 
+<h2>Respaldos de la base</h2>
+
+<p class="tenue">
+  Copia de <code>{{ seguridad.db_path }}</code> con la API de respaldo de
+  SQLite —consistente aunque el panel esté en uso— comprimida en
+  <code>{{ dir_respaldos }}</code>. Ese directorio se configura en
+  <code>config.yaml</code>, que el panel no puede escribir: si se pudiera
+  elegir desde aquí, quien entrara podría mandar copias enteras de la base a
+  una ruta suya.
+</p>
+<p class="tenue">
+  <strong>No se descargan desde el panel.</strong> Un respaldo lleva los hashes
+  de todas las contraseñas y los secretos de segundo factor: vale tanto como la
+  base. Se recogen por SSH. Para mirar la auditoría fuera del servidor está la
+  exportación de más abajo.
+</p>
+
+<section class="panel-accion">
+  <form class="formulario en-fila"
+        hx-disabled-elt="find button"
+        hx-post="/configuracion/respaldos"
+        hx-target="#avisos"
+        hx-swap="innerHTML">
+    <label for="respaldo-frecuencia">Cada cuánto</label>
+    <select id="respaldo-frecuencia" name="frecuencia">
+      {% for clave, texto in frecuencias.items() %}
+      <option value="{{ clave }}" {{ 'selected' if respaldo.frecuencia == clave }}>{{ texto }}</option>
+      {% endfor %}
+    </select>
+    <label for="respaldo-hora">A qué hora</label>
+    <input type="time" id="respaldo-hora" name="hora" value="{{ respaldo.hora }}">
+    <label for="respaldo-conservar">Copias a conservar</label>
+    <input type="number" id="respaldo-conservar" name="conservar" min="1" max="90"
+           value="{{ respaldo.conservar }}">
+    <button type="submit" class="boton boton-principal">Guardar programación</button>
+  </form>
+
+  {# La hora es la del reloj del servidor. El vigilante mira cada cinco minutos,
+     así que el respaldo cae dentro de ese rato, no al segundo. #}
+  <p class="tenue">
+    Hora del servidor. Lo comprueba el vigilante cada cinco minutos; si el panel
+    estuvo parado a esa hora, respalda en cuanto vuelve. Las copias que sobren
+    de las que se conservan se borran solas, empezando por la más antigua.
+  </p>
+
+  <button class="boton"
+          hx-disabled-elt="this"
+          hx-post="/configuracion/respaldos/ahora"
+          hx-target="#avisos"
+          hx-swap="innerHTML">
+    Respaldar ahora
+  </button>
+</section>
+
+<div id="tabla-respaldos"
+     hx-get="/configuracion/respaldos/tabla"
+     hx-trigger="load, respaldos-actualizados from:body"
+     hx-swap="innerHTML">
+  <p class="tenue">Cargando…</p>
+</div>
+
 <h2>Notificaciones</h2>
 
 <p class="tenue">

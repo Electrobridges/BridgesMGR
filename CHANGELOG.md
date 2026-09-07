@@ -9,6 +9,24 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ### Añadido
 
+- **Respaldos de la base, programables desde el panel.** Copia a
+  `/var/lib/ovpn-web/respaldos/` con la API de respaldo de SQLite —consistente
+  con el panel en uso, que un `cp` no garantiza— comprimida y con los mismos
+  permisos que la base.
+  - Se programa en *Configuración*: cada día o cada semana, a la hora elegida,
+    conservando las N últimas. Lo dispara el vigilante en su vuelta de cinco
+    minutos, y si el panel estuvo parado a esa hora respalda al volver en vez
+    de saltarse el día.
+  - **No se descargan desde la web.** Un respaldo es la base entera: hashes de
+    contraseñas y secretos TOTP. Se quedan en el servidor y se recogen por SSH;
+    hay una prueba que se pone roja si alguien añade la ruta de descarga.
+  - El **directorio** va en `config.yaml`, que el panel no puede escribir: si
+    se pudiera elegir desde la web, quien entrara podría mandar copias de la
+    base a una ruta suya. El **horario** va en la tabla `ajustes`, que sí.
+  - Un respaldo que falla sí avisa, una vez por racha y otra al recuperarse:
+    el síntoma de que no se está respaldando es que no pasa nada, y eso se
+    descubre el día que hace falta la copia.
+  - Cómo restaurar uno está en [docs/instalacion.md](docs/instalacion.md).
 - **La tabla de conexiones dice cuánto lleva dentro cada cliente.** Antes solo
   estaba la fecha de entrada, y saber si alguien llevaba diez minutos o tres
   días obligaba a restar de cabeza en cada fila.
