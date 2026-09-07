@@ -64,6 +64,12 @@ el versionado es [SemVer](https://semver.org/lang/es/).
     sesión de la auditoría.
   - La tabla ya se refrescaba sola cada diez segundos, así que el tiempo sube
     sin tocar nada.
+- **Botón de actualizar en Conexiones**, con el icono de recarga. La tabla ya
+  se refresca sola cada diez segundos, pero quien acaba de desconectar a
+  alguien quiere verlo ahora. Pide el mismo fragmento que el intervalo, así que
+  no hay dos caminos distintos hasta la tabla, y el icono gira mientras dura la
+  petición: sin novedades la tabla vuelve idéntica y nada diría que el clic
+  hizo algo.
 - **Las sesiones de la VPN que siguen abiertas dicen cuánto llevan.** La columna
   de duración ponía «en curso», que no responde a la pregunta que se hace quien
   la mira. Va en una clave aparte de la duración medida y con la palabra

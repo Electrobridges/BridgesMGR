@@ -214,6 +214,19 @@ def test_conexiones_informan_el_fallo_del_management(como_admin):
     assert "no disponible" in respuesta.text
 
 
+def test_conexiones_tiene_boton_para_actualizar_ya(como_admin):
+    """
+    El refresco automático tarda hasta diez segundos, y quien acaba de
+    desconectar a alguien quiere verlo ahora. Pide el mismo fragmento que el
+    intervalo: un camino distinto podría enseñar otra cosa.
+    """
+    respuesta = como_admin.get("/conexiones")
+
+    assert 'hx-get="/conexiones/tabla"' in respuesta.text
+    assert 'hx-target="#tabla-conexiones"' in respuesta.text
+    assert "Actualizar" in respuesta.text
+
+
 def _escribir_status(cfg, *lineas):
     """Un archivo de status v3 de mentira, para no necesitar OpenVPN"""
     with open(cfg.openvpn.status_path, "w", encoding="utf-8") as f:

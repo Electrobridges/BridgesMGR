@@ -234,6 +234,16 @@ a { color: var(--cian); }
 .etiqueta-ok { color: var(--verde); background: rgba(91, 241, 168, .12); }
 .etiqueta-mal { color: var(--rojo); background: rgba(248, 113, 113, .12); }
 
+/* --------------------------------------------------- barra sobre una tabla */
+/* El texto a la izquierda y las acciones a la derecha, en una fila que se
+   parte sola cuando no caben. Mismo reparto que .paginacion. */
+.barra-tabla {
+  display: flex; flex-wrap: wrap; gap: .5rem 1rem;
+  align-items: center; justify-content: space-between;
+  margin: .9rem 0;
+}
+.barra-tabla p { margin: 0; }
+
 /* ------------------------------------------------------------------- botones */
 .boton {
   display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
@@ -246,6 +256,15 @@ a { color: var(--cian); }
 .boton:hover { background: var(--fondo-3); color: var(--texto); border-color: var(--linea-fuerte); }
 .boton:focus-visible { box-shadow: var(--foco); border-radius: var(--radio-boton); }
 .boton.pequeno { padding: .35rem .75rem; font-size: .8rem; }
+
+/* Un icono dentro de un botón hereda su color y crece con su texto. */
+.icono { width: 1.15em; height: 1.15em; flex-shrink: 0; }
+
+/* HTMX marca con .htmx-request el elemento que tiene una petición en vuelo.
+   El icono gira mientras dura porque, si no hay novedades, la tabla vuelve
+   idéntica y nada diría que el clic hizo algo. */
+.boton.htmx-request .icono { animation: girar .8s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
 
 /* Cian sobre navy tinta: 8,76:1. */
 .boton-principal {
@@ -624,4 +643,8 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
    sigue siendo visible — se quita la animación, no la señal. */
 @media (prefers-reduced-motion: reduce) {
   .nav a::after, .boton { transition: none; }
+
+  /* El icono deja de girar, pero el botón sigue deshabilitándose mientras
+     carga: se quita el movimiento, no la señal. */
+  .boton.htmx-request .icono { animation: none; }
 }
