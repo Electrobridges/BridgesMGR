@@ -476,6 +476,11 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
    la separaría del visor. Sin este aire las dos cosas se leen como una. */
 .filtros-log { margin-bottom: 1.1rem; }
 
+/* Marca de la última lectura, pegada al visor: con el log quieto es lo único
+   del fragmento que cambia al pulsar «Actualizar», así que tiene que verse
+   junto a lo que acaba de refrescar y no perdida en la página. */
+.linea-actualizado { margin: 0 0 .4rem; font-size: .85rem; }
+
 .log {
   max-height: 65vh; overflow: auto;
   padding: .85rem 1rem; margin: 0;

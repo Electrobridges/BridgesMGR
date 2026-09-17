@@ -1,3 +1,11 @@
+{# La línea de «Actualizado» va fuera del if y antes que nada: con el log
+   quieto, el resto del fragmento sale idéntico a la vez anterior, y sin una
+   marca que cambie no hay forma de ver que el botón hizo su trabajo. #}
+<p class="tenue linea-actualizado">
+  Actualizado {{ momento.strftime('%H:%M:%S') }}
+  {%- if entradas %} · {{ entradas|length }} línea{{ '' if entradas|length == 1 else 's' }}{% endif %}
+</p>
+
 {% if error %}
 <div class="aviso aviso-error">{{ error }}</div>
 {% elif entradas %}

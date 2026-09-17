@@ -1,5 +1,6 @@
 """Dashboard, conexiones activas, logs y configuración"""
 
+from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, Form, Query, Request
@@ -63,6 +64,16 @@ def tabla_conexiones(request: Request, sesion=Depends(usuario_actual)):
     })
 
 
+def _ahora():
+    """
+    El reloj del visor de logs, aparte para que las pruebas lo puedan fijar.
+
+    Hora local del servidor y no UTC a propósito: se compara de un vistazo con
+    las marcas que el propio OpenVPN escribe en cada línea del log.
+    """
+    return datetime.now()
+
+
 @router.get("/logs")
 def pagina_logs(request: Request, sesion=Depends(usuario_actual)):
     return render(request, "logs.html", {"ruta": cfg(request).openvpn.log_path})
@@ -91,7 +102,14 @@ def contenido_logs(
     except OSError as e:
         error = "Error leyendo el log: %s" % e
 
-    return render(request, "partials/log.html", {"entradas": entradas, "error": error})
+    # El momento va SIEMPRE, también con error o sin líneas: es la única
+    # señal de que la lectura ocurrió. Sin él, pulsar «Actualizar» con un log
+    # que no ha crecido devuelve un fragmento idéntico y el botón parece roto.
+    return render(request, "partials/log.html", {
+        "entradas": entradas,
+        "error": error,
+        "momento": _ahora(),
+    })
 
 
 @router.get("/configuracion")

@@ -25,7 +25,10 @@
   <label for="filtro">Filtrar</label>
   <input type="text" id="filtro" name="filtro" placeholder="texto a buscar" maxlength="120">
 
-  <button type="submit" class="boton">Actualizar</button>
+  {# hx-disabled-elt como en el botón de la tabla de conexiones: evita que
+     una segunda pulsación encole otra lectura del log encima de la que
+     ya va en camino. #}
+  <button type="submit" class="boton" hx-disabled-elt="this">Actualizar</button>
 </form>
 
 <div id="contenido-log">
