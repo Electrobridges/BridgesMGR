@@ -7,8 +7,15 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.3.0] — 2026-09-18
+
 ### Añadido
 
+- **La versión se ve.** En el pie de todas las páginas del panel (solo con
+  sesión: a la página de entrada no se le cuenta), en `python -m app.cli
+  --version`, y el instalador la imprime al terminar leyéndola de lo que acaba
+  de copiar. Hasta ahora saber qué versión corría un servidor obligaba a
+  comparar los hashes del árbol instalado contra la historia de git.
 - **Respaldos de la base, programables desde el panel.** Copia a
   `/var/lib/ovpn-web/respaldos/` con la API de respaldo de SQLite —consistente
   con el panel en uso, que un `cp` no garantiza— comprimida y con los mismos
@@ -99,6 +106,57 @@ el versionado es [SemVer](https://semver.org/lang/es/).
     formato de salida cambia entre versiones.
   - Una CI que falla por motivos ajenos al cambio enseña a ignorarla, y el día
     que falle por algo de verdad nadie la mirará.
+- **El visor de logs abría por las líneas más viejas y el botón «Actualizar»
+  parecía roto.** Enseña las últimas N líneas en un bloque con scroll que
+  arrancaba arriba: las nuevas entraban por abajo, fuera de la vista, así que
+  aunque el log creciera lo que se tenía delante no cambiaba. Y con el log
+  quieto la respuesta era idéntica a la anterior, sin ninguna señal de que la
+  lectura hubiera ocurrido. Se dio por averiado dos veces; el servidor
+  respondía 200 a cada pulsación.
+  - El visor abre ahora por el final, en lo más reciente.
+  - El fragmento dice siempre a qué hora se leyó el log y cuántas líneas
+    trae, y esa marca destella en cada lectura: es lo único que separa
+    «actualizado y sigue igual» de «no responde». Sale también cuando el
+    filtro no encuentra nada y cuando la lectura falla.
+  - El botón lleva el mismo icono y giro que el de Conexiones, y se
+    deshabilita mientras pide.
+  - Un salto de línea de más entre líneas doblaba el espaciado: el visor
+    enseñaba la mitad de las que caben.
+- **La auditoría de VPN salía vacía si el log no llevaba fecha.** La unidad
+  que trae el paquete `openvpn` de Debian arranca con `--suppress-timestamps`,
+  y el lector exigía la marca de tiempo como prefijo obligatorio: descartaba
+  la línea entera. En el servidor de pruebas eso dejaba once conexiones en
+  cero sucesos, con la pestaña en blanco y un aviso que mandaba a mirar el
+  `verb`, que era lo único que estaba bien.
+  - La fecha pasa a ser opcional. Sin ella se pierde el cuándo, no el qué: el
+    emparejado de sesiones va por `ip:puerto`, que sigue estando. La duración
+    queda en blanco y se dice por qué, con el arreglo concreto en el aviso.
+  - El instalador deja el log con fecha: escribe un añadido a la unidad de
+    systemd que repite el `ExecStart` sin esa bandera, copiándolo del que hay
+    en vez de congelar los argumentos de hoy. Lo escriben tanto
+    `instalar-openvpn.sh` como `install.sh` —el camino de actualización, que
+    es lo único que alcanza a un servidor en marcha— desde una lógica común en
+    `deploy/fechas-log.sh`.
+  - Reiniciar OpenVPN desconecta a todos, así que solo se reinicia si de verdad
+    había algo que cambiar, una vez por servidor, y se dice a cuántos clientes
+    va a afectar antes de hacerlo.
+- **Los pasos a medias se contaban como fallos en la auditoría.** Tres rutas
+  escribían en `resultado` un estado que aún no había terminado
+  (`2fa_pendiente`, `iniciada`, `descartada`), y el filtro de fallos y la
+  etiqueta de la tabla lo leían como fracaso: cada login correcto con segundo
+  factor acababa en rojo en la pestaña de fallos. Ahora el resultado describe
+  el paso que acaba de terminar y el estado va al detalle. La fila del primer
+  paso se conserva: sin la de después es el único rastro de una contraseña
+  acertada que nunca completó el segundo factor, que es justo la señal de que
+  se ha filtrado. Los valores viejos quedan listados en
+  `db.RESULTADOS_NO_FALLO`, de donde salen ahora el filtro y la etiqueta.
+- **Los intentos de login fallidos no avisaban.** `notificar.py` los tenía en
+  `SOLO_SI_FALLA` desde el principio —un intento fallido es la primera señal
+  de que alguien está probando contraseñas— pero el router los anotaba con
+  `db.registrar()`, que solo escribe en la auditoría, y los avisos cuelgan de
+  `auditar()`. Solo salía el del bloqueo. Ahora todos los sucesos de login
+  pasan por `auditar()`, que acepta un `actor` para que la columna de usuario
+  no quede vacía justo en las entradas donde interesa contra qué cuenta iba.
 
 ### Cambiado
 
@@ -452,6 +510,7 @@ servidor OpenVPN desde el navegador, con el núcleo portado de
   endurecida y certificado TLS autofirmado.
 - 84 pruebas.
 
-[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.2.0...HEAD
+[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.1.0
