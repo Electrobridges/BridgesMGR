@@ -67,7 +67,12 @@ ProtectHome=true
 #
 # Si mueves la PKI (openvpn.easyrsa_path en config.yaml), esta línea tiene que
 # seguirla. Hay una prueba que comprueba que cubre lo que declara el ejemplo.
-ReadWritePaths=/var/lib/ovpn-web /etc/openvpn
+# El '-' delante de /etc/openvpn: si la ruta no existe se ignora, en vez de
+# impedir montar el espacio de nombres y dejar el servicio sin arrancar con
+# un 226/NAMESPACE que no dice por qué. Pasa cuando el panel se instala antes
+# que OpenVPN. Cuando existe —que es siempre en un servidor de verdad— el
+# comportamiento es el mismo: escribible, para la PKI y la CRL.
+ReadWritePaths=/var/lib/ovpn-web -/etc/openvpn
 
 # ProtectProc y PrivateMounts sí se pueden: van por espacio de nombres, no por
 # seccomp, así que no encienden no_new_privs.
