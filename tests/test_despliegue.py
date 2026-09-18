@@ -339,7 +339,10 @@ def test_el_servicio_puede_escribir_en_la_pki():
 
     m = re.search(r"^ReadWritePaths=(.+)$", fuente, re.M)
     assert m, "La unidad no declara ReadWritePaths"
-    escribibles = m.group(1).split()
+    # El '-' delante de una ruta le dice a systemd que la ignore si no existe;
+    # para lo que se comprueba aquí —que la PKI queda escribible cuando está—
+    # la ruta cuenta igual.
+    escribibles = [ruta.lstrip("-") for ruta in m.group(1).split()]
 
     pki = _config_ejemplo()["easyrsa_path"]
     assert any(pki == ruta or pki.startswith(ruta.rstrip("/") + "/") for ruta in escribibles), (
@@ -941,3 +944,32 @@ def test_no_se_reinicia_openvpn_sin_pedirlo_y_sin_hacer_falta():
     assert fuente.index("El log de OpenVPN ya lleva fecha") < fuente.index("mkdir -p")
     # Y el reinicio queda detrás de la bandera.
     assert fuente.index('"$REINICIAR" != "1"') < fuente.index('systemctl restart')
+
+
+def test_el_instalador_reinicia_el_panel_si_ya_corria():
+    """
+    El instalador es también el camino de actualización, y deja el código
+    nuevo en disco con el proceso viejo corriendo. Sin reiniciarlo se cree
+    haber subido de versión sin haberlo hecho: pasó dos veces seguidas en
+    producción y se descubrió mirando ActiveEnterTimestamp.
+
+    Y solo si ya corría: en una instalación nueva no hay cuentas ni la
+    configuración está revisada, así que arrancarlo sería adelantarse.
+    """
+    fuente = _leer(INSTALADOR)
+    reinicio = re.search(r"systemctl restart ovpn-web", fuente)
+    assert reinicio, "install.sh no reinicia el panel"
+
+    # La guarda tiene que estar ANTES del reinicio y mirar el estado real
+    antes = fuente[: reinicio.start()]
+    assert re.search(r"systemctl is-active ovpn-web", antes), (
+        "El reinicio no está condicionado a que el panel ya corriera"
+    )
+
+    # Y un reinicio que deja el servicio caído tiene que decirlo y fallar,
+    # no terminar en verde
+    despues = fuente[reinicio.end():]
+    assert "is-active --quiet ovpn-web" in despues and "exit 1" in despues, (
+        "Tras reiniciar no se comprueba que el panel haya vuelto a arrancar"
+    )
+

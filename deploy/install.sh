@@ -299,6 +299,47 @@ install -m 0644 deploy/ovpn-web.service /etc/systemd/system/ovpn-web.service
 systemctl daemon-reload
 systemctl enable ovpn-web >/dev/null
 
+# Si el panel ya corría, esto es una actualización: el código nuevo está en
+# disco pero el proceso sigue siendo el viejo, y sin reiniciarlo se cree haber
+# subido de versión sin haberlo hecho. Pasó dos veces seguidas en producción
+# y se descubrió mirando ActiveEnterTimestamp. En una instalación nueva no se
+# arranca: la configuración aún no está revisada y no existe ninguna cuenta.
+PANEL_REINICIADO=0
+case "$(systemctl is-active ovpn-web 2>/dev/null || true)" in
+  active|activating|reloading)
+    info "El panel ya corría: reiniciándolo con el código nuevo"
+    systemctl restart ovpn-web
+    PANEL_REINICIADO=1
+    ;;
+  failed)
+    amar "El panel estaba en estado 'failed': se arranca con el código nuevo"
+    systemctl restart ovpn-web
+    PANEL_REINICIADO=1
+    ;;
+esac
+if [[ "$PANEL_REINICIADO" == "1" ]]; then
+  # La unidad es Type=simple: systemd la da por activa en cuanto lanza el
+  # proceso, así que preguntar al instante diría "activo" también de un
+  # código que revienta al importar. Se dejan pasar unos segundos —un fallo de
+  # arranque cae en uno o dos— y luego se comprueba de verdad: un reinicio
+  # que deja el servicio caído tiene que salir en rojo aquí, no en el
+  # navegador media hora después. Con Restart=on-failure el estado entre
+  # intentos es 'activating', que is-active tampoco da por bueno.
+  sleep 4
+  for _ in 1 2 3 4 5 6; do
+    systemctl is-active --quiet ovpn-web && break
+    sleep 1
+  done
+  if systemctl is-active --quiet ovpn-web; then
+    verde "Panel reiniciado y activo"
+  else
+    rojo "El panel no ha vuelto a arrancar tras el reinicio."
+    echo "  Mira por qué con:"
+    echo "      journalctl -u ovpn-web -n 50 --no-pager"
+    exit 1
+  fi
+fi
+
 # ---------------------------------------------------------- fechas del log
 # Esto es lo único que alcanza a un servidor ya instalado: instalar-openvpn.sh
 # solo pasa al montar la VPN, y el añadido hace falta en cualquier máquina
@@ -334,12 +375,20 @@ elif [[ "$CONFIG_NUEVA" == "1" ]]; then
   echo "  openvpn.servicio y cliente_ovpn.remote_host."
   echo
 fi
-echo "Crea el primer administrador:"
-echo "    cd $DESTINO && sudo -u $USUARIO venv/bin/python -m app.cli crear-usuario TU_USUARIO --rol admin"
-echo "    (la primera cuenta es el superusuario de la instalacion)"
-echo
-echo "Arranca el panel:"
-echo "    systemctl start ovpn-web && systemctl status ovpn-web"
+# Solo en una instalación nueva: en una actualización ya hay cuentas y esto
+# era ruido que se leía justo antes del "arranca el panel".
+if [[ "$CONFIG_NUEVA" == "1" ]]; then
+  echo "Crea el primer administrador:"
+  echo "    cd $DESTINO && sudo -u $USUARIO venv/bin/python -m app.cli crear-usuario TU_USUARIO --rol admin"
+  echo "    (la primera cuenta es el superusuario de la instalacion)"
+  echo
+fi
+if [[ "$PANEL_REINICIADO" == "1" ]]; then
+  echo "El panel ya está corriendo con esta versión."
+else
+  echo "Arranca el panel:"
+  echo "    systemctl start ovpn-web && systemctl status ovpn-web"
+fi
 echo
 echo "Y ábrelo en:  https://<IP_DEL_SERVIDOR>:55443"
 
