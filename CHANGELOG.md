@@ -7,6 +7,8 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.3.1] — 2026-09-18
+
 ### Corregido
 
 - **El instalador no reiniciaba el panel al actualizar.** Dejaba el código
@@ -542,7 +544,8 @@ servidor OpenVPN desde el navegador, con el núcleo portado de
   endurecida y certificado TLS autofirmado.
 - 84 pruebas.
 
-[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.3.0...HEAD
+[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.1.0
