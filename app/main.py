@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db
+from . import __version__, db
 from .auth import (
     CSRFInvalido,
     NoAutenticado,
@@ -52,6 +52,7 @@ def crear_app(cfg=None):
     plantillas = Jinja2Templates(directory=os.path.join(BASE, "templates"))
     plantillas.env.globals["format_bytes"] = format_bytes
     plantillas.env.globals["formatear_duracion"] = formatear_duracion
+    plantillas.env.globals["version"] = __version__
     app.state.plantillas = plantillas
 
     app.mount("/static", StaticFiles(directory=os.path.join(BASE, "static")), name="static")

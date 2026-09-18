@@ -20,7 +20,7 @@ import argparse
 import getpass
 import sys
 
-from . import db
+from . import __version__, db
 from .config import cargar_config
 
 
@@ -195,6 +195,7 @@ def main(argv=None):
         description="Administración de cuentas del panel OpenVPN Manager Web",
     )
     parser.add_argument("--config", help="Ruta a config.yaml (por defecto /etc/ovpn-web/config.yaml)")
+    parser.add_argument("--version", action="version", version="BridgesMGR %s" % __version__)
 
     subs = parser.add_subparsers(dest="comando", required=True)
 

@@ -316,7 +316,11 @@ if [[ -f "$(dirname "$0")/fechas-log.sh" ]]; then
 fi
 
 echo
-verde "Instalación completada."
+# La versión sale de app/__init__.py, que es lo que acaba de copiarse: lo que
+# se imprime es lo que hay en disco, no lo que dice el clon. Sin esto, saber
+# qué versión corre un servidor obligaba a comparar hashes contra git.
+VERSION_PANEL=$(sed -n 's/^__version__ = "\([^"]*\)"/\1/p' "$DESTINO/app/__init__.py")
+verde "Instalación completada: BridgesMGR ${VERSION_PANEL:-versión desconocida}."
 echo
 if [[ "$CONFIG_NUEVA" == "1" && "$CONFIG_RELLENA" == "1" ]]; then
   echo "La configuración ya está rellena con lo que se acaba de montar."

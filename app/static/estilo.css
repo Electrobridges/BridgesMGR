@@ -149,6 +149,9 @@ a { color: var(--cian); }
 
 /* ----------------------------------------------------------------- contenido */
 .contenido { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+/* Mismo ancho y margen que el contenido, para que quede alineado con él y no
+   con el borde de la ventana. Pequeño y tenue: se busca, no se lee. */
+.pie-version { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 1.5rem; font-size: .78rem; text-align: right; }
 .tenue { color: var(--tenue); }
 .destacado { font-weight: 600; color: var(--texto); }
 .pequeno { font-size: .85rem; }

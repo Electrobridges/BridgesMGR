@@ -83,6 +83,13 @@
   {% block contenido %}{% endblock %}
 </main>
 
+{# La versión, para saber qué corre sin abrir una terminal: hubo que comparar
+   hashes del árbol instalado contra git para averiguarlo. Solo con sesión: a
+   quien está en la página de entrada no se le cuenta qué versión hay. #}
+{% if sesion %}
+<footer class="pie-version tenue">BridgesMGR {{ version }}</footer>
+{% endif %}
+
 {# Diálogo de confirmación, uno por página y compartido por todas las acciones.
 
    <dialog> nativo y no un div: trae el atrapado del foco, el cierre con
