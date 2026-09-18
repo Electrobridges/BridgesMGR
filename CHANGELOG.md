@@ -7,6 +7,38 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Corregido
+
+- **El instalador no reiniciaba el panel al actualizar.** Dejaba el código
+  nuevo en disco con el proceso viejo corriendo, y se creía haber subido de
+  versión sin haberlo hecho: pasó dos veces seguidas en producción y se
+  descubrió mirando `ActiveEnterTimestamp`. Ahora, si el panel ya corría, lo
+  reinicia y **comprueba que vuelve**: deja pasar unos segundos —la unidad es
+  `Type=simple` y systemd la da por activa en cuanto lanza el proceso, así que
+  preguntar al instante diría «activo» también de un código que revienta al
+  importar— y si no está activo termina en rojo con el `journalctl` que hay
+  que mirar. En una instalación nueva no arranca nada: la configuración aún no
+  está revisada y no hay cuentas. Probado en Debian 13, incluido el caso
+  negativo con un fallo de importación a propósito.
+- **El panel no arrancaba si se instalaba antes que OpenVPN.**
+  `ReadWritePaths=/etc/openvpn` sin la ruta existente impide montar el
+  espacio de nombres del servicio, y systemd lo deja caído con un
+  `226/NAMESPACE` que no dice por qué. Ahora va con el prefijo `-`, que la
+  ignora solo cuando falta; cuando existe —siempre, en un servidor de
+  verdad— la PKI sigue siendo escribible y la prueba que lo vigila sigue
+  pasando.
+
+### Añadido
+
+- **Prueba de humo en la CI.** Un trabajo instala el panel de cero en el
+  runner con `install.sh --sin-openvpn --si` —usuario de sistema, venv con
+  hashes, sudoers, unidad, certificado—, lo arranca, comprueba que `/login`
+  responde 200 y que `--version` dice lo que dice el repo, y vuelve a pasar
+  el instalador encima para comprobar que el proceso se reinicia. Hasta ahora
+  la única red de `deploy/` era probarlo a mano en una VM, y dos
+  actualizaciones de producción se quedaron con el proceso viejo sin que
+  nada lo dijera.
+
 ## [0.3.0] — 2026-09-18
 
 ### Añadido

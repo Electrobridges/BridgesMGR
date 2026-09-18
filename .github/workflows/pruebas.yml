@@ -214,3 +214,62 @@ jobs:
         # Informativo: no bloquea el merge, pero deja el aviso en el registro.
         continue-on-error: true
         run: shellcheck deploy/install.sh deploy/instalar-openvpn.sh deploy/comprobar-servidor.sh deploy/reconstruir-ca.sh
+
+  humo:
+    name: instalación de humo (de cero y actualización)
+    # Lo que 'bash -n' y las invariantes no pueden decir: que install.sh deja
+    # un panel que ARRANCA y RESPONDE en un sistema limpio, y que volver a
+    # pasarlo encima —el camino de actualización— reinicia el proceso. Antes
+    # la única red era probarlo a mano en una VM; dos actualizaciones seguidas
+    # de producción se quedaron con el proceso viejo sin que nada lo dijera.
+    #
+    # El runner es una VM Ubuntu con systemd, así que se instala de verdad:
+    # usuario de sistema, venv con hashes, sudoers, unidad, certificado. Sin
+    # OpenVPN a propósito (--sin-openvpn): se prueba el panel, no la VPN, que
+    # ya se monta en el trabajo 'despliegue'.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar de cero
+        run: sudo bash deploy/install.sh --sin-openvpn --si
+
+      - name: El panel arranca y responde
+        run: |
+          sudo systemctl start ovpn-web
+          IP=$(sudo sed -n 's/^ *host_bind: *"\(.*\)".*/\1/p' /etc/ovpn-web/config.yaml)
+          echo "host_bind: $IP"
+          for _ in $(seq 1 20); do
+            codigo=$(curl -sk -o /dev/null -w '%{http_code}' "https://$IP:55443/login" || true)
+            [ "$codigo" = "200" ] && break
+            sleep 1
+          done
+          echo "/login -> HTTP $codigo"
+          test "$codigo" = "200"
+          sudo systemctl is-active --quiet ovpn-web
+
+      - name: Lo instalado es la versión del repo
+        run: |
+          esperada=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' app/__init__.py)
+          dicha=$(cd /opt/ovpn-web && sudo -u ovpnweb venv/bin/python -m app.cli --version)
+          echo "repo: $esperada · instalado: $dicha"
+          test "$dicha" = "BridgesMGR $esperada"
+
+      - name: Instalar encima reinicia el panel
+        # ActiveEnterTimestampMonotonic sube en cada arranque; si el instalador
+        # no reinicia, se queda igual y esto falla. Es exactamente lo que se
+        # miró a mano en producción para descubrir el fallo.
+        run: |
+          antes=$(systemctl show ovpn-web -p ActiveEnterTimestampMonotonic --value)
+          sudo bash deploy/install.sh --sin-openvpn --si
+          despues=$(systemctl show ovpn-web -p ActiveEnterTimestampMonotonic --value)
+          echo "antes=$antes despues=$despues"
+          test "$despues" -gt "$antes"
+          IP=$(sudo sed -n 's/^ *host_bind: *"\(.*\)".*/\1/p' /etc/ovpn-web/config.yaml)
+          test "$(curl -sk -o /dev/null -w '%{http_code}' "https://$IP:55443/login")" = "200"
+
+      - name: Journal del panel
+        # Solo si algo ha fallado: es lo primero que se pediría a mano.
+        if: failure()
+        run: sudo journalctl -u ovpn-web --no-pager -n 80
