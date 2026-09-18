@@ -478,12 +478,21 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
 
 /* Marca de la última lectura, pegada al visor: con el log quieto es lo único
    del fragmento que cambia al pulsar «Actualizar», así que tiene que verse
-   junto a lo que acaba de refrescar y no perdida en la página. */
-.linea-actualizado { margin: 0 0 .4rem; font-size: .85rem; }
+   junto a lo que acaba de refrescar y no perdida en la página. Un segundo de
+   diferencia en la hora no lo ve nadie: por eso destella, del blanco pleno al
+   tenue, cada vez que el fragmento se vuelve a pintar. */
+.linea-actualizado { margin: 0 0 .4rem; font-size: .85rem; animation: destello 1.4s ease-out; }
+@keyframes destello { from { color: var(--texto); } }
 
 .log {
   max-height: 65vh; overflow: auto;
-  padding: .85rem 1rem; margin: 0;
+  margin: 0;
+  /* column-reverse con un solo hijo: el scroll arranca en el extremo inferior,
+     o sea en las líneas más recientes. Sin esto el visor abría por las más
+     viejas de la ventana y las nuevas entraban fuera de la vista. El relleno
+     va en el <pre> y no aquí: en un contenedor invertido el relleno superior
+     se queda fuera del área que se desplaza y la primera línea toca el borde. */
+  display: flex; flex-direction: column-reverse;
   background: var(--fondo-2);
   /* Línea fuerte y no línea: el visor se apoya en el mismo navy que las
      tarjetas, así que el borde es lo único que dice dónde empieza. */
@@ -496,6 +505,9 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
      texto sobre relleno cian, nunca fondo de zona.) */
   color: var(--texto);
 }
+/* El <pre> hereda todo del contenedor y no aporta nada propio: quien tiene el
+   borde, el scroll y la tipografía es .log. */
+.log pre { margin: 0; padding: .85rem 1rem; font: inherit; white-space: inherit; word-break: inherit; }
 /* Cada nivel lleva prefijo además de color: no se distingue solo por el tono. */
 .log span { display: block; padding-left: 1.6em; text-indent: -1.6em; }
 .log span::before { display: inline-block; width: 1.6em; text-indent: 0; font-weight: 700; }
@@ -652,4 +664,7 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
   /* El icono deja de girar, pero el botón sigue deshabilitándose mientras
      carga: se quita el movimiento, no la señal. */
   .boton.htmx-request .icono { animation: none; }
+
+  /* La hora de «Actualizado» sigue cambiando; solo se quita el destello. */
+  .linea-actualizado { animation: none; }
 }

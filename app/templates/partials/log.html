@@ -1,6 +1,8 @@
 {# La línea de «Actualizado» va fuera del if y antes que nada: con el log
    quieto, el resto del fragmento sale idéntico a la vez anterior, y sin una
-   marca que cambie no hay forma de ver que el botón hizo su trabajo. #}
+   marca que cambie no hay forma de ver que el botón hizo su trabajo. El
+   destello lo pone el CSS: el elemento se recrea en cada intercambio, así que
+   la animación se repite en cada pulsación. #}
 <p class="tenue linea-actualizado">
   Actualizado {{ momento.strftime('%H:%M:%S') }}
   {%- if entradas %} · {{ entradas|length }} línea{{ '' if entradas|length == 1 else 's' }}{% endif %}
@@ -9,8 +11,14 @@
 {% if error %}
 <div class="aviso aviso-error">{{ error }}</div>
 {% elif entradas %}
-<pre class="log">{% for e in entradas %}<span class="log-{{ e.nivel }}">{{ e.texto }}</span>
-{% endfor %}</pre>
+{# El <pre> va dentro de un contenedor con scroll y no es él quien desplaza:
+   .log es column-reverse para que arranque abajo, en lo más reciente. Las
+   líneas nuevas entran por el final, y con el scroll arriba nadie las veía
+   aunque el log creciera. #}
+{# Sin salto de línea entre spans: ya son bloque, y con pre-wrap el salto
+   contaba como una línea vacía más — el visor enseñaba la mitad de las que
+   caben. #}
+<div class="log"><pre>{% for e in entradas %}<span class="log-{{ e.nivel }}">{{ e.texto }}</span>{% endfor %}</pre></div>
 {% else %}
 <p class="tenue">Sin líneas que mostrar con ese filtro.</p>
 {% endif %}

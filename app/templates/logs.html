@@ -8,11 +8,16 @@
 
 {# 'filtros-log' solo aporta la separación con el visor: aquí el formulario va
    suelto en la página, no dentro de una tarjeta que ya lo separaría. #}
+{# hx-disabled-elt e hx-indicator van en el formulario y no en el botón: es
+   el formulario quien emite la petición, y esos atributos se buscan desde el
+   emisor hacia arriba, así que puestos en el botón no hacen nada. #}
 <form class="formulario en-fila filtros-log"
       hx-get="/logs/contenido"
       hx-target="#contenido-log"
       hx-swap="innerHTML"
-      hx-trigger="load, submit, change from:#lineas, keyup changed delay:400ms from:#filtro">
+      hx-trigger="load, submit, change from:#lineas, keyup changed delay:400ms from:#filtro"
+      hx-disabled-elt="find button"
+      hx-indicator="#boton-actualizar-log">
   <label for="lineas">Líneas</label>
   <select id="lineas" name="lineas">
     <option value="100">100</option>
@@ -25,10 +30,13 @@
   <label for="filtro">Filtrar</label>
   <input type="text" id="filtro" name="filtro" placeholder="texto a buscar" maxlength="120">
 
-  {# hx-disabled-elt como en el botón de la tabla de conexiones: evita que
-     una segunda pulsación encole otra lectura del log encima de la que
-     ya va en camino. #}
-  <button type="submit" class="boton" hx-disabled-elt="this">Actualizar</button>
+  {# Mismo icono y mismo giro que el botón de la tabla de conexiones. #}
+  <button type="submit" class="boton" id="boton-actualizar-log">
+    <svg class="icono" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-8 8s3.57 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+    </svg>
+    Actualizar
+  </button>
 </form>
 
 <div id="contenido-log">
