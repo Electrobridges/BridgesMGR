@@ -7,6 +7,39 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Añadido
+
+- **Los sucesos de la VPN se guardan en la base.** La pestaña VPN de la
+  auditoría leía el log de OpenVPN en vivo, y por eso el historial no pasaba de
+  unos días: por un lado se leían solo las últimas 5000 líneas, y por otro
+  logrotate vacía `openvpn.log` cada semana, así que lo visible era el más corto
+  de los dos techos. Ahora un lector incremental —`app/eventos.py`, con el
+  cursor en `ajustes`— se lleva cada cinco minutos lo que se haya escrito desde
+  la última vuelta y lo guarda en la tabla `eventos_vpn`; el log pasa a ser un
+  archivo de paso y el historial dura hasta que alguien lo borre. Ocupa además
+  entre veinte y cincuenta veces menos que guardar el log equivalente, porque
+  solo entran los sucesos y no las líneas de ruido que OpenVPN escribe alrededor
+  de cada conexión, y la pestaña filtra y pagina en SQL en vez de releer el
+  archivo en cada visita.
+
+  Lo escrito entre la última vuelta y una rotación se rescata de
+  `openvpn.log.1`, que sigue siendo texto plano gracias al `delaycompress` que
+  ya ponía el instalador. Cuando no se puede —sin copia, o con dos rotaciones
+  seguidas sin que el panel mirara— el **hueco se anota y se enseña**, en vez de
+  dejar un tramo en blanco que se leería como una semana sin visitas.
+
+  Ingiere el vigilante y solo el vigilante: es el único escritor, porque lo que
+  impide guardar dos veces el mismo suceso es el cursor, y hacerlo al pintar la
+  página duplicaría el tramo con dos visitas simultáneas.
+
+- **Purga de los sucesos de la VPN**, en la limpieza de Configuración y con su
+  propio corte, aparte del de la auditoría: de la VPN entran muchos más y cunde
+  tirarlos antes, mientras que la auditoría del panel es pequeña y conviene
+  guardarla más tiempo. Nada se limpia solo —la retención es manual, como la de
+  la auditoría— y se confirma escribiendo `LIMPIAR`, porque el log del que
+  salieron lo vacía logrotate y lo que se tire aquí no se puede volver a leer de
+  ninguna parte.
+
 ## [0.3.1] — 2026-09-18
 
 ### Corregido

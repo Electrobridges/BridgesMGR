@@ -529,6 +529,55 @@ def test_la_limpieza_no_levanta_un_bloqueo_en_vigor(como_admin, csrf_admin, cfg)
     assert db.esta_bloqueado(ruta, "intruso@1.2.3.4") > 0
 
 
+def test_los_sucesos_de_la_vpn_se_purgan_con_su_propio_corte(como_admin,
+                                                            csrf_admin, cfg):
+    """
+    Dos cortes y no uno compartido: de la VPN entran muchos más sucesos y cunde
+    tirarlos antes, mientras que la auditoría del panel es pequeña y conviene
+    guardarla más tiempo. Un solo desplegable obligaría a elegir el peor de los
+    dos.
+    """
+    ruta = cfg.seguridad.db_path
+    _auditar_viejo(ruta, 400, "muy_vieja")
+    db.guardar_eventos_vpn(ruta, [{
+        "ts": "2026-07-30 10:00:01", "tipo": "conexion", "cn": "daniel",
+        "ip": "192.168.1.50", "puerto": "49711", "detalle": None,
+    }])
+
+    respuesta = como_admin.post(
+        "/configuracion/limpieza",
+        data={"eventos": "1", "dias_eventos": "0", "confirmacion": "LIMPIAR"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 200
+    assert "1 suceso(s) de la VPN" in respuesta.text
+    assert db.contar_eventos_vpn(ruta) == 0
+    # La auditoría no se toca: no se marcó su casilla
+    assert "muy_vieja" in [e["accion"] for e in db.listar_auditoria(ruta)]
+
+
+def test_purgar_los_sucesos_de_la_vpn_tambien_se_confirma(como_admin, csrf_admin, cfg):
+    """
+    El log del que salieron lo vacía logrotate cada semana, así que lo que se
+    tire aquí no se puede volver a leer de ninguna parte.
+    """
+    ruta = cfg.seguridad.db_path
+    db.guardar_eventos_vpn(ruta, [{
+        "ts": "", "tipo": "conexion", "cn": "daniel",
+        "ip": "192.168.1.50", "puerto": "49711", "detalle": None,
+    }])
+
+    respuesta = como_admin.post(
+        "/configuracion/limpieza",
+        data={"eventos": "1", "dias_eventos": "0", "confirmacion": "limpiar"},
+        headers={"X-CSRF-Token": csrf_admin},
+    )
+
+    assert respuesta.status_code == 400
+    assert db.contar_eventos_vpn(ruta) == 1
+
+
 def test_una_limpieza_sin_nada_marcado_lo_dice(como_admin, csrf_admin):
     respuesta = como_admin.post(
         "/configuracion/limpieza",

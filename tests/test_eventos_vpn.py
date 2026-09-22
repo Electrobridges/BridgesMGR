@@ -11,7 +11,19 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from app import eventos
 from app.core import eventos_vpn as ev
+
+
+def _ingiere(cfg):
+    """
+    Deja en la base lo que haya en el log, como haría el vigilante.
+
+    Las pruebas de la página lo llaman a mano porque crear_app() no levanta el
+    vigilante —construir la app cientos de veces no puede arrancar un hilo cada
+    vez—, así que sin esto la pestaña saldría vacía: ya no lee el archivo.
+    """
+    return eventos.ingerir(cfg)
 
 
 CONEXION_OK = """\
@@ -138,68 +150,122 @@ basura sin fecha
 
 # ------------------------------------------------------- lectura del archivo
 
-class _Cfg:
-    def __init__(self, ruta):
-        self.openvpn = type("O", (), {"log_path": ruta})()
-
-
 def test_avisa_si_no_existe_el_log(tmp_path):
-    eventos, avisos = ev.leer_eventos(_Cfg(str(tmp_path / "no-existe.log")))
+    avisos = ev.revisar_archivo(str(tmp_path / "no-existe.log"))
 
-    assert eventos == []
     assert avisos and "log-append" in avisos[0]
 
 
 def test_avisa_si_no_hay_ruta_configurada():
-    eventos, avisos = ev.leer_eventos(_Cfg(""))
-
-    assert eventos == []
-    assert avisos
+    assert ev.revisar_archivo("")
 
 
-def test_avisa_si_hay_log_pero_nada_reconocible(tmp_path):
-    """
-    Un 'verb' bajo no escribe estas líneas, y una tabla vacía se parecería a
-    «no ha entrado nadie». Hay que decir cuál de las dos cosas es.
-    """
-    log = tmp_path / "openvpn.log"
-    log.write_text("2026-07-30 10:00:00 us=1 Cipher negotiation enabled\n", encoding="utf-8")
-
-    eventos, avisos = ev.leer_eventos(_Cfg(str(log)))
-
-    assert eventos == []
-    assert avisos and "verb" in avisos[0]
-
-
-def test_lee_el_final_del_archivo(tmp_path):
+def test_un_log_legible_no_tiene_nada_que_decir(tmp_path):
     log = tmp_path / "openvpn.log"
     log.write_text(CONEXION_OK, encoding="utf-8")
 
-    eventos, avisos = ev.leer_eventos(_Cfg(str(log)))
-
-    assert avisos == []
-    assert eventos[0]["cn"] == "daniel"
+    assert ev.revisar_archivo(str(log)) == []
 
 
-def test_respeta_el_limite(tmp_path):
+# ------------------------------------------------- lectura incremental
+
+def test_la_primera_lectura_se_lo_lleva_todo(tmp_path):
     log = tmp_path / "openvpn.log"
-    log.write_text(CONEXION_OK * 50, encoding="utf-8")
+    log.write_text(CONEXION_OK, encoding="utf-8")
 
-    eventos, _ = ev.leer_eventos(_Cfg(str(log)), limite=7)
+    lineas, cursor, truncado = ev.leer_desde(str(log), 0)
 
-    assert len(eventos) == 7
+    assert len(lineas) == 5
+    assert cursor == log.stat().st_size
+    assert truncado is False
+
+
+def test_la_segunda_lectura_solo_trae_lo_nuevo(tmp_path):
+    """
+    El cursor es lo único que impide guardar dos veces el mismo suceso: no hay
+    deduplicación por contenido, porque un cliente que reconecta en bucle
+    escribe líneas legítimamente idénticas en el mismo segundo.
+    """
+    log = tmp_path / "openvpn.log"
+    log.write_text(CONEXION_OK, encoding="utf-8")
+    _, cursor, _ = ev.leer_desde(str(log), 0)
+
+    with open(log, "a", encoding="utf-8") as f:
+        f.write("2026-07-30 11:00:00 Initialization Sequence Completed\n")
+
+    lineas, cursor_nuevo, _ = ev.leer_desde(str(log), cursor)
+
+    assert len(lineas) == 1
+    assert "Initialization" in lineas[0]
+    assert cursor_nuevo == log.stat().st_size
+
+
+def test_sin_nada_nuevo_no_devuelve_nada_y_el_cursor_no_se_mueve(tmp_path):
+    log = tmp_path / "openvpn.log"
+    log.write_text(CONEXION_OK, encoding="utf-8")
+    _, cursor, _ = ev.leer_desde(str(log), 0)
+
+    lineas, cursor_nuevo, truncado = ev.leer_desde(str(log), cursor)
+
+    assert lineas == []
+    assert cursor_nuevo == cursor
+    assert truncado is False
+
+
+def test_una_linea_a_medio_escribir_se_deja_para_la_vuelta_siguiente(tmp_path):
+    """
+    OpenVPN puede estar escribiendo la línea justo cuando se lee. Entregarla
+    partida daría dos mitades que no son ningún suceso: la de arriba se
+    parsearía sola y la de abajo llegaría descabezada.
+    """
+    log = tmp_path / "openvpn.log"
+    log.write_text(CONEXION_OK + "2026-07-30 11:00:00 192.168.1.50:49711 [dan", encoding="utf-8")
+
+    lineas, cursor, _ = ev.leer_desde(str(log), 0)
+
+    assert len(lineas) == 5
+    assert cursor == len(CONEXION_OK)
+
+    # Y cuando termina de escribirse, sale entera
+    with open(log, "a", encoding="utf-8") as f:
+        f.write("iel] Peer Connection Initiated with [AF_INET]192.168.1.50:49711\n")
+
+    lineas, _, _ = ev.leer_desde(str(log), cursor)
+
+    assert len(lineas) == 1
+    assert ev.parse_eventos(lineas)[0]["cn"] == "daniel"
+
+
+def test_un_log_vaciado_se_detecta_y_se_relee_desde_el_principio(tmp_path):
+    """
+    Es lo que se ve tras un logrotate con 'copytruncate': mismo inodo, tamaño
+    cero. Sin detectarlo, el cursor se quedaría por delante del final del
+    archivo y no volvería a leerse nada nunca más.
+    """
+    log = tmp_path / "openvpn.log"
+    log.write_text(CONEXION_OK, encoding="utf-8")
+    _, cursor, _ = ev.leer_desde(str(log), 0)
+
+    log.write_text("2026-07-30 11:00:00 Initialization Sequence Completed\n",
+                   encoding="utf-8")
+
+    lineas, _, truncado = ev.leer_desde(str(log), cursor)
+
+    assert truncado is True
+    assert len(lineas) == 1
 
 
 # ------------------------------------------------------------ la página
 
 @pytest.fixture
-def log_vpn(cfg):
-    """Escribe un log con una conexión y un rechazo por revocación"""
+def log_vpn(cfg, app):
+    """Un log con una conexión y un rechazo por revocación, ya ingerido"""
     ruta = cfg.openvpn.log_path
     with open(ruta, "w", encoding="utf-8") as f:
         f.write(CONEXION_OK)
         f.write("2026-07-30 10:05:00 192.168.1.77:51001 VERIFY ERROR: depth=0, "
                 "error=certificate revoked: CN=antiguo-becario\n")
+    _ingiere(cfg)
     return ruta
 
 
@@ -403,15 +469,11 @@ def test_formatear_duracion(segundos, esperado):
     assert ev.formatear_duracion(segundos) == esperado
 
 
-def test_leer_sesiones_avisa_si_el_log_no_llega_al_principio(tmp_path):
+def test_avisa_si_el_tramo_emparejado_no_llega_al_principio():
     """Una duración ausente tiene que explicarse, no quedarse en un guion"""
-    log = tmp_path / "openvpn.log"
-    log.write_text(
-        _desconecta("2026-07-30 12:33:00", "daniel", "192.168.1.50", "49711"),
-        encoding="utf-8",
-    )
-
-    sesiones, avisos = ev.leer_sesiones(_Cfg(str(log)))
+    sesiones, avisos = ev.sesiones_de(ev.parse_eventos(
+        _desconecta("2026-07-30 12:33:00", "daniel", "192.168.1.50", "49711").splitlines()
+    ))
 
     assert sesiones[0]["estado"] == ev.SIN_INICIO
     assert avisos and "solo consta la salida" in avisos[0]
@@ -420,12 +482,13 @@ def test_leer_sesiones_avisa_si_el_log_no_llega_al_principio(tmp_path):
 # ------------------------------------------------- la vista de sesiones
 
 @pytest.fixture
-def log_con_sesiones(cfg):
-    """Una sesión cerrada de 2 h 33 min y otra que sigue abierta"""
+def log_con_sesiones(cfg, app):
+    """Una sesión cerrada de 2 h 33 min y otra que sigue abierta, ya ingeridas"""
     with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
         f.write(_conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711"))
         f.write(_desconecta("2026-07-30 12:33:00", "daniel", "192.168.1.50", "49711"))
         f.write(_conecta("2026-07-30 13:00:00", "marta", "192.168.1.77", "51001"))
+    _ingiere(cfg)
     return cfg.openvpn.log_path
 
 
@@ -462,6 +525,7 @@ def test_el_filtro_de_conexiones_deja_fuera_lo_que_no_es_del_cliente(como_admin,
     with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
         f.write(_conecta("2026-07-30 10:00:00", "daniel", "192.168.1.50", "49711"))
         f.write("2026-07-30 09:00:00 Initialization Sequence Completed\n")
+    _ingiere(cfg)
 
     texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=conexiones").text
 
@@ -478,6 +542,7 @@ def test_la_vista_de_sesiones_dice_cuanto_lleva_quien_sigue_dentro(como_admin, c
     with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
         f.write(_conecta(hace_dos_horas.strftime(ev.FORMATO_TS),
                          "daniel", "192.168.1.50", "49711"))
+    _ingiere(cfg)
 
     texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=sesiones").text
 
@@ -572,28 +637,25 @@ def test_una_sesion_sin_fechas_se_empareja_pero_no_inventa_la_duracion():
     assert s["segundos"] is None
 
 
-def test_avisa_de_que_el_log_no_lleva_fecha_y_dice_como_arreglarlo(tmp_path):
+def test_avisa_de_que_el_log_no_lleva_fecha_y_dice_como_arreglarlo(cfg, app):
     """
     El aviso de 'verb bajo' mandaba a mirar el server.conf, donde no está el
     problema ni la solución. Con 'verb 3' puesto, el log se ve lleno y la culpa
     parece del panel.
     """
-    log = tmp_path / "openvpn.log"
-    log.write_text(SIN_FECHA, encoding="utf-8")
+    with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
+        f.write(SIN_FECHA)
 
-    eventos, avisos = ev.leer_eventos(_Cfg(str(log)))
-
-    assert eventos, "los sucesos tienen que salir igual"
-    assert avisos and "suppress-timestamps" in avisos[0]
+    assert _ingiere(cfg) == 2, "los sucesos tienen que guardarse igual"
+    assert any("suppress-timestamps" in a for a in eventos.avisos(cfg))
 
 
-def test_un_log_con_fechas_no_da_ese_aviso(tmp_path):
-    log = tmp_path / "openvpn.log"
-    log.write_text(CONEXION_OK, encoding="utf-8")
+def test_un_log_con_fechas_no_da_ese_aviso(cfg, app):
+    with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
+        f.write(CONEXION_OK)
+    _ingiere(cfg)
 
-    _, avisos = ev.leer_eventos(_Cfg(str(log)))
-
-    assert not any("suppress-timestamps" in a for a in avisos)
+    assert not any("suppress-timestamps" in a for a in eventos.avisos(cfg))
 
 
 def test_la_vista_de_sesiones_no_miente_con_un_log_sin_fechas(como_admin, cfg):
@@ -603,6 +665,7 @@ def test_la_vista_de_sesiones_no_miente_con_un_log_sin_fechas(como_admin, cfg):
     """
     with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
         f.write(SIN_FECHA)
+    _ingiere(cfg)
 
     texto = como_admin.get("/admin/auditoria?fuente=vpn&filtro=sesiones").text
 

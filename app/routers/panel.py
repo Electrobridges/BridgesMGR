@@ -354,8 +354,9 @@ def guardar_notificaciones(
 EVENTO_RESPALDOS = "respaldos-actualizados"
 CONFIRMA_LIMPIAR = "LIMPIAR"
 
-# Cortes que se ofrecen para la purga de auditoría. Lista cerrada y no un campo
-# libre: 'días' llega de un formulario.
+# Cortes que se ofrecen para las dos purgas —la auditoría del panel y los
+# sucesos de la VPN—. Lista cerrada y no un campo libre: 'días' llega de un
+# formulario.
 #
 # El 0 es «todo, desde el primer registro», y está en la lista con su propio
 # texto en pantalla justamente para que sea una elección y no un accidente: un
@@ -525,6 +526,8 @@ def limpiar_base(
     request: Request,
     auditoria: str = Form(None),
     dias: int = Form(CORTE_POR_DEFECTO),
+    eventos: str = Form(None),
+    dias_eventos: int = Form(CORTE_POR_DEFECTO),
     sesiones: str = Form(None),
     compactar: str = Form(None),
     confirmacion: str = Form(""),
@@ -532,12 +535,23 @@ def limpiar_base(
     _csrf=Depends(verificar_csrf),
 ):
     """
-    Limpia la base: auditoría antigua, sesiones e intentos caducados, y VACUUM.
+    Limpia la base: auditoría, sucesos de la VPN, caducados, y VACUUM.
 
     Pide escribir una palabra por lo mismo que la rotación de tls-crypt: borrar
-    auditoría destruye el registro de quién hizo qué, y eso no puede quedar a un
-    clic de distancia. La propia limpieza se anota en la auditoría que queda, y
-    esa entrada dice cuántas filas se llevó por delante.
+    cualquiera de los dos historiales destruye el registro de quién hizo qué, y
+    eso no puede quedar a un clic de distancia. La propia limpieza se anota en
+    la auditoría que queda, y esa entrada dice cuántas filas se llevó por
+    delante.
+
+    Las dos purgas van con su propio corte y no comparten el desplegable: de
+    los sucesos de la VPN entran muchos más y cunde tirarlos antes, mientras
+    que la auditoría del panel es pequeña y conviene guardarla más tiempo.
+    Un solo corte para ambas obligaría a elegir el peor de los dos.
+
+    Los sucesos de la VPN no se recuperan borrándolos por error: el log del que
+    salieron lo vacía logrotate cada semana, así que lo que se tire aquí se
+    tira para siempre. Por eso también se purgan a mano, con su palabra y su
+    corte, y no hay ninguna limpieza automática que corra sola por detrás.
 
     Los perfiles archivados no se tocan: son el historial de quién tuvo
     certificado, y ocupan tres columnas de texto.
@@ -552,7 +566,10 @@ def limpiar_base(
     if dias not in DIAS_LIMPIEZA:
         dias = CORTE_POR_DEFECTO
 
-    if not (auditoria or sesiones or compactar):
+    if dias_eventos not in DIAS_LIMPIEZA:
+        dias_eventos = CORTE_POR_DEFECTO
+
+    if not (auditoria or eventos or sesiones or compactar):
         return error_htmx(request, "No has marcado nada que limpiar.")
 
     hecho = []
@@ -566,6 +583,17 @@ def limpiar_base(
             hecho.append("%d entrada(s) de auditoría de más de %d días" % (filas, dias))
         detalle.append("auditoria=%d corte=%s"
                        % (filas, "todo" if dias == TODO_EL_HISTORIAL else "%dd" % dias))
+
+    if eventos:
+        filas = db.purgar_eventos_vpn(ruta, dias_eventos)
+        if dias_eventos == TODO_EL_HISTORIAL:
+            hecho.append("%d suceso(s) de la VPN, el historial entero" % filas)
+        else:
+            hecho.append("%d suceso(s) de la VPN de más de %d días"
+                         % (filas, dias_eventos))
+        detalle.append("eventos_vpn=%d corte=%s"
+                       % (filas, "todo" if dias_eventos == TODO_EL_HISTORIAL
+                          else "%dd" % dias_eventos))
 
     if sesiones:
         caducadas = db.purgar_sesiones(ruta)

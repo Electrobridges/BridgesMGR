@@ -23,9 +23,11 @@
 {% if fuente == 'vpn' %}
 
   <p class="tenue">
-    Sucesos leídos del log de OpenVPN, del más reciente al más antiguo.
-    <strong>No se guardan en la base del panel</strong>: se leen en vivo, así
-    que el histórico llega hasta donde llegue el archivo.
+    Sucesos del log de OpenVPN, del más reciente al más antiguo. El panel los
+    lee cada pocos minutos y <strong>los guarda en su base</strong>, así que el
+    histórico ya no depende del archivo, que logrotate vacía cada semana.
+    Cuánto se conserva lo decides tú, borrándolos desde
+    <a href="/configuracion">Configuración</a>.
   </p>
 
   {% for a in avisos %}
@@ -47,7 +49,9 @@
   <p class="tenue">
     Cada fila empareja una conexión con su desconexión. Lo que no consta
     <strong>no se rellena</strong>: una sesión sin salida registrada se dice,
-    en vez de darle una duración que nadie ha medido.
+    en vez de darle una duración que nadie ha medido. Se emparejan los sucesos
+    más recientes, no todo el historial: una entrada y su salida pueden estar a
+    días de distancia, así que hay que mirarlos en un tramo seguido.
   </p>
 
   {% if sesiones_vpn %}
@@ -62,7 +66,7 @@
         <td class="destacado">{{ s.cn or '—' }}</td>
         <td class="tenue">{{ s.ip or '—' }}{% if s.puerto %}:{{ s.puerto }}{% endif %}</td>
         {# Guion y no una fecha inventada: si la entrada quedó fuera del tramo
-           de log que se lee, no hay nada que poner. #}
+           de sucesos que se empareja, no hay nada que poner. #}
         <td class="tenue">{{ s.inicio or '—' }}</td>
         <td class="tenue">
           {% if s.estado == 'abierta' %}

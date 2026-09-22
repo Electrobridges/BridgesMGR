@@ -21,6 +21,7 @@ del que hereda el núcleo de parseo y comunicación con OpenVPN.
 - **Usuarios del panel**: jerarquía de tres roles — `superusuario` (la primera cuenta, intocable), `admin` (puede modificar) y `supervisor` (solo consulta).
 - **Verificación en dos pasos**: TOTP con la app del móvil, opcional para quien manda y exigible al rol supervisor.
 - **Auditoría**: quién hizo qué, cuándo y desde qué IP, incluidos los logins fallidos.
+- **Historial de la VPN**: quién entró, cuándo salió, cuánto duró la sesión y quién fue rechazado. Se lee del log de OpenVPN y **se guarda en la base**, así que el historial no se pierde cuando logrotate vacía el archivo; cuánto se conserva lo decides tú.
 
 ![Lista de clientes VPN con sus certificados marcados como válidos, sobre el formulario de crear cliente con la casilla de cifrar la clave privada con contraseña](docs/capturas/clientes.png)
 

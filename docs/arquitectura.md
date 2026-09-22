@@ -48,8 +48,9 @@ quien llama lo guarda para que un código no pueda usarse dos veces.
 desconocidas**, para que una errata no pase inadvertida como valor por defecto.
 
 **`db.py`** — SQLite con usuarios, sesiones, intentos de login, ajustes,
-logins a medio hacer y auditoría. Una conexión por operación: los endpoints
-corren en un pool de hilos y `sqlite3` no comparte conexión entre hilos.
+logins a medio hacer, auditoría y sucesos de la VPN. Una conexión por
+operación: los endpoints corren en un pool de hilos y `sqlite3` no comparte
+conexión entre hilos.
 
 Las columnas y tablas añadidas después de la primera versión están en
 `COLUMNAS_NUEVAS` y las aplica `_migrar()` al arrancar: `CREATE TABLE IF NOT
@@ -81,6 +82,32 @@ cuenta no lo tiene, `usuario_actual` levanta `RequiereAltaTOTP` y todo lleva a
 `/perfil` hasta que se active. Se comprueba en cada petición y no al iniciar
 sesión, para que imponer la política alcance también a las sesiones ya
 abiertas.
+
+**`eventos.py`** — ingesta del log de OpenVPN a la tabla `eventos_vpn`, con un
+lector incremental: guarda un cursor en `ajustes` y en cada vuelta se lleva solo
+lo que se haya escrito desde la última. Antes la pestaña de auditoría leía el
+archivo en vivo, y de ahí salían sus dos techos —la cola que se leía y, por
+encima, logrotate, que lo vacía cada semana—: el historial visible era el más
+corto de los dos, unos días. Ahora el log es un archivo **de paso** y el
+historial vive en la base, donde dura hasta que alguien lo borre a mano y se
+consulta con SQL en vez de releyendo megas de texto en cada visita. Ocupa
+además entre veinte y cincuenta veces menos, porque solo entran los sucesos y
+no las líneas de ruido que OpenVPN escribe alrededor de cada conexión.
+
+Dos detalles que no son evidentes:
+
+- **La rotación es `copytruncate`** —así la instala `deploy/instalar-openvpn.sh`,
+  para no tener que mandar un SIGHUP a OpenVPN y cortarle el túnel a todo el
+  mundo—, o sea que el archivo se vacía sin cambiar de inodo. Eso se detecta
+  porque el tamaño queda por debajo del cursor, y entonces el tramo que faltaba
+  se rescata de la copia que dejó la rotación, `openvpn.log.1`, que gracias a
+  `delaycompress` todavía es texto plano. Cuando no se puede —no hay copia, o
+  hubo dos rotaciones desde la última vuelta— se **anota el hueco** y se enseña
+  en la pestaña para siempre: un registro de accesos con una semana en blanco
+  que nadie anunció se lee como una semana tranquila.
+- **Un solo escritor.** Lo llama el vigilante, que ya corre en su propio hilo.
+  Hacerlo al pintar la página duplicaría el tramo con dos visitas simultáneas,
+  porque lo único que impide repetir es el cursor.
 
 **`qr.py`** — dibuja el QR del alta del segundo factor con `segno`. Está aquí
 y no en `core/` justo para que `core/` siga siendo solo biblioteca estándar:

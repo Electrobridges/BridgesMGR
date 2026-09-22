@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
+from .core import eventos_vpn
+
 # Jerarquía de tres escalones, de más a menos:
 #
 #   superusuario  el primero que se dio de alta. Manda igual que un admin, pero
@@ -161,7 +163,33 @@ CREATE TABLE IF NOT EXISTS clientes_archivados (
     por       TEXT
 );
 
+-- Sucesos de la VPN, ingeridos del log de OpenVPN por app/eventos.py. NO es
+-- la tabla `auditoria`: aquella registra acciones de una cuenta del panel y
+-- esta conexiones de un certificado, que no tiene cuenta.
+--
+-- Dos fechas, y no por duplicar: `ts` es lo que escribió OpenVPN, hora LOCAL
+-- del servidor y sin zona —y vacía si la unidad arranca con
+-- '--suppress-timestamps'—, así que sirve para enseñar y para restar, pero no
+-- para ordenar ni para purgar. `visto` lo pone el panel al ingerir, en ISO UTC
+-- como el resto de la base, y es lo único que siempre está y siempre avanza.
+--
+-- El orden de lectura es `id DESC` y no una fecha: el id sigue el orden del
+-- log, que es el orden real de los hechos, y funciona aunque no haya fechas.
+CREATE TABLE IF NOT EXISTS eventos_vpn (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    visto   TEXT NOT NULL,
+    ts      TEXT NOT NULL DEFAULT '',
+    tipo    TEXT NOT NULL,
+    cn      TEXT NOT NULL DEFAULT '',
+    ip      TEXT NOT NULL DEFAULT '',
+    puerto  TEXT NOT NULL DEFAULT '',
+    detalle TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_auditoria_ts ON auditoria(ts DESC);
+-- Por 'visto' purga la limpieza; por 'tipo' filtran las pestañas de la VPN.
+CREATE INDEX IF NOT EXISTS idx_eventos_vpn_visto ON eventos_vpn(visto);
+CREATE INDEX IF NOT EXISTS idx_eventos_vpn_tipo ON eventos_vpn(tipo);
 CREATE INDEX IF NOT EXISTS idx_sesiones_expira ON sesiones(expira);
 CREATE INDEX IF NOT EXISTS idx_pendientes_expira ON logins_pendientes(expira);
 CREATE INDEX IF NOT EXISTS idx_repartos_cerrado ON repartos(cerrado);
@@ -943,6 +971,123 @@ def compactar(ruta):
         con.close()
 
     return max(0, antes - os.path.getsize(ruta))
+
+
+# ------------------------------------------------------- sucesos de la VPN
+
+def _tipos_sql(tipos):
+    """
+    Condición SQL para un conjunto de tipos de suceso.
+
+    Se construye desde los conjuntos de core.eventos_vpn en vez de escribirla a
+    mano por lo mismo que las plantillas no comparan roles con cadenas: un tipo
+    nuevo se añadiría en un sitio y el otro seguiría filtrando por la lista
+    vieja, sin que nada fallara. Interpolar es seguro porque son constantes del
+    código, nunca texto que llegue por la URL.
+    """
+    return "tipo IN (%s)" % ", ".join("'%s'" % t for t in sorted(tipos))
+
+
+# Los filtros de la pestaña VPN, como condiciones SQL. Mismo patrón que
+# FILTROS_AUDITORIA: se elige por clave y un valor inventado cae en 'todo'.
+FILTROS_EVENTOS_VPN = {
+    "todo": "",
+    "conexiones": _tipos_sql(eventos_vpn.ENTRADAS_Y_SALIDAS),
+    "fallos": _tipos_sql(eventos_vpn.FALLOS),
+}
+
+
+def _donde_eventos(filtro):
+    condicion = FILTROS_EVENTOS_VPN.get(filtro or "todo", "")
+    return (" WHERE " + condicion) if condicion else ""
+
+
+def _evento(fila):
+    """
+    Una fila de `eventos_vpn` con la misma forma que la devuelve parse_eventos.
+
+    'fallo' se deriva aquí y no se guarda: es una pregunta sobre el tipo, y
+    almacenarla dejaría filas viejas contestando distinto que el código el día
+    que se añada un tipo de rechazo.
+    """
+    evento = dict(fila)
+    evento["fallo"] = evento["tipo"] in eventos_vpn.FALLOS
+    return evento
+
+
+def guardar_eventos_vpn(ruta, eventos):
+    """
+    Guarda sucesos recién leídos del log. Devuelve cuántos.
+
+    Se esperan en orden cronológico, del más antiguo al más reciente, porque el
+    id es lo que después ordena la tabla: parse_eventos() los devuelve al revés
+    —el más reciente primero, que es como se enseñan— así que quien llama tiene
+    que darles la vuelta antes.
+
+    No hay deduplicación por contenido a propósito. Un cliente que reconecta en
+    bucle escribe líneas legítimamente idénticas en el mismo segundo, y un
+    UNIQUE se las comería; lo que evita repetir es el cursor de app/eventos.py,
+    que es lo único que sabe qué se leyó ya.
+    """
+    visto = _iso(_ahora())
+    filas = [
+        (visto, e["ts"], e["tipo"], e["cn"], e["ip"], e["puerto"], e["detalle"])
+        for e in eventos
+    ]
+
+    if not filas:
+        return 0
+
+    with conexion(ruta) as con:
+        con.executemany(
+            "INSERT INTO eventos_vpn (visto, ts, tipo, cn, ip, puerto, detalle)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            filas,
+        )
+
+    return len(filas)
+
+
+def contar_eventos_vpn(ruta, filtro=None):
+    with conexion(ruta) as con:
+        return con.execute(
+            "SELECT COUNT(*) FROM eventos_vpn" + _donde_eventos(filtro)
+        ).fetchone()[0]
+
+
+def listar_eventos_vpn(ruta, limite=200, desplazamiento=0, filtro=None):
+    """Página de sucesos, del más reciente hacia atrás"""
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT * FROM eventos_vpn" + _donde_eventos(filtro) +
+            " ORDER BY id DESC LIMIT ? OFFSET ?",
+            (int(limite), int(desplazamiento)),
+        ).fetchall()
+    return [_evento(f) for f in filas]
+
+
+def hay_eventos_vpn(ruta):
+    """Si se ha llegado a ingerir algo alguna vez"""
+    with conexion(ruta) as con:
+        return con.execute("SELECT 1 FROM eventos_vpn LIMIT 1").fetchone() is not None
+
+
+def purgar_eventos_vpn(ruta, dias):
+    """
+    Borra los sucesos de la VPN con más de N días. Devuelve cuántos.
+
+    Corta por `visto` —cuándo los leyó el panel— y no por `ts`: el del log
+    puede venir vacío, y cuando viene es hora local sin zona, así que compararlo
+    con un corte en UTC daría de menos o de más según el huso. Como el ingestor
+    pasa cada pocos minutos, las dos fechas se parecen tanto que la diferencia
+    solo se nota en la primera vuelta, cuando se lee de golpe un log de días.
+
+    Con dias=0 se lleva el historial entero, igual que purgar_auditoria().
+    """
+    corte = _iso(_ahora() - timedelta(days=int(dias)))
+
+    with conexion(ruta) as con:
+        return con.execute("DELETE FROM eventos_vpn WHERE visto < ?", (corte,)).rowcount
 
 
 # -------------------------------------------------------- perfiles archivados

@@ -163,9 +163,16 @@
 
 <section class="panel-accion">
   <p>
-    <strong>Limpieza</strong>: la auditoría es la única tabla que crece sin
-    techo. Borrarla destruye el registro de quién hizo qué, así que hay que
-    escribir una palabra para confirmarlo, como al rotar la clave.
+    <strong>Limpieza</strong>: las dos tablas que crecen sin techo son la
+    auditoría del panel y los sucesos de la VPN. Borrarlas destruye el registro
+    de quién hizo qué, así que hay que escribir una palabra para confirmarlo,
+    como al rotar la clave.
+  </p>
+  <p class="tenue">
+    Nada se limpia solo: el panel guarda los sucesos de la VPN indefinidamente
+    hasta que alguien los tire desde aquí. Los del log original, en cambio, se
+    pierden igualmente cuando logrotate vacía el archivo, así que lo que se
+    borre en esta tabla no se puede volver a leer de ninguna parte.
   </p>
   <p class="tenue">
     Los perfiles archivados no se tocan: son el historial de quién tuvo
@@ -186,6 +193,16 @@
         <option value="{{ valor }}">{{ texto }}</option>
         {% endfor %}
       </select>
+    </label>
+    <label class="casilla">
+      <input type="checkbox" name="eventos" value="1">
+      Borrar sucesos de la VPN de
+      <select name="dias_eventos">
+        {% for valor, texto in opciones_limpieza %}
+        <option value="{{ valor }}">{{ texto }}</option>
+        {% endfor %}
+      </select>
+      <span class="tenue">conexiones, desconexiones y rechazos</span>
     </label>
     <label class="casilla">
       <input type="checkbox" name="sesiones" value="1">

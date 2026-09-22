@@ -15,7 +15,7 @@ unos a otros, a propósito.
 
 from fastapi import APIRouter, Depends, Form, Request
 
-from .. import db
+from .. import db, eventos
 from ..auth import solo_admin, usuario_actual, verificar_csrf
 from ..core import eventos_vpn
 from .comun import auditar, aviso, cfg, error_htmx, paginar, render
@@ -325,21 +325,13 @@ def politica_totp_supervisor(
     return aviso(request, mensaje, refrescar=EVENTO_REFRESCO)
 
 
-# Filtros de la pestaña de VPN. Los del panel viven en db.FILTROS_AUDITORIA,
-# porque allí son condiciones SQL.
-FILTROS_VPN = {
-    "todo": lambda e: True,
-    # Entradas y salidas juntas: una desconexión es parte de la conexión que
-    # cierra, no otra cosa. El conjunto vive en core con los tipos de suceso.
-    "conexiones": lambda e: e["tipo"] in eventos_vpn.ENTRADAS_Y_SALIDAS,
-    "fallos": lambda e: e["fallo"],
-}
-
 # Las sesiones no son un filtro más sobre los sucesos: emparejan dos de ellos en
 # una sola fila, así que la tabla tiene otras columnas y se atiende aparte. Se
-# valida junto a los filtros para que una URL escrita a mano no cuele.
+# valida junto a los filtros —que son condiciones SQL y viven en
+# db.FILTROS_EVENTOS_VPN, igual que los del panel— para que una URL escrita a
+# mano no cuele.
 VISTA_SESIONES = "sesiones"
-VISTAS_VPN = set(FILTROS_VPN) | {VISTA_SESIONES}
+VISTAS_VPN = set(db.FILTROS_EVENTOS_VPN) | {VISTA_SESIONES}
 
 
 @router.get("/auditoria")
@@ -357,18 +349,23 @@ def pagina_auditoria(
     Dos fuentes distintas, y por eso dos pestañas y no una tabla mezclada:
 
     - 'panel' sale de la tabla `auditoria`, son acciones de una cuenta del
-      panel y llevan usuario. Se filtra y se pagina en SQL: la tabla crece sin
-      límite y traerla entera para descartar la mayor parte sería leer todo el
-      historial en cada visita.
-    - 'vpn' sale del log de OpenVPN, son conexiones de un certificado y no
-      tienen cuenta del panel. Se leen en vivo, acotadas por la cola del
-      archivo, y se paginan en memoria porque ya vienen acotadas.
+      panel y llevan usuario.
+    - 'vpn' sale de la tabla `eventos_vpn`, son conexiones de un certificado y
+      no tienen cuenta del panel. Las ingiere del log el vigilante; aquí no se
+      abre ningún archivo.
+
+    Las dos se filtran y se paginan en SQL, por el mismo motivo: las dos tablas
+    crecen sin techo y traerlas enteras para descartar la mayor parte sería
+    leerse el historial completo en cada visita.
 
     Dentro de 'vpn', la vista de sesiones empareja cada conexión con su
-    desconexión para poder dar la duración. Va aquí y no en una página aparte
-    porque es el mismo log mirado de otra manera, no otra fuente.
+    desconexión para poder dar la duración. Esa no se pagina en SQL: emparejar
+    exige un tramo contiguo, así que se trae uno acotado y se pagina ya
+    emparejado. Va aquí y no en una página aparte porque es lo mismo mirado de
+    otra manera, no otra fuente.
     """
     c = cfg(request)
+    ruta = c.seguridad.db_path
     fuente = "vpn" if fuente == "vpn" else "panel"
     validos = VISTAS_VPN if fuente == "vpn" else db.FILTROS_AUDITORIA
     if filtro not in validos:
@@ -380,30 +377,32 @@ def pagina_auditoria(
     contexto = {"fuente": fuente, "filtro": filtro, "es_fallo": db.es_fallo}
 
     if fuente == "vpn" and filtro == VISTA_SESIONES:
-        sesiones_vpn, avisos = eventos_vpn.leer_sesiones(c)
+        sucesos = db.listar_eventos_vpn(ruta, limite=eventos_vpn.EVENTOS_SESIONES)
+        sesiones_vpn, avisos = eventos_vpn.sesiones_de(sucesos)
         pg = paginar(len(sesiones_vpn), pagina, por_pagina, base)
         contexto.update({
             "sesiones_vpn": sesiones_vpn[
                 pg["desplazamiento"]:pg["desplazamiento"] + pg["por_pagina"]
             ],
-            "avisos": avisos,
+            "avisos": eventos.avisos(c) + avisos,
             "pg": pg,
         })
     elif fuente == "vpn":
-        eventos, avisos = eventos_vpn.leer_eventos(c)
-        eventos = [e for e in eventos if FILTROS_VPN[filtro](e)]
-        pg = paginar(len(eventos), pagina, por_pagina, base)
+        total = db.contar_eventos_vpn(ruta, filtro)
+        pg = paginar(total, pagina, por_pagina, base)
         contexto.update({
-            "eventos": eventos[pg["desplazamiento"]:pg["desplazamiento"] + pg["por_pagina"]],
-            "avisos": avisos,
+            "eventos": db.listar_eventos_vpn(
+                ruta, pg["por_pagina"], pg["desplazamiento"], filtro
+            ),
+            "avisos": eventos.avisos(c),
             "pg": pg,
         })
     else:
-        total = db.contar_auditoria(c.seguridad.db_path, filtro)
+        total = db.contar_auditoria(ruta, filtro)
         pg = paginar(total, pagina, por_pagina, base)
         contexto.update({
             "entradas": db.listar_auditoria(
-                c.seguridad.db_path, pg["por_pagina"], pg["desplazamiento"], filtro
+                ruta, pg["por_pagina"], pg["desplazamiento"], filtro
             ),
             "pg": pg,
         })

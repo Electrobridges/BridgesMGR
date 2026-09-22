@@ -17,6 +17,13 @@ Corre en un hilo aparte y comprueba cada pocos minutos:
   un correo diario que nadie lee—, pero uno que falla sí, y también cuando
   vuelve a salir bien.
 
+Y una cuarta cosa que no es vigilar sino recoger: **ingerir el log de OpenVPN**
+a la tabla `eventos_vpn`. Vive aquí porque necesita exactamente lo mismo que lo
+demás —un hilo que pase solo, cada pocos minutos, fuera de las peticiones— y
+porque así hay **un único escritor**: hacerlo al pintar la página duplicaría el
+tramo con dos visitas a la vez. No avisa de nada: lo que salga mal se enseña en
+la propia pestaña, que es donde se va a mirar.
+
 Lo arranca app/servidor.py y no crear_app(): así las pruebas, que construyen la
 aplicación cientos de veces, no levantan un hilo cada vez.
 """
@@ -24,7 +31,7 @@ aplicación cientos de veces, no levantan un hilo cada vez.
 import threading
 from datetime import datetime, timezone
 
-from . import db, notificar, respaldar
+from . import db, eventos, notificar, respaldar
 from .core import easyrsa, respaldos, salud
 
 # Cada cuánto se mira. Cinco minutos: lo que vigila cambia en días o de golpe,
@@ -197,8 +204,20 @@ def _revisar_respaldo(cfg):
     db.guardar_ajuste(ruta_db, AJUSTE_RESPALDO, "ok")
 
 
+def _ingerir_eventos(cfg):
+    """
+    Se lleva a la base lo que se haya escrito en el log desde la última vuelta.
+
+    Va con las revisiones y no en un hilo propio porque comparte su única
+    exigencia —pasar sola, cada pocos minutos— y porque el bucle de aquí ya
+    aguanta que una vuelta falle sin llevarse por delante a las demás.
+    """
+    eventos.ingerir(cfg)
+
+
 def _vuelta(cfg):
-    for revision in (_revisar_crl, _revisar_servicio, _revisar_respaldo):
+    for revision in (_revisar_crl, _revisar_servicio, _revisar_respaldo,
+                     _ingerir_eventos):
         try:
             revision(cfg)
         except Exception:  # noqa: BLE001
