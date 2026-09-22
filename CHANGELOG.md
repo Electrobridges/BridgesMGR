@@ -40,6 +40,23 @@ el versionado es [SemVer](https://semver.org/lang/es/).
   salieron lo vacía logrotate y lo que se tire aquí no se puede volver a leer de
   ninguna parte.
 
+- **Recuperación del historial ya rotado**, con `python -m app.cli
+  importar-eventos`. Al estrenar lo anterior en un servidor que lleva meses en
+  marcha, el log vivo es el de esta semana y las ocho anteriores están en el
+  disco —`openvpn.log.1` y los `.gz` que guarda logrotate— a punto de borrarse
+  sin que nadie las haya leído. Esto las lee, comprimidas incluidas, y las mete
+  por debajo de lo que ya hay: el id ordena la tabla, así que unos sucesos que
+  ocurrieron antes no pueden recibir un id mayor o el historial quedaría del
+  revés justo al recuperarlo.
+
+  Es idempotente sin llevar cuenta de nada —solo entra lo anterior al suceso
+  fechado más antiguo que ya hay, y al terminar el corte pasa a ser lo recién
+  importado—, así que el instalador lo ejecuta en **cada** actualización y a
+  partir de la segunda vez no hace nada. A los sucesos recuperados se les
+  deriva `visto` de su propia fecha y no del momento de importar: si no, una
+  historia de hace un año quedaría marcada como leída hoy y la purga por
+  antigüedad no se la llevaría nunca.
+
 ### Corregido
 
 - **La primera vuelta del vigilante se perdía tras cada actualización que

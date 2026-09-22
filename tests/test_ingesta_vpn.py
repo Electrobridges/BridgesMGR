@@ -12,6 +12,7 @@ blanco que nadie anunció es peor que no tener registro: se lee como una semana
 tranquila.
 """
 
+import gzip
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -266,6 +267,175 @@ def test_el_hueco_no_se_borra_en_la_vuelta_siguiente(cfg, base):
     eventos.ingerir(cfg)
 
     assert any("Faltan sucesos" in a for a in eventos.avisos(cfg))
+
+
+# ------------------------------------------------ el historial ya rotado
+
+# Lo que deja logrotate: '.1' en texto plano —por el delaycompress que pone el
+# instalador— y del '.2' en adelante comprimidos.
+VIEJO_1 = ("2026-07-20 09:00:00 192.168.1.50:40001 [daniel] Peer Connection "
+           "Initiated with [AF_INET]192.168.1.50:40001\n")
+VIEJO_2 = ("2026-06-01 08:00:00 192.168.1.77:40002 [marta] Peer Connection "
+           "Initiated with [AF_INET]192.168.1.77:40002\n")
+
+
+def _rotado(cfg, sufijo, texto):
+    ruta = cfg.openvpn.log_path + sufijo
+    if sufijo.endswith(".gz"):
+        with gzip.open(ruta, "wb") as f:
+            f.write(texto.encode("utf-8"))
+    else:
+        with open(ruta, "w", encoding="utf-8") as f:
+            f.write(texto)
+    return ruta
+
+
+def test_recupera_lo_que_quedo_en_los_archivos_rotados(cfg, base):
+    """
+    El caso de estrenar esto en un servidor que lleva meses en marcha: el log
+    vivo es de esta semana y las ocho anteriores están en el disco, a punto de
+    borrarse sin que nadie las haya leído.
+    """
+    _escribir(cfg, CONEXION)
+    eventos.ingerir(cfg)
+    _rotado(cfg, ".1", VIEJO_1)
+    _rotado(cfg, ".2.gz", VIEJO_2)
+
+    resumen = eventos.importar_rotados(cfg)
+
+    assert resumen["sucesos"] == 2
+    assert resumen["avisos"] == []
+    assert db.contar_eventos_vpn(base) == 3
+
+
+def test_lo_recuperado_queda_por_debajo_y_no_arriba(cfg, base):
+    """
+    El id ordena la tabla. A unos sucesos que ocurrieron antes no se les puede
+    dar un id mayor: saldrían los primeros, como si fueran lo último que ha
+    pasado, y el historial quedaría del revés justo al recuperarlo.
+    """
+    _escribir(cfg, CONEXION)
+    eventos.ingerir(cfg)
+    _rotado(cfg, ".1", VIEJO_1)
+    _rotado(cfg, ".2.gz", VIEJO_2)
+
+    eventos.importar_rotados(cfg)
+
+    assert [e["ts"] for e in db.listar_eventos_vpn(base)] == [
+        "2026-07-30 10:00:01",   # el que ya estaba, el más reciente
+        "2026-07-20 09:00:00",
+        "2026-06-01 08:00:00",
+    ]
+
+
+def test_importar_dos_veces_no_duplica(cfg, base):
+    """
+    Es idempotente sin llevar cuenta de qué archivos se leyeron —que además se
+    renombran solos en cada rotación—: al terminar, el corte pasa a ser lo
+    recién importado.
+    """
+    _escribir(cfg, CONEXION)
+    eventos.ingerir(cfg)
+    _rotado(cfg, ".1", VIEJO_1)
+
+    eventos.importar_rotados(cfg)
+    segunda = eventos.importar_rotados(cfg)
+
+    assert segunda["sucesos"] == 0
+    assert db.contar_eventos_vpn(base) == 2
+
+
+def test_no_vuelve_a_meter_lo_que_ya_trajo_la_ingesta(cfg, base):
+    """
+    El '.1' es copia del archivo vivo: si el rescate de una rotación ya se
+    llevó su final, eso no puede entrar otra vez por la puerta de atrás.
+    """
+    _escribir(cfg, VIEJO_1 + CONEXION)
+    eventos.ingerir(cfg)
+    _rotado(cfg, ".1", VIEJO_1 + CONEXION)
+
+    resumen = eventos.importar_rotados(cfg)
+
+    assert resumen["sucesos"] == 0
+    assert db.contar_eventos_vpn(base) == 2
+
+
+def test_con_la_tabla_vacia_entra_todo(cfg, base):
+    """Instalación nueva: no hay corte contra el que comparar"""
+    _rotado(cfg, ".1", VIEJO_1)
+    _rotado(cfg, ".2.gz", VIEJO_2)
+
+    assert eventos.importar_rotados(cfg)["sucesos"] == 2
+
+
+def test_lo_recuperado_se_purga_por_su_fecha_y_no_por_la_de_hoy(cfg, base):
+    """
+    Si `visto` fuera el momento de importar, una historia de hace un año
+    quedaría marcada como leída hoy y la purga por antigüedad no se la
+    llevaría nunca.
+    """
+    hace_un_ano = datetime.now() - timedelta(days=400)
+    _rotado(cfg, ".1", "%s 192.168.1.50:40001 [daniel] Peer Connection "
+                       "Initiated with [AF_INET]192.168.1.50:40001\n"
+                       % hace_un_ano.strftime("%Y-%m-%d %H:%M:%S"))
+
+    eventos.importar_rotados(cfg)
+
+    assert db.purgar_eventos_vpn(base, 90) == 1
+
+
+def test_sin_archivos_rotados_lo_dice(cfg, base):
+    _escribir(cfg, CONEXION)
+    eventos.ingerir(cfg)
+
+    resumen = eventos.importar_rotados(cfg)
+
+    assert resumen["sucesos"] == 0
+    assert any("No hay archivos rotados" in a for a in resumen["avisos"])
+
+
+def test_si_lo_guardado_no_lleva_fecha_se_niega_y_explica(cfg, base):
+    """
+    Sin fechas no hay forma de saber qué parte de los archivos rotados ya
+    entró, y meterlos enteros la duplicaría. Se dice, con el arreglo.
+    """
+    _escribir(cfg, "127.0.0.1:57176 [alfa2] Peer Connection Initiated with "
+                   "[AF_INET]127.0.0.1:57176\n")
+    eventos.ingerir(cfg)
+    _rotado(cfg, ".1", VIEJO_1)
+
+    resumen = eventos.importar_rotados(cfg)
+
+    assert resumen["sucesos"] == 0
+    assert any("fechas-log.sh" in a for a in resumen["avisos"])
+    assert db.contar_eventos_vpn(base) == 1
+
+
+def test_un_gz_ilegible_no_tira_abajo_a_los_demas(cfg, base):
+    _rotado(cfg, ".1", VIEJO_1)
+    with open(cfg.openvpn.log_path + ".2.gz", "wb") as f:
+        f.write(b"esto no es un gzip")
+
+    resumen = eventos.importar_rotados(cfg)
+
+    assert resumen["sucesos"] == 1
+    assert any("No se pudo leer" in a for a in resumen["avisos"])
+
+
+def test_los_rotados_se_leen_del_mas_antiguo_al_mas_reciente(cfg):
+    """
+    El número sube con la antigüedad. Leerlos al revés desordenaría el
+    historial y rompería la atribución de un rechazo a su CN, que depende de
+    que las líneas de una sesión vayan seguidas.
+    """
+    for sufijo in (".1", ".2.gz", ".3.gz"):
+        _rotado(cfg, sufijo, VIEJO_1)
+
+    rotados = ev.archivos_rotados(cfg.openvpn.log_path)
+
+    assert [os.path.basename(r) for r in rotados] == [
+        "openvpn.log.3.gz", "openvpn.log.2.gz", "openvpn.log.1",
+    ]
 
 
 # --------------------------------------------------------- los avisos

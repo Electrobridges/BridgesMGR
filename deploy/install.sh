@@ -340,6 +340,28 @@ if [[ "$PANEL_REINICIADO" == "1" ]]; then
   fi
 fi
 
+# ------------------------------------------------- historial ya rotado
+# El panel guarda los sucesos de la VPN según se escriben, pero de antes de
+# tener esa función no tiene nada, y en el disco sí que hay: logrotate conserva
+# unas ocho semanas de openvpn.log.N(.gz) que se iban a borrar sin que nadie
+# las hubiera leído. Esto las recupera.
+#
+# Va en cada actualización y no solo en la primera porque es idempotente por
+# construcción —solo entra lo anterior al suceso más antiguo que ya hay—, así
+# que a partir de la segunda vez no hace nada y lo dice en una línea. Y si
+# falla no se para la instalación: es historia vieja, no el servicio.
+#
+# Como el usuario del panel y no como root: la base es suya, y un -wal o un
+# -journal que quedara de root la dejaría sin poder escribir.
+if [[ -f "$CONFIG_DIR/config.yaml" ]]; then
+  info "Recuperando el historial de la VPN de los logs ya rotados"
+  if ! (cd "$DESTINO" && sudo -u "$USUARIO" venv/bin/python -m app.cli importar-eventos); then
+    amar "No se pudo recuperar el historial de los logs rotados."
+    echo "  No afecta al panel; lo de ahora en adelante se guarda igual. Míralo con:"
+    echo "      cd $DESTINO && sudo -u $USUARIO venv/bin/python -m app.cli importar-eventos"
+  fi
+fi
+
 # ---------------------------------------------------------- fechas del log
 # Esto es lo único que alcanza a un servidor ya instalado: instalar-openvpn.sh
 # solo pasa al montar la VPN, y el añadido hace falta en cualquier máquina

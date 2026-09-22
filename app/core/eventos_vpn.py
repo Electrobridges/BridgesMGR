@@ -20,9 +20,10 @@ que devuelven avisos: una tabla vacía no puede parecerse a «no ha entrado
 nadie» cuando en realidad es que no hay nada que leer.
 """
 
+import gzip
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Cuánto se lee de una vez. En marcha normal son unos pocos kilobytes —el
 # ingestor pasa cada pocos minutos—, así que este techo es para la primera
@@ -148,6 +149,72 @@ def revisar_archivo(ruta):
         ]
 
     return []
+
+
+# Hasta qué número se buscan los archivos que deja logrotate. El instalador
+# pone 'rotate 8'; se mira más arriba por si alguien lo ha subido, que cuesta
+# ocho stat() y evita dejarse semanas fuera sin decir nada.
+ROTADOS_MAX = 20
+
+
+def archivos_rotados(ruta):
+    """
+    Los archivos que dejó logrotate, del MÁS ANTIGUO al más reciente.
+
+    El número sube con la antigüedad —'.1' es la rotación de esta semana— y el
+    '.gz' aparece un ciclo más tarde, porque el instalador usa 'delaycompress':
+    el '.1' siempre es texto plano y del '.2' en adelante están comprimidos.
+    Se buscan las dos formas de cada número porque eso depende de la
+    configuración de logrotate, que el panel no controla.
+    """
+    encontrados = []
+
+    for n in range(1, ROTADOS_MAX + 1):
+        for nombre in ("%s.%d" % (ruta, n), "%s.%d.gz" % (ruta, n)):
+            if os.path.isfile(nombre):
+                encontrados.append(nombre)
+
+    # Se recorrió del más reciente al más antiguo; hace falta al revés, porque
+    # el orden de las líneas es lo que permite atar un rechazo con su CN.
+    encontrados.reverse()
+    return encontrados
+
+
+def leer_rotado(ruta):
+    """
+    Las líneas de un archivo de logrotate, comprimido o no.
+
+    Entero en memoria y no por bloques: son los archivos de una rotación
+    semanal, decenas o cientos de KB, y leerlos de una pieza evita tener que
+    repetir aquí la lógica de la línea a medias, que en un archivo ya cerrado
+    además no puede darse.
+    """
+    abrir = gzip.open if ruta.endswith(".gz") else open
+
+    with abrir(ruta, "rb") as f:
+        datos = f.read()
+
+    return datos.decode("utf-8", errors="replace").splitlines()
+
+
+def ts_a_utc(ts):
+    """
+    El 'ts' del log —hora local del servidor, sin zona— en ISO UTC, o None.
+
+    Se usa solo al importar archivos ya rotados. Ahí no vale poner en `visto`
+    el momento de la importación, que es lo que hace la ingesta normal: una
+    historia de agosto quedaría marcada como leída hoy y la purga por
+    antigüedad no se la llevaría nunca, o se la llevaría toda de golpe.
+
+    La conversión da por hecho que el panel corre en la misma zona con la que
+    OpenVPN escribió la línea. Es la misma máquina, así que solo se desvía una
+    hora en las líneas escritas al otro lado de un cambio de horario, y para
+    decidir si algo tiene más de 90 días eso da igual.
+    """
+    try:
+        return datetime.strptime(ts, FORMATO_TS).astimezone(timezone.utc).isoformat()
+    except (ValueError, TypeError):
+        return None
 
 
 def leer_desde(ruta, offset):

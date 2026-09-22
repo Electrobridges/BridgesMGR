@@ -14,13 +14,14 @@ recuperación exige estar dentro del servidor.
     python -m app.cli cambiar-password daniel
     python -m app.cli designar-superusuario daniel
     python -m app.cli purgar-sesiones
+    python -m app.cli importar-eventos
 """
 
 import argparse
 import getpass
 import sys
 
-from . import __version__, db
+from . import __version__, db, eventos
 from .config import cargar_config
 
 
@@ -183,6 +184,32 @@ def cmd_marcar_reparto(cfg, args):
     print("Aparecerá en Clientes VPN hasta que alguien lo dé por hecho.")
 
 
+def cmd_importar_eventos(cfg, args):
+    """
+    Recupera de los logs ya rotados los sucesos anteriores a lo guardado.
+
+    Lo llama también deploy/install.sh en cada actualización, y por eso hablar
+    de más aquí sería ruido en la salida del instalador: cuando no hay nada
+    que recuperar —lo normal a partir de la segunda vez— dice una línea y ya.
+    """
+    resumen = eventos.importar_rotados(cfg)
+
+    for aviso in resumen["avisos"]:
+        print("Aviso: %s" % aviso)
+
+    if not resumen["sucesos"]:
+        print("Nada que recuperar: los %d archivo(s) rotado(s) no traen sucesos "
+              "anteriores a los que ya hay." % len(resumen["archivos"]))
+        return
+
+    cuando = ""
+    if resumen["desde"]:
+        cuando = ", del %s al %s" % (resumen["desde"], resumen["hasta"])
+
+    print("Recuperados %d suceso(s) de %d archivo(s) rotado(s)%s."
+          % (resumen["sucesos"], len(resumen["archivos"]), cuando))
+
+
 def cmd_purgar_sesiones(cfg, args):
     db.purgar_sesiones(cfg.seguridad.db_path)
     db.purgar_logins_pendientes(cfg.seguridad.db_path)
@@ -215,6 +242,12 @@ def main(argv=None):
 
     p = subs.add_parser("purgar-sesiones", help="Borra las sesiones caducadas")
     p.set_defaults(func=cmd_purgar_sesiones)
+
+    p = subs.add_parser(
+        "importar-eventos",
+        help="Recupera de los logs ya rotados los sucesos de la VPN anteriores",
+    )
+    p.set_defaults(func=cmd_importar_eventos)
 
     p = subs.add_parser(
         "marcar-reparto",

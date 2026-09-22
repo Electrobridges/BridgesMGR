@@ -224,6 +224,89 @@ def _una_pasada(cfg, ultima):
     return guardados, len(lineas)
 
 
+# ------------------------------------------------------------- importación
+
+def importar_rotados(cfg):
+    """
+    Recupera de los archivos ya rotados lo anterior a lo que ya está guardado.
+
+    Es de una sola vez y a mano: sirve para la instalación que estrena esto,
+    donde el log lleva semanas rotando y en la base no hay nada. La ingesta
+    normal no puede hacerlo —lee hacia delante desde un cursor— y meterlo en
+    ella significaría releer ocho archivos cada cinco minutos para no
+    encontrar nada nuevo.
+
+    **Idempotente sin llevar ninguna cuenta**: solo entra lo anterior al
+    suceso fechado más antiguo que ya hay. Lo que no es anterior ya lo trajo
+    la ingesta, y al terminar el corte pasa a ser lo recién importado, así que
+    repetirlo no mete nada dos veces. No hace falta recordar qué archivos se
+    leyeron, que además se renombran solos en cada rotación.
+
+    Devuelve un resumen: qué archivos miró, cuántos sucesos entraron, de qué
+    fecha a cuál, y lo que haya que advertir.
+    """
+    ruta_db = cfg.seguridad.db_path
+    ruta = cfg.openvpn.log_path
+    resumen = {"archivos": [], "sucesos": 0, "desde": "", "hasta": "", "avisos": []}
+
+    if not ruta:
+        resumen["avisos"].append("No hay 'openvpn.log_path' configurado.")
+        return resumen
+
+    resumen["archivos"] = eventos_vpn.archivos_rotados(ruta)
+
+    if not resumen["archivos"]:
+        resumen["avisos"].append(
+            "No hay archivos rotados junto a %s. Si logrotate los guarda en "
+            "otro sitio, no hay nada que recuperar desde aquí." % ruta
+        )
+        return resumen
+
+    corte = db.ts_mas_antiguo_vpn(ruta_db)
+
+    # Hay historia guardada pero ninguna fila fechada: entonces no hay forma de
+    # saber qué parte de los archivos rotados ya entró, y meterlos enteros la
+    # duplicaría. Se dice, con el arreglo, en vez de duplicar en silencio.
+    if corte is None and db.hay_eventos_vpn(ruta_db):
+        resumen["avisos"].append(
+            "Los sucesos ya guardados no llevan fecha, así que no se puede "
+            "saber qué parte de los archivos rotados falta. Pon fecha al log "
+            "(deploy/fechas-log.sh) y vuelve a intentarlo cuando la tabla "
+            "tenga sucesos fechados."
+        )
+        return resumen
+
+    lineas = []
+    for archivo in resumen["archivos"]:
+        try:
+            lineas += eventos_vpn.leer_rotado(archivo)
+        except (OSError, EOFError) as e:
+            # Un '.gz' a medio escribir o sin permiso no puede tirar abajo la
+            # recuperación de los otros siete.
+            resumen["avisos"].append("No se pudo leer %s: %s" % (archivo, e))
+
+    # De más antiguo a más reciente, que es como hay que insertarlos: el id
+    # ordena la tabla y tiene que seguir el orden de los hechos.
+    candidatos = list(reversed(eventos_vpn.parse_eventos(lineas)))
+
+    if corte:
+        candidatos = [e for e in candidatos if e["ts"] and e["ts"] < corte]
+    elif any(not e["ts"] for e in candidatos):
+        resumen["avisos"].append(
+            "Algunos sucesos de los archivos rotados no llevan fecha. Entran "
+            "igual —el suceso es el mismo— pero no tendrán cuándo, y no se "
+            "podrá volver a importar sobre ellos."
+        )
+
+    resumen["sucesos"] = db.importar_eventos_vpn(ruta_db, candidatos)
+
+    fechados = [e["ts"] for e in candidatos if e["ts"]]
+    if fechados:
+        resumen["desde"], resumen["hasta"] = fechados[0], fechados[-1]
+
+    return resumen
+
+
 def avisos(cfg):
     """
     Lo que hay que decir en la pestaña de VPN, de lo más urgente a lo de fondo.

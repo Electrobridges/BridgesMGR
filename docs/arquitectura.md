@@ -108,6 +108,14 @@ Dos detalles que no son evidentes:
 - **Un solo escritor.** Lo llama el vigilante, que ya corre en su propio hilo.
   Hacerlo al pintar la página duplicaría el tramo con dos visitas simultáneas,
   porque lo único que impide repetir es el cursor.
+- **Lo anterior a estrenar esto se recupera aparte**, con `python -m app.cli
+  importar-eventos`, que lee los `openvpn.log.N(.gz)` que guarda logrotate y
+  los mete **por debajo** de lo que ya hay, con ids menores: el id sigue el
+  orden del log, así que unos sucesos más antiguos no pueden recibir un id
+  mayor. No lleva cuenta de qué archivos leyó —se renombran solos en cada
+  rotación—: solo entra lo anterior al suceso fechado más antiguo guardado, y
+  eso lo hace idempotente por construcción. Lo ejecuta el instalador en cada
+  actualización.
 
 **`qr.py`** — dibuja el QR del alta del segundo factor con `segno`. Está aquí
 y no en `core/` justo para que `core/` siga siendo solo biblioteca estándar:

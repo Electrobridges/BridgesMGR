@@ -1072,6 +1072,59 @@ def hay_eventos_vpn(ruta):
         return con.execute("SELECT 1 FROM eventos_vpn LIMIT 1").fetchone() is not None
 
 
+def ts_mas_antiguo_vpn(ruta):
+    """
+    El 'ts' del suceso fechado más antiguo que hay guardado, o None.
+
+    Es el corte de la importación: lo que sea anterior a esto es historia que
+    el panel no llegó a ver, y lo demás ya lo trajo la ingesta normal. Mira
+    solo los fechados porque es lo único que se puede situar en el tiempo.
+    """
+    with conexion(ruta) as con:
+        fila = con.execute(
+            "SELECT MIN(ts) FROM eventos_vpn WHERE ts <> ''"
+        ).fetchone()
+    return fila[0] if fila and fila[0] else None
+
+
+def importar_eventos_vpn(ruta, eventos):
+    """
+    Mete sucesos ANTERIORES a los que ya hay, con ids por debajo de los suyos.
+
+    El id es lo que ordena la tabla y sigue el orden del log, así que a unos
+    sucesos que ocurrieron antes no se les puede dar un id mayor: saldrían
+    arriba del todo, como si fueran lo último que ha pasado. SQLite deja
+    escribir el id a mano —también negativo—, y es justo lo que hace falta:
+    se reservan tantos huecos como filas por debajo del id más bajo que haya.
+
+    `visto` se deriva del propio 'ts' en vez de ser el momento de importar,
+    porque si no una historia de agosto se purgaría como si se hubiera leído
+    hoy. Se esperan en orden cronológico, del más antiguo al más reciente.
+    """
+    filas = list(eventos)
+    if not filas:
+        return 0
+
+    respaldo = _iso(_ahora())
+
+    with conexion(ruta) as con:
+        minimo = con.execute("SELECT MIN(id) FROM eventos_vpn").fetchone()[0]
+        primero = (minimo if minimo is not None else 1) - len(filas)
+
+        con.executemany(
+            "INSERT INTO eventos_vpn (id, visto, ts, tipo, cn, ip, puerto, detalle)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (primero + i,
+                 eventos_vpn.ts_a_utc(e["ts"]) or respaldo,
+                 e["ts"], e["tipo"], e["cn"], e["ip"], e["puerto"], e["detalle"])
+                for i, e in enumerate(filas)
+            ],
+        )
+
+    return len(filas)
+
+
 def purgar_eventos_vpn(ruta, dias):
     """
     Borra los sucesos de la VPN con más de N días. Devuelve cuántos.
