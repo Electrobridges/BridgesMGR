@@ -186,6 +186,37 @@ def test_una_crl_ilegible_no_llena_el_buzon(monkeypatch, cfg, avisos):
     assert avisos == []
 
 
+# ------------------------------------------------- el arranque
+
+def test_prepara_la_base_antes_de_su_primera_vuelta(monkeypatch, cfg):
+    """
+    Lo arranca servidor.py ANTES de que uvicorn llame a crear_app(), que es
+    quien crea las tablas. Si no la prepara él, su primera vuelta se encuentra
+    una base sin esquema, revienta contra una tabla que no existe y el bucle se
+    lo traga: en una instalación nueva no vigila ni ingiere nada durante los
+    primeros cinco minutos, y en un servidor ya en marcha se pierde la primera
+    vuelta tras cada actualización que añada una tabla.
+
+    Pasó de verdad al desplegar `eventos_vpn`: el panel arrancó a las 17:07:51,
+    la pestaña de VPN seguía vacía y no había ni rastro del porqué, porque el
+    error iba directo al 'except' que mantiene vivo al hilo.
+    """
+    # Que el hilo salga solo: aquí lo que se prueba es la vuelta de partida.
+    monkeypatch.setattr(vigilante, "_bucle", lambda c: None)
+    with open(cfg.openvpn.log_path, "w", encoding="utf-8") as f:
+        f.write("2026-07-30 10:00:01 192.168.1.50:49711 [daniel] Peer "
+                "Connection Initiated with [AF_INET]192.168.1.50:49711\n")
+
+    try:
+        vigilante.arrancar(cfg)
+
+        assert db.contar_eventos_vpn(cfg.seguridad.db_path) == 1
+        assert db.obtener_ajuste(cfg.seguridad.db_path,
+                                 vigilante.AJUSTE_SERVICIO) is not None
+    finally:
+        vigilante._hilo = None
+
+
 # ------------------------------------------------- el servicio
 
 def _servicio(monkeypatch, activo):

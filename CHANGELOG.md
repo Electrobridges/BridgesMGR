@@ -40,6 +40,17 @@ el versionado es [SemVer](https://semver.org/lang/es/).
   salieron lo vacía logrotate y lo que se tire aquí no se puede volver a leer de
   ninguna parte.
 
+### Corregido
+
+- **La primera vuelta del vigilante se perdía tras cada actualización que
+  añadiera una tabla.** `servidor.py` lo arranca antes de que uvicorn llame a
+  `crear_app()`, que es quien crea el esquema, así que esa vuelta se encontraba
+  una base sin la tabla nueva, reventaba y el `except` que mantiene vivo al
+  hilo se lo tragaba sin dejar rastro. Se vio al desplegar `eventos_vpn`: el
+  panel arrancaba, la pestaña de VPN seguía vacía y no había ni un error que
+  mirar; se arreglaba solo cinco minutos después, en la vuelta siguiente. Ahora
+  `arrancar()` prepara la base antes de su primera vuelta.
+
 ## [0.3.1] — 2026-09-18
 
 ### Corregido

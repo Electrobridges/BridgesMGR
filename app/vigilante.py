@@ -238,12 +238,20 @@ def arrancar(cfg):
 
     Se hace una primera vuelta en el momento para dejar anotado el estado de
     partida sin avisar de él, y a partir de ahí se avisa solo de los cambios.
+
+    Antes de esa vuelta se prepara la base, y no es redundante con crear_app():
+    servidor.py arranca esto ANTES de que uvicorn llame a la factoría, así que
+    aquí la base puede no tener todavía el esquema —o tener el de la versión
+    anterior, que es el caso de cada actualización que añada una tabla—. Sin
+    esto, la vuelta de partida revienta contra una tabla que no existe y el
+    'except' que mantiene vivo al hilo se lo traga sin dejar rastro.
     """
     global _hilo
 
     if _hilo is not None and _hilo.is_alive():
         return _hilo
 
+    db.init_db(cfg.seguridad.db_path)
     _vuelta(cfg)
 
     _parar.clear()
