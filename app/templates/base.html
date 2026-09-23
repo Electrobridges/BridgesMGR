@@ -25,7 +25,6 @@
      nunca en línea: la CSP es script-src 'self'. Si no cargara, HTMX vuelve a
      su confirm nativo y la guarda sigue puesta. #}
   <script src="/static/confirmar.js" defer></script>
-  <script src="/static/menu.js" defer></script>
 </head>
 {# El token CSRF viaja en todas las peticiones HTMX. Una web ajena no puede
    poner cabeceras propias, así que esto corta el CSRF de raíz. #}
@@ -83,6 +82,11 @@
   </div>
   </div>
 </header>
+{# Justo detrás de la barra y sin defer, a propósito: con defer corre al final
+   del documento, y en una conexión lenta el navegador pintaba antes la barra
+   desplegada —195px en un teléfono— y luego la plegaba, con toda la página
+   dando un salto. Aquí la barra ya existe y todavía no se ha pintado nada. #}
+<script src="/static/menu.js"></script>
 {% endif %}
 
 <main class="contenido">

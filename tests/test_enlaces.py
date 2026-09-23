@@ -306,4 +306,25 @@ def test_sin_javascript_la_barra_no_se_pliega():
             )
 
     boton = re.search(r'\.menu-boton\s*\{([^{}]*)\}', css).group(1)
-    assert "display: none" in boton, "el botón debe nacer oculto hasta que cargue menu.js"
+    assert "display: none" in boton, (
+        "el botón debe nacer oculto hasta que cargue menu.js"
+    )
+
+
+def test_el_menu_se_pliega_antes_de_pintar(como_admin):
+    """
+    Regresión: con defer, menu.js corría al terminar el documento y en una
+    conexión lenta se veía primero la barra desplegada —195px en un
+    teléfono— y después plegada, con toda la página dando un salto (CLS de
+    0,14 medido con la red y la CPU estranguladas).
+
+    Tiene que cargarse sin defer ni async y justo detrás de la barra: ahí la
+    barra ya existe y aún no se ha pintado nada de lo que va debajo.
+    """
+    texto = como_admin.get("/clientes").text
+
+    etiqueta = re.search(r'<script[^>]*src="/static/menu.js"[^>]*>', texto).group(0)
+    assert "defer" not in etiqueta and "async" not in etiqueta
+
+    tras_barra = texto[texto.index("</header>"):]
+    assert re.match(r'</header>\s*<script src="/static/menu.js">', tras_barra)
