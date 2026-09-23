@@ -215,10 +215,16 @@ Contenedor centrado de 1200px máximo con 24px de aire lateral (16px por debajo 
 `repeat(auto-fit, minmax(190px, 1fr))`, así que se reorganizan sin consultar
 breakpoints. Más espacio encima de un título que debajo: 32px arriba, 12px abajo.
 
-Un único breakpoint en 700px, coherente con `PRODUCT.md`: el escenario confirmado
-es escritorio en LAN, así que el responsive protege de una ventana estrecha, no
-de un teléfono. Las tablas anchas scrollean **dentro de su contenedor**; la
-página nunca scrollea en horizontal.
+Un breakpoint de contenido en 700px, coherente con `PRODUCT.md`: el escenario
+confirmado es escritorio en LAN, así que el responsive protege de una ventana
+estrecha, no de un teléfono. Las tablas anchas scrollean **dentro de su
+contenedor**; la página nunca scrollea en horizontal.
+
+La única excepción es la barra superior, que se pliega por debajo de **1200px**
+—el ancho del contenedor—. No es un segundo punto de diseño sino una medida: los
+siete enlaces del superusuario, su nombre y su rol necesitan unos 1170px en una
+fila, y por debajo la barra se partía en tres o cuatro y empujaba la página
+hacia abajo. El contenido sigue cambiando solo en 700px.
 
 ## Elevation & Depth
 
@@ -299,6 +305,15 @@ Licencia Apache-2.0, la misma del proyecto; queda anotada en NOTICE.
   literalmente del `.main-nav a::after` del sitio de marca. Es el gesto que más
   reconocible hace al panel como Electrobridges.
 - El activo además sube el texto a blanco.
+- **Plegada (por debajo de 1200px):** la hamburguesa del sitio de marca —tres
+  trazos que se cruzan en una X— abre un panel bajo el botón, alineado a la
+  derecha, con las secciones arriba y la cuenta debajo de una línea. El panel
+  sube a navy elevado con borde de línea fuerte y **sin sombra**, como todo lo
+  que flota en este sistema. Se cierra con Escape (el foco vuelve al botón) o
+  tocando fuera.
+- **Mejora progresiva:** el botón nace oculto y lo activa `static/menu.js`. Sin
+  él la barra no se pliega: se apila entera en vez de esconder la navegación
+  tras un botón muerto.
 
 ### Badges
 - Píldora de 999px, label de 0.72rem con tracking `0.12em`, borde 1px del color

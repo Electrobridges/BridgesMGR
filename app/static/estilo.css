@@ -92,11 +92,15 @@ a { color: var(--cian); }
 
 /* ------------------------------------------------------------------ cabecera */
 .barra {
+  position: relative;
   display: flex; align-items: center; gap: 1.75rem; flex-wrap: wrap;
   padding: .85rem 1.5rem;
   background: var(--fondo-2);
   border-bottom: 1px solid var(--linea);
 }
+/* Envuelve navegación y sesión para poder plegarlas juntas. En ancho no se
+   nota: ocupa el hueco que antes ocupaban ellas dos. */
+.menu { display: flex; align-items: center; gap: 1.75rem; flex-wrap: wrap; flex: 1; }
 /* La marca lleva al inicio; sin subrayado porque ya es un bloque reconocible. */
 .marca {
   display: flex; align-items: center; gap: .55rem;
@@ -146,6 +150,65 @@ a { color: var(--cian); }
 .rol-superusuario { color: var(--cian); }
 .rol-admin { color: var(--amarillo); }
 .rol-supervisor { color: var(--tenue); }
+
+/* La hamburguesa de electrobridges.com: tres trazos que se cruzan en una X al
+   abrir. Oculta hasta que menu.js marca la barra como .plegable. */
+.menu-boton {
+  display: none; position: relative; flex-shrink: 0;
+  width: 44px; height: 44px; padding: 0;
+  align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--linea-fuerte);
+  border-radius: var(--radio-boton); cursor: pointer;
+}
+.menu-boton:hover { background: var(--fondo-3); }
+.menu-boton:focus-visible { box-shadow: var(--foco); border-radius: var(--radio-boton); }
+.menu-boton span, .menu-boton::before, .menu-boton::after {
+  content: ''; display: block; width: 18px; height: 2px;
+  border-radius: 999px; background: var(--texto);
+  transition: transform .2s ease, opacity .2s ease;
+}
+.menu-boton::before { position: absolute; transform: translateY(-6px); }
+.menu-boton::after { position: absolute; transform: translateY(6px); }
+.abierto .menu-boton span { opacity: 0; }
+.abierto .menu-boton::before { transform: rotate(45deg); }
+.abierto .menu-boton::after { transform: rotate(-45deg); }
+
+/* Por debajo de 1200px —el ancho del contenedor— los siete enlaces, el nombre
+   y el rol ya no caben en una fila: la barra se partía en tres o cuatro y
+   empujaba la página hacia abajo. Se pliegan en un panel que cae desde la
+   derecha, bajo el botón. */
+@media (max-width: 1200px) {
+  .barra.plegable {
+    flex-direction: row; align-items: center; flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+  .barra.plegable .menu-boton { display: inline-flex; }
+
+  /* Un escalón tonal más y línea fuerte, sin sombra: en este sistema lo que
+     flota encima sube de navy, no proyecta. visibility además de opacity para
+     que, cerrado, el tabulador no se meta en enlaces que no se ven. */
+  .barra.plegable .menu {
+    position: absolute; top: calc(100% + .5rem); right: .75rem; z-index: 10;
+    width: min(320px, calc(100% - 1.5rem));
+    flex: none; flex-direction: column; align-items: stretch; gap: 1rem;
+    padding: 1.1rem 1.25rem;
+    background: var(--fondo-3);
+    border: 1px solid var(--linea-fuerte); border-radius: var(--radio);
+    visibility: hidden; opacity: 0; transform: translateY(-.5rem);
+    transition: opacity .2s ease, transform .2s ease, visibility .2s;
+  }
+  .barra.plegable.abierto .menu { visibility: visible; opacity: 1; transform: none; }
+
+  /* Cada enlace a su tamaño y no a lo ancho del panel: el subrayado cian mide
+     lo que mide el texto, igual que en la barra. */
+  .barra.plegable .nav { flex: none; flex-direction: column; gap: .5rem; }
+  .barra.plegable .nav a { align-self: flex-start; font-size: 1rem; }
+
+  /* La cuenta va aparte, bajo una línea: es otra cosa que las secciones. */
+  .barra.plegable .sesion {
+    flex-wrap: wrap; padding-top: 1rem; border-top: 1px solid var(--linea);
+  }
+}
 
 /* ----------------------------------------------------------------- contenido */
 .contenido { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
@@ -638,15 +701,15 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
 .secreto.pequeno-texto { font-size: .82rem; letter-spacing: 0; }
 
 @media (max-width: 700px) {
-  /* En vertical la barra se apila con orden explícito: si se deja envolver,
-     la navegación acaba por encima de la marca. */
+  /* Sin menu.js la barra no se pliega y se apila en columna: si se deja
+     envolver, la navegación acaba por encima de la marca. Con él, lo de
+     .plegable manda sobre esto. */
   .barra {
     flex-direction: column; align-items: flex-start;
     gap: .85rem; padding: .85rem 1rem;
   }
-  .marca { order: 1; }
-  .nav { order: 2; flex: none; width: 100%; gap: 1rem; }
-  .sesion { order: 3; }
+  .menu { flex-direction: column; align-items: flex-start; gap: .85rem; width: 100%; }
+  .nav { flex: none; width: 100%; gap: 1rem; }
   .contenido { padding: 1rem; }
   .formulario.en-fila { flex-direction: column; align-items: stretch; }
   .login-caja { margin: 5vh auto; padding: 1.5rem; }
@@ -663,6 +726,10 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
    sigue siendo visible — se quita la animación, no la señal. */
 @media (prefers-reduced-motion: reduce) {
   .nav a::after, .boton { transition: none; }
+
+  /* El menú aparece y la hamburguesa se vuelve X sin animar el paso. */
+  .barra.plegable .menu, .menu-boton span,
+  .menu-boton::before, .menu-boton::after { transition: none; }
 
   /* El icono deja de girar, pero el botón sigue deshabilitándose mientras
      carga: se quita el movimiento, no la señal. */

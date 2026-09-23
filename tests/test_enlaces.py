@@ -249,3 +249,61 @@ def test_el_formulario_del_dialogo_no_lo_desactiva_el_script():
     base = (PLANTILLAS / "base.html").read_text(encoding="utf-8")
     dialogo = re.search(r'<dialog id="dialogo-confirmar".*?</dialog>', base, re.S)
     assert dialogo and 'method="dialog"' in dialogo.group(0)
+
+
+# ------------------------------------------------------- el menú plegable
+
+ESTILO = Path(__file__).resolve().parents[1] / "app" / "static" / "estilo.css"
+
+
+def test_el_script_del_menu_se_sirve(cliente):
+    """Va en /static por lo mismo que confirmar.js: la CSP es script-src 'self'"""
+    respuesta = cliente.get("/static/menu.js")
+
+    assert respuesta.status_code == 200
+    assert "plegable" in respuesta.text
+
+
+def test_el_boton_del_menu_pliega_navegacion_y_sesion(como_admin):
+    """
+    El botón controla un menú que existe, y ese menú guarda las secciones y la
+    cuenta. Si "Salir" quedara fuera, en estrecho se vería suelto junto a la
+    hamburguesa; si quedaran fuera las secciones, no habría nada que plegar.
+    """
+    texto = como_admin.get("/clientes").text
+    barra = re.search(r'<header class="barra">.*?</header>', texto, re.S).group(0)
+
+    boton = re.search(r'<button[^>]*class="menu-boton"[^>]*>', barra).group(0)
+    assert 'type="button"' in boton
+    assert 'aria-controls="menu-principal"' in boton
+    assert 'aria-expanded="false"' in boton
+
+    menu = barra.index('id="menu-principal"')
+    assert menu < barra.index('class="nav"')
+    assert menu < barra.index('action="/logout"')
+    assert 'src="/static/menu.js"' in texto
+
+
+def test_sin_javascript_la_barra_no_se_pliega():
+    """
+    Mejora progresiva: todo lo que oculta la navegación cuelga de .plegable,
+    que solo pone menu.js. Si una regla escondiera el menú sin esa clase, un
+    fallo al cargar el script dejaría el panel sin navegación y con un botón
+    que no hace nada.
+    """
+    css = ESTILO.read_text(encoding="utf-8")
+    ocultan = ("visibility: hidden", "position: absolute", "opacity: 0")
+
+    reglas = re.findall(r'([^{}]+)\{([^{}]*)\}', css)
+    del_menu = [(sel.strip(), cuerpo) for sel, cuerpo in reglas
+                if re.search(r'\.menu\b(?!-)', sel)]
+    assert del_menu, "el barrido no encuentra reglas de .menu: ¿cambió el CSS?"
+
+    for selector, cuerpo in del_menu:
+        if any(o in cuerpo for o in ocultan):
+            assert ".plegable" in selector, (
+                "%s oculta el menú sin depender de .plegable" % selector
+            )
+
+    boton = re.search(r'\.menu-boton\s*\{([^{}]*)\}', css).group(1)
+    assert "display: none" in boton, "el botón debe nacer oculto hasta que cargue menu.js"

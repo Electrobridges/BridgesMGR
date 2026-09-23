@@ -5,6 +5,22 @@ Todos los cambios relevantes de este proyecto se anotan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 el versionado es [SemVer](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Cambiado
+
+- **La barra superior se pliega en ventanas estrechas.** Por debajo de 1200px
+  los siete enlaces, el nombre y el rol ya no cabían en una fila y la barra se
+  partía en tres o cuatro: 234px de cabecera en una tablet y 195px en un
+  teléfono antes de ver nada de la página. Ahora queda en una fila de 72px con
+  la marca y una hamburguesa —la de `electrobridges.com`— que abre un panel con
+  las secciones y, bajo una línea, la cuenta. Se cierra con Escape o tocando
+  fuera. En escritorio ancho la barra no cambia.
+
+  Lo pliega `static/menu.js`, archivo aparte por la CSP. Si no cargara, la
+  barra se apila entera como antes en vez de esconder la navegación tras un
+  botón que no responde; hay una prueba que lo vigila.
+
 ## [0.4.0] — 2026-09-22
 
 ### Añadido
