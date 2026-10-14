@@ -160,13 +160,15 @@ a { color: var(--cian); }
 .mal { color: var(--rojo); }
 
 /* ------------------------------------------------------------------ tarjetas */
+/* Compactas: una tarjeta enseña una cifra, y con más aire del que necesita la
+   fila de arriba se comía media pantalla para decir «1». */
 .tarjetas {
-  display: grid; gap: 1rem; margin: 1rem 0;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  display: grid; gap: .75rem; margin: .75rem 0;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 .tarjeta {
-  display: flex; flex-direction: column; gap: .5rem;
-  padding: 1.125rem;
+  display: flex; flex-direction: column; gap: .3rem;
+  padding: .75rem 1rem;
   background: var(--fondo-2);
   border: 1px solid var(--linea);
   border-radius: var(--radio);
@@ -176,7 +178,7 @@ a { color: var(--cian); }
   letter-spacing: .12em; color: var(--tenue);
 }
 .tarjeta-valor {
-  font-size: 1.75rem; font-weight: 800; letter-spacing: -.03em;
+  font-size: 1.5rem; font-weight: 800; letter-spacing: -.03em;
   line-height: 1.1; color: var(--texto);
   font-variant-numeric: tabular-nums;
 }
@@ -184,7 +186,12 @@ a { color: var(--cian); }
 .tarjeta-valor.pequeno { font-size: .9375rem; font-weight: 600; letter-spacing: 0; }
 .tarjeta-valor.ok { color: var(--verde); }
 .tarjeta-valor.mal { color: var(--rojo); }
-.tarjeta-detalle { font-size: .78rem; line-height: 1.4; margin-top: .35rem; overflow-wrap: anywhere; }
+/* Una línea: el detalle completo va en el title. Sin el recorte,
+   un mensaje largo de systemctl estiraba toda la fila de tarjetas. */
+.tarjeta-detalle {
+  font-size: .75rem; line-height: 1.35; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
 
 /* -------------------------------------------------------------------- tablas */
 /* El contenedor scrollea, no la página: una tabla ancha no debe provocar

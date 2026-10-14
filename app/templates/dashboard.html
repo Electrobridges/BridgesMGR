@@ -30,7 +30,7 @@
     <span class="tarjeta-valor {{ 'ok' if servicio.activo else 'mal' }}">
       {{ 'activo' if servicio.activo else ('inactivo' if servicio.estado in ('inactive', 'failed') else 'caído') }}
     </span>
-    {% if not servicio.activo %}<span class="tarjeta-detalle tenue">{{ servicio.estado }}</span>{% endif %}
+    {% if not servicio.activo %}<span class="tarjeta-detalle tenue" title="{{ servicio.estado }}">{{ servicio.estado }}</span>{% endif %}
   </div>
 </section>
 
