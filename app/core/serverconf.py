@@ -11,6 +11,8 @@ Solo stdlib y sin E/S: se le pasa la lista y se prueba sin servidor.
 import ipaddress
 
 HOOK_CLIENT_CONNECT = "/usr/local/lib/ovpn-web/client-connect"
+VERIFICAR_TOTP = "/usr/local/lib/ovpn-web/verificar-totp"
+GRUPO_VPN = "ovpnweb-vpn"
 
 
 def ultima(directivas, nombre):
@@ -93,3 +95,23 @@ def gancho(directivas):
     if not nivel or nivel[0] not in ("2", "3"):
         return False, "falta 'script-security 2', y sin él OpenVPN no ejecuta el script"
     return True, None
+
+
+def dos_pasos(directivas):
+    """
+    Lo que le falta al server.conf para la verificación en dos pasos.
+
+    Lista vacía = listo. Lo mismo que comprueba el helper antes de activarla,
+    que es quien de verdad lo hace cumplir.
+    """
+    faltan = []
+    verify = ultima(directivas, "auth-user-pass-verify")
+    if not verify or verify[0] != VERIFICAR_TOTP:
+        faltan.append("auth-user-pass-verify %s via-file" % VERIFICAR_TOTP)
+    if not tiene(directivas, "auth-user-pass-optional"):
+        faltan.append("auth-user-pass-optional")
+    if (ultima(directivas, "group") or [""])[0] != GRUPO_VPN:
+        faltan.append("group %s" % GRUPO_VPN)
+    if (ultima(directivas, "script-security") or [""])[0] not in ("2", "3"):
+        faltan.append("script-security 2")
+    return faltan

@@ -233,7 +233,7 @@ def _sistema(d):
         hallazgos.append(_h(AVISO, "privilegios", "OpenVPN sigue corriendo como root",
                             "Sin 'user', un fallo en el proceso que atiende a los clientes es "
                             "un fallo con privilegios de root.",
-                            "user nobody  y  group nogroup  (más persist-key y persist-tun)"))
+                            "user nobody  y  group %s  (más persist-key y persist-tun)" % sc.GRUPO_VPN))
     else:
         hallazgos.append(_h(BIEN, "privilegios", "Suelta privilegios a '%s'" % user[0],
                             "Tras arrancar ya no corre como root."))
@@ -269,6 +269,18 @@ def _sistema(d):
         hallazgos.append(_h(AVISO, "verb", "verb %s: el log no registra las conexiones" % verb[0],
                             "El historial de la VPN del panel se queda vacío y no hay rastro "
                             "de quién entró ni de quién fue rechazado.", "verb 3"))
+
+    faltan = sc.dos_pasos(d)
+    if not faltan:
+        hallazgos.append(_h(BIEN, "dos-pasos", "Verificación en dos pasos disponible",
+                            "Se puede exigir un código de la app del móvil a cada cliente "
+                            "desde sus políticas."))
+    else:
+        hallazgos.append(_h(SUGERENCIA, "dos-pasos", "La VPN no puede pedir un segundo factor",
+                            "Con él, un .ovpn robado no basta para entrar: hace falta "
+                            "también el móvil de su dueño. Solo se pide a los clientes que "
+                            "lo tengan activado.",
+                            "  ".join(faltan) + "  y  auth-gen-token 0"))
 
     enganchado, motivo = sc.gancho(d)
     if enganchado:

@@ -18,6 +18,9 @@ CONFIG_DIR=/etc/ovpn-web
 DATOS_DIR=/var/lib/ovpn-web
 HELPER=/usr/local/sbin/ovpn-web-helper
 HOOK_CLIENT_CONNECT=/usr/local/lib/ovpn-web/client-connect
+VERIFICAR_TOTP=/usr/local/lib/ovpn-web/verificar-totp
+GRUPO_VPN=ovpnweb-vpn
+ESTADO_TOTP=/var/lib/ovpn-web-vpn
 USUARIO=ovpnweb
 HTMX_VERSION=2.0.4
 HTMX_URL="https://unpkg.com/htmx.org@${HTMX_VERSION}/dist/htmx.min.js"
@@ -136,6 +139,13 @@ install -o root -g root -m 0750 deploy/ovpn-web-helper "$HELPER"
 info "Instalando el script de políticas en $HOOK_CLIENT_CONNECT"
 install -d -o root -g root -m 0755 "$(dirname "$HOOK_CLIENT_CONNECT")"
 install -o root -g root -m 0755 deploy/ovpn-web-client-connect "$HOOK_CLIENT_CONNECT"
+install -o root -g root -m 0755 deploy/ovpn-web-verificar-totp "$VERIFICAR_TOTP"
+
+# Verificación en dos pasos de la VPN. El grupo es el que tiene que llevar
+# OpenVPN ('group ovpnweb-vpn' en el server.conf) para leer los secretos; el
+# directorio es donde el script anota el último código aceptado.
+getent group "$GRUPO_VPN" >/dev/null || groupadd --system "$GRUPO_VPN"
+install -d -o root -g "$GRUPO_VPN" -m 0770 "$ESTADO_TOTP"
 
 # Recarga las reglas de acceso por cliente al arrancar la máquina. Las escribe
 # el helper en /etc/openvpn/ovpn-web/acceso.nft; sin esta unidad se perderían

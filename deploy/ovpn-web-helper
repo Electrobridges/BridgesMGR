@@ -29,6 +29,7 @@ Uso:
     ovpn-web-helper aplicar-politicas      (documento JSON por stdin)
     ovpn-web-helper bloqueos               (documento JSON por stdin)
     ovpn-web-helper listar-bloqueos
+    ovpn-web-helper totp-vpn               (documento JSON por stdin)
 
 Lo que NO está aquí y no debe estarlo: reconstruir la CA. Necesitaría escribir
 en server.conf, y quien pueda hacerlo mete un 'script-security 2' con un script
@@ -504,6 +505,15 @@ def cmd_ovpn(cfg, cn):
         "remote-cert-tls server",
         "cipher %s" % cliente.get("cipher", "AES-256-CBC"),
         "verb 3",
+    ]
+
+    # Con la verificación en dos pasos activada para este cliente, el perfil
+    # pide usuario y contraseña: la contraseña es el código de su app.
+    # 'auth-nocache' para que el cliente no guarde el código en memoria.
+    if cn in leer_secretos_totp():
+        partes += ["auth-user-pass", "auth-nocache"]
+
+    partes += [
         "",
         "<ca>", leer_pem(rutas["ca"]), "</ca>",
         "<cert>", leer_pem(crt), "</cert>",
@@ -956,7 +966,7 @@ def reglas_nft(clientes):
     return texto, sum(1 for r in reglas if r.strip().startswith("ip "))
 
 
-def _escribir_atomico(ruta, contenido, modo):
+def _escribir_atomico(ruta, contenido, modo, grupo=0):
     """
     Escribe un archivo de DIR_POLITICAS de forma atómica.
 
@@ -971,7 +981,7 @@ def _escribir_atomico(ruta, contenido, modo):
     with open(temporal, "w", encoding="utf-8") as f:
         f.write(contenido)
     os.chmod(temporal, modo)
-    os.chown(temporal, 0, 0)
+    os.chown(temporal, 0, grupo)
     os.replace(temporal, ruta)
 
 
@@ -1074,6 +1084,103 @@ def cmd_aplicar_politicas(cfg):
         "nft": estado_nft,
         "enganchado": enganchado,
     }
+
+
+# ------------------------------------------- verificación en dos pasos (VPN)
+
+ARCHIVO_TOTP = os.path.join(DIR_POLITICAS, "totp-vpn.json")
+GRUPO_VPN = "ovpnweb-vpn"
+VERIFICAR_TOTP = "/usr/local/lib/ovpn-web/verificar-totp"
+SECRETO_RE = re.compile(r'^[A-Z2-7]{16,64}$')
+
+
+def leer_secretos_totp():
+    try:
+        with open(ARCHIVO_TOTP, "r", encoding="utf-8") as f:
+            datos = json.load(f)
+        return datos if isinstance(datos, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def requisitos_dos_pasos(directivas):
+    """Lo que le falta al server.conf para pedir el código. Vacío = listo."""
+    def ultima(nombre):
+        hallada = None
+        for d in directivas:
+            if d and d[0] == nombre:
+                hallada = d[1:]
+        return hallada
+
+    faltan = []
+    verify = ultima("auth-user-pass-verify")
+    if not verify or verify[0] != VERIFICAR_TOTP:
+        faltan.append("auth-user-pass-verify %s via-file" % VERIFICAR_TOTP)
+    if ultima("auth-user-pass-optional") is None:
+        faltan.append("auth-user-pass-optional")
+    if (ultima("group") or [""])[0] != GRUPO_VPN:
+        faltan.append("group %s" % GRUPO_VPN)
+    if (ultima("script-security") or [""])[0] not in ("2", "3"):
+        faltan.append("script-security 2")
+    return faltan
+
+
+def cmd_totp_vpn(cfg):
+    """
+    Activa, quita o lista la verificación en dos pasos de clientes VPN.
+
+        {"accion": "alta", "cn": "ana", "secreto": "BASE32…"}
+        {"accion": "baja", "cn": "ana"}
+        {"accion": "listar"}
+
+    El secreto llega por stdin y no se devuelve nunca: el panel lo genera, lo
+    enseña una vez en forma de QR y lo olvida. Aquí se guarda en un archivo
+    que solo pueden leer root y el grupo con el que corre OpenVPN.
+    """
+    import grp
+
+    bruto = sys.stdin.read(MAX_STDIN + 1)
+    try:
+        doc = json.loads(bruto)
+    except ValueError:
+        error("Documento no válido")
+    if not isinstance(doc, dict) or doc.get("accion") not in ("alta", "baja", "listar"):
+        error("Documento mal formado")
+
+    secretos = leer_secretos_totp()
+    accion = doc["accion"]
+
+    if accion == "listar":
+        return {"clientes": sorted(secretos)}
+
+    cn = validar_cn(doc.get("cn") if isinstance(doc.get("cn"), str) else "")
+
+    if accion == "alta":
+        secreto = doc.get("secreto")
+        if not isinstance(secreto, str) or not SECRETO_RE.match(secreto):
+            error("Secreto TOTP no válido")
+        # Activarlo con el servidor sin preparar dejaría al cliente fuera sin
+        # remedio: su perfil pediría un código que nadie comprueba, o el
+        # archivo no se podría leer y se rechazaría a todos los que tienen uno.
+        _ruta, directivas = leer_server_conf(cfg)
+        faltan = requisitos_dos_pasos(directivas)
+        if faltan:
+            error("El server.conf no está preparado para la verificación en dos pasos. "
+                  "Falta: %s" % "; ".join(faltan))
+        secretos[cn] = secreto
+    else:
+        secretos.pop(cn, None)
+
+    try:
+        gid = grp.getgrnam(GRUPO_VPN).gr_gid
+    except KeyError:
+        error("No existe el grupo '%s'. Vuelve a pasar deploy/install.sh." % GRUPO_VPN)
+
+    os.makedirs(DIR_POLITICAS, mode=0o755, exist_ok=True)
+    _escribir_atomico(ARCHIVO_TOTP, json.dumps(secretos, indent=1, sort_keys=True) + "\n",
+                      0o640, grupo=gid)
+
+    return {"ok": True, "accion": "totp-vpn", "clientes": sorted(secretos)}
 
 
 # ------------------------------------------------------- bloqueo de IPs
@@ -1243,6 +1350,7 @@ COMANDOS_SIN_CN = {
     "aplicar-politicas": cmd_aplicar_politicas,
     "bloqueos": cmd_bloqueos,
     "listar-bloqueos": cmd_listar_bloqueos,
+    "totp-vpn": cmd_totp_vpn,
 }
 
 # Los únicos que emiten una clave privada nueva y, por tanto, los únicos que

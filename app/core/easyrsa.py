@@ -200,3 +200,18 @@ def bloqueos(cfg, bloquear=(), desbloquear=()):
 
 def listar_bloqueos(cfg):
     return _ejecutar(cfg, ["listar-bloqueos"], timeout=30)
+
+
+def totp_vpn(cfg, accion, cn=None, secreto=None):
+    """
+    Verificación en dos pasos de un cliente VPN: 'alta', 'baja' o 'listar'.
+
+    Devuelve la lista de CN que la tienen activada. El secreto va por stdin y
+    el helper no lo devuelve nunca.
+    """
+    doc = {"accion": accion}
+    if cn is not None:
+        doc["cn"] = validar_cn(cn)
+    if secreto is not None:
+        doc["secreto"] = secreto
+    return _ejecutar(cfg, ["totp-vpn"], entrada=json.dumps(doc), timeout=30)["clientes"]

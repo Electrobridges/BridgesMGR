@@ -30,6 +30,7 @@ def _conf_del_instalador():
         "TLS_CRYPT": "/etc/openvpn/tls-crypt.key", "RED_VPN_DIR": "10.8.0.0",
         "RED_VPN_MASK": "255.255.255.0", "POOL_INI": "10.8.0.2", "POOL_FIN": "10.8.0.191",
         "LOG_DIR": "/var/log/openvpn", "HOOK_CLIENT_CONNECT": "/usr/local/lib/ovpn-web/client-connect",
+        "VERIFICAR_TOTP": "/usr/local/lib/ovpn-web/verificar-totp", "GRUPO_VPN": "ovpnweb-vpn",
         "MGMT_HOST": "127.0.0.1", "MGMT_PORT": "7505", "STATUS_FILE": "/var/log/openvpn/status.log",
         "LOG_FILE": "/var/log/openvpn/openvpn.log",
     }
@@ -128,3 +129,8 @@ def test_la_pagina_dice_por_que_no_puede_auditar(como_admin):
     r = como_admin.get("/seguridad")
     assert r.status_code == 200
     assert "No se pudo leer el server.conf" in r.text
+
+
+def test_el_servidor_nuevo_ya_puede_pedir_segundo_factor():
+    informe = auditor.auditar(_conf_del_instalador(), "OpenVPN 2.6.14")
+    assert "dos-pasos" in _claves(informe, auditor.BIEN)

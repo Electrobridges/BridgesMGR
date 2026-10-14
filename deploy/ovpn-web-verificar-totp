@@ -1,0 +1,162 @@
+#!/usr/bin/python3 -I
+# -*- coding: utf-8 -*-
+"""
+Verificación en dos pasos de la VPN. Lo ejecuta OpenVPN al autenticar.
+
+Se engancha en el server.conf con:
+
+    script-security 2
+    auth-user-pass-verify /usr/local/lib/ovpn-web/verificar-totp via-file
+    auth-user-pass-optional
+    auth-gen-token 0
+    group ovpnweb-vpn
+
+Solo se le pide código a quien tenga la verificación activada en el panel:
+con 'auth-user-pass-optional' un perfil sin 'auth-user-pass' llega aquí con
+usuario y contraseña vacíos, y si su CN no tiene secreto, entra. Si lo tiene,
+la contraseña ES el código de 6 dígitos de su app, y el nombre de usuario da
+igual: quién es lo dice el certificado, no lo que se teclee.
+
+'auth-gen-token' hace que el código se pida al conectar y no en cada
+renegociación de claves, que sería cada hora.
+
+Los secretos están en /etc/openvpn/ovpn-web/totp-vpn.json, root:ovpnweb-vpn
+0640: los escribe ovpn-web-helper y solo los lee el proceso de OpenVPN, que
+corre con ese grupo. Un código ya usado no vale dos veces: el último paso
+aceptado de cada cliente se anota en /var/lib/ovpn-web-vpn.
+
+Mismo algoritmo que app/core/totp.py (RFC 6238, SHA1, 30 s, 6 dígitos, ±1
+paso). Repetido a propósito, como el resto de lo que vive a este lado de la
+frontera; hay una prueba que compara los dos.
+"""
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import re
+import struct
+import sys
+import time
+
+SECRETOS = "/etc/openvpn/ovpn-web/totp-vpn.json"
+ESTADO = "/var/lib/ovpn-web-vpn"
+
+PERIODO = 30
+DIGITOS = 6
+VENTANA = 1
+
+CN_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$')
+PREFIJO = "ovpn-web totp:"
+
+
+def codigo(secreto, paso):
+    limpio = secreto.strip().replace(" ", "").upper().rstrip("=")
+    clave = base64.b32decode(limpio + "=" * (-len(limpio) % 8), casefold=True)
+    resumen = hmac.new(clave, struct.pack(">Q", paso), hashlib.sha1).digest()
+    desplazamiento = resumen[-1] & 0x0F
+    trozo = struct.unpack(">I", resumen[desplazamiento:desplazamiento + 4])[0] & 0x7FFFFFFF
+    return str(trozo % (10 ** DIGITOS)).zfill(DIGITOS)
+
+
+def verificar(secreto, entrada, momento, paso_minimo=None):
+    """El paso que coincide, o None. Igual que app/core/totp.verificar."""
+    limpio = "".join(c for c in entrada if c.isdigit())
+    if len(limpio) != DIGITOS:
+        return None
+    ahora = int(momento // PERIODO)
+    for delta in range(-VENTANA, VENTANA + 1):
+        paso = ahora + delta
+        if paso_minimo is not None and paso <= paso_minimo:
+            continue
+        if hmac.compare_digest(codigo(secreto, paso), limpio):
+            return paso
+    return None
+
+
+def decidir(secretos, cn, password, momento, ultimo_paso):
+    """
+    Devuelve (motivo_de_rechazo, paso_aceptado). Sin motivo, entra.
+
+    Sin secreto para ese CN no hay segundo factor que pedir: paso None.
+    """
+    secreto = secretos.get(cn)
+    if not secreto:
+        return None, None
+    if not password:
+        return "sin_codigo", None
+    paso = verificar(secreto, password, momento, ultimo_paso)
+    if paso is None:
+        # Distinguir el código repetido del incorrecto ayuda a quien depura y
+        # no al que ataca: los dos se rechazan igual.
+        if ultimo_paso is not None and verificar(secreto, password, momento) is not None:
+            return "codigo_repetido", None
+        return "codigo_incorrecto", None
+    return None, paso
+
+
+def rechazar(cn, motivo):
+    sys.stdout.write("%s RECHAZO cn=%s motivo=%s\n" % (PREFIJO, cn or "-", motivo))
+    sys.stdout.flush()
+    sys.exit(1)
+
+
+def _ultimo_paso(cn):
+    try:
+        with open(os.path.join(ESTADO, cn), "r", encoding="ascii") as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _anotar_paso(cn, paso):
+    try:
+        temporal = os.path.join(ESTADO, ".%s.%d" % (cn, os.getpid()))
+        with open(temporal, "w", encoding="ascii") as f:
+            f.write(str(paso))
+        os.replace(temporal, os.path.join(ESTADO, cn))
+    except OSError as e:
+        # Sin poder anotarlo se pierde la protección contra la repetición de
+        # un código durante su ventana, no la verificación. Se deja pasar y se
+        # dice, en vez de dejar fuera a todo el mundo por un permiso.
+        sys.stdout.write("%s AVISO no se pudo anotar el paso de %s: %s\n" % (PREFIJO, cn, e))
+
+
+def main():
+    cn = os.environ.get("common_name", "")
+    if not CN_RE.match(cn):
+        rechazar("", "cn_no_valido")
+
+    try:
+        with open(SECRETOS, "r", encoding="utf-8") as f:
+            secretos = json.load(f)
+    except FileNotFoundError:
+        sys.exit(0)
+    except (OSError, ValueError):
+        # Hay secretos y no se pueden leer: lo prudente es no saltárselos.
+        rechazar(cn, "secretos_ilegibles")
+
+    password = ""
+    if len(sys.argv) >= 2:
+        try:
+            with open(sys.argv[1], "r", encoding="utf-8", errors="replace") as f:
+                lineas = f.read().splitlines()
+            password = lineas[1].strip() if len(lineas) > 1 else ""
+        except OSError:
+            rechazar(cn, "sin_codigo")
+
+    try:
+        motivo, paso = decidir(secretos, cn, password, time.time(), _ultimo_paso(cn))
+    except (ValueError, TypeError, AttributeError):
+        rechazar(cn, "secretos_ilegibles")
+
+    if motivo:
+        rechazar(cn, motivo)
+    if paso is not None:
+        _anotar_paso(cn, paso)
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

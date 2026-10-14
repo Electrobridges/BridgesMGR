@@ -1089,3 +1089,43 @@ def test_migrar_a_v2_avisa_al_panel_como_ovpnweb():
 
 def test_con_v2_no_se_rota_la_clave_compartida():
     assert "tls-crypt-v2 está activo" in _leer(HELPER)
+
+
+# ------------------------------------------- verificación en dos pasos (VPN)
+
+VERIFICAR = DEPLOY / "ovpn-web-verificar-totp"
+
+
+def test_el_script_de_dos_pasos_corre_aislado_y_con_stdlib():
+    texto = _leer(VERIFICAR)
+    assert texto.splitlines()[0] == "#!/usr/bin/python3 -I"
+    modulos = set()
+    for nodo in ast.walk(ast.parse(texto)):
+        if isinstance(nodo, ast.Import):
+            modulos |= {a.name.split(".")[0] for a in nodo.names}
+        elif isinstance(nodo, ast.ImportFrom):
+            modulos.add(nodo.module.split(".")[0])
+    assert modulos <= {"base64", "hashlib", "hmac", "json", "os", "re", "struct", "sys", "time"}
+
+
+def test_los_instaladores_preparan_la_verificacion_en_dos_pasos():
+    for instalador in (INSTALADOR, INSTALA_VPN):
+        texto = _leer(instalador)
+        assert "ovpn-web-verificar-totp" in texto
+        assert "groupadd --system \"$GRUPO_VPN\"" in texto
+        assert 'install -d -o root -g "$GRUPO_VPN" -m 0770 "$ESTADO_TOTP"' in texto
+
+
+def test_el_servidor_nuevo_corre_con_el_grupo_propio():
+    """
+    Con 'nogroup', los secretos de la verificación en dos pasos los podría
+    leer cualquier otro servicio que corra con ese grupo.
+    """
+    texto = _leer(INSTALA_VPN)
+    assert "group ${GRUPO_VPN}" in texto and "group nogroup" not in texto
+    assert "auth-user-pass-optional" in texto
+    assert "auth-gen-token 0" in texto
+
+
+def test_los_secretos_no_los_lee_cualquiera():
+    assert '0o640, grupo=gid' in _leer(HELPER)

@@ -73,6 +73,7 @@ ACCIONES = {
     "desconectar": CERTIFICADOS,
     "politica_cliente": CERTIFICADOS,
     "politica_global": CERTIFICADOS,
+    "dos_pasos_vpn": CERTIFICADOS,
 
     # Lo que hace el propio panel, sin nadie detrás, en nombre de una política:
     # expulsar a quien se queda fuera, revocar un acceso temporal que caduca y

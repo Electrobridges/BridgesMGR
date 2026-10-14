@@ -907,7 +907,8 @@ FILTROS_AUDITORIA = {
     "certificados": ("accion IN ('crear_cliente', 'revocar', 'restaurar',"
                      " 'descargar_ovpn', 'desconectar', 'archivar', 'desarchivar',"
                      " 'politica_cliente', 'politica_global', 'expulsar_politica',"
-                     " 'fin_sesion', 'caducar_cliente', 'perfil_compartido')"),
+                     " 'fin_sesion', 'caducar_cliente', 'perfil_compartido',"
+                     " 'dos_pasos_vpn')"),
     "sesiones": "accion IN ('login', 'logout')",
 }
 

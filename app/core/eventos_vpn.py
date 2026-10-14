@@ -77,13 +77,17 @@ RECHAZO_POLITICA = "rechazo_politica"
 # delata un perfil compartido es que se repita alternando entre IP.
 SESION_DUPLICADA = "sesion_duplicada"
 
+# El script de verificación en dos pasos dijo que no: sin código, incorrecto…
+RECHAZO_2FA = "rechazo_2fa"
+
 # Qué cuenta como fallo al filtrar en pantalla
 FALLOS = {RECHAZO_REVOCADO, RECHAZO_CERTIFICADO, RECHAZO_TLS, RECHAZO_CLAVE,
-          RECHAZO_POLITICA}
+          RECHAZO_POLITICA, RECHAZO_2FA}
 
 # Lo que escribe deploy/ovpn-web-client-connect al rechazar. OpenVPN no le
 # pone fecha ni prefijo: la línea llega tal cual la imprime el script.
 _RECHAZO_POLITICA = re.compile(r'^ovpn-web client-connect: RECHAZO cn=(\S+) motivo=(\S+)')
+_RECHAZO_2FA = re.compile(r'^ovpn-web totp: RECHAZO cn=(\S+) motivo=(\S+)')
 _DUPLICADA = re.compile(r"MULTI: new connection by client '([^']+)' will cause previous active sessions")
 
 # Cómo escribe OpenVPN un paquete que no pasa la clave tls-crypt/tls-auth. La
@@ -95,6 +99,14 @@ _SIN_CLAVE = (
     "cannot locate HMAC in incoming packet",
 )
 _ORIGEN_EN_MENSAJE = re.compile(r'from \[AF_INET6?\](\d{1,3}(?:\.\d{1,3}){3}):(\d+)')
+
+MOTIVOS_2FA = {
+    "sin_codigo": "no envió el código de verificación",
+    "codigo_incorrecto": "código de verificación incorrecto",
+    "codigo_repetido": "código de verificación ya usado",
+    "secretos_ilegibles": "OpenVPN no puede leer los secretos (¿falta 'group ovpnweb-vpn'?)",
+    "cn_no_valido": "nombre de certificado no válido",
+}
 
 MOTIVOS_POLITICA = {
     "bloqueado": "bloqueado por el panel",
@@ -125,6 +137,10 @@ def _clasificar(msg):
     m = _RECHAZO_POLITICA.match(msg)
     if m:
         return RECHAZO_POLITICA, MOTIVOS_POLITICA.get(m.group(2), m.group(2))
+
+    m = _RECHAZO_2FA.match(msg)
+    if m:
+        return RECHAZO_2FA, MOTIVOS_2FA.get(m.group(2), m.group(2))
 
     if _DUPLICADA.search(msg):
         return SESION_DUPLICADA, "se cerró la sesión anterior de este perfil"
@@ -347,6 +363,8 @@ def parse_eventos(lineas):
                 cn = entre_corchetes.group(1)
         if not cn and tipo == RECHAZO_POLITICA:
             cn = _RECHAZO_POLITICA.match(msg).group(1)
+        if not cn and tipo == RECHAZO_2FA:
+            cn = _RECHAZO_2FA.match(msg).group(1)
         if not cn and tipo == SESION_DUPLICADA:
             cn = _DUPLICADA.search(msg).group(1)
         if not cn and tipo in FALLOS:

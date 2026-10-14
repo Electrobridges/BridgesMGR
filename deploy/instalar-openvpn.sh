@@ -45,6 +45,9 @@ MGMT_PORT=7505
 # una directiva client-connect que apunta a un archivo que todavía no existe,
 # que rechazaría a todo el mundo hasta terminar de instalar el panel.
 HOOK_CLIENT_CONNECT=/usr/local/lib/ovpn-web/client-connect
+VERIFICAR_TOTP=/usr/local/lib/ovpn-web/verificar-totp
+GRUPO_VPN=ovpnweb-vpn
+ESTADO_TOTP=/var/lib/ovpn-web-vpn
 
 # ----------------------------------------------------------------- opciones
 SALIDA=""              # lan | todo
@@ -385,11 +388,22 @@ ifconfig-pool-persist ${LOG_DIR}/ipp.txt
 script-security 2
 client-connect ${HOOK_CLIENT_CONNECT}
 
+# Verificación en dos pasos, solo para los clientes que la tengan activada en
+# el panel: con 'auth-user-pass-optional', un perfil sin 'auth-user-pass'
+# llega al script con la contraseña vacía y, si su CN no tiene secreto, entra.
+# 'auth-gen-token' evita pedir el código en cada renegociación de claves.
+auth-user-pass-verify ${VERIFICAR_TOTP} via-file
+auth-user-pass-optional
+auth-gen-token 0
+
 keepalive 10 120
 persist-key
 persist-tun
 user nobody
-group nogroup
+# Grupo propio y no 'nogroup': es el único que puede leer los secretos de la
+# verificación en dos pasos (/etc/openvpn/ovpn-web/totp-vpn.json). Con
+# 'nogroup' los leería cualquier otro servicio que corra con ese grupo.
+group ${GRUPO_VPN}
 
 data-ciphers AES-256-GCM:AES-128-GCM
 data-ciphers-fallback AES-256-CBC
@@ -507,6 +521,12 @@ bash "$(dirname "$0")/fechas-log.sh" "$UNIDAD"
 info "Instalando el script de políticas en $HOOK_CLIENT_CONNECT"
 install -d -o root -g root -m 0755 "$(dirname "$HOOK_CLIENT_CONNECT")"
 install -o root -g root -m 0755 "$(dirname "$0")/ovpn-web-client-connect" "$HOOK_CLIENT_CONNECT"
+install -o root -g root -m 0755 "$(dirname "$0")/ovpn-web-verificar-totp" "$VERIFICAR_TOTP"
+
+# El grupo con el que corre OpenVPN, y donde el script de dos pasos anota el
+# último código aceptado de cada cliente para que no valga dos veces.
+getent group "$GRUPO_VPN" >/dev/null || groupadd --system "$GRUPO_VPN"
+install -d -o root -g "$GRUPO_VPN" -m 0770 "$ESTADO_TOTP"
 
 # --------------------------------------------------------------------- unidad
 if [[ "$SIN_ARRANCAR" == "1" ]]; then

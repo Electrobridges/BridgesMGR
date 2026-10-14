@@ -140,6 +140,8 @@
             <span class="etiqueta">servidor arrancado</span>
           {% elif e.tipo == 'crl' %}
             <span class="etiqueta">CRL recargada</span>
+          {% elif e.tipo == 'rechazo_2fa' %}
+            <span class="etiqueta etiqueta-mal">rechazado: 2.º factor</span>
           {% elif e.tipo == 'rechazo_politica' %}
             <span class="etiqueta etiqueta-mal">rechazado: política</span>
           {% elif e.tipo == 'sesion_duplicada' %}

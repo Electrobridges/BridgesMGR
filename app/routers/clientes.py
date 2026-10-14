@@ -466,16 +466,15 @@ FRANJAS_FORMULARIO = 3
 
 def _servidor(c):
     """
-    (red, (enganchado, motivo), error) leyendo el server.conf por el helper.
+    (directivas, error) leyendo el server.conf por el helper.
 
     Un fallo aquí no impide editar: el helper vuelve a validar al aplicar.
     Solo se pierde la ayuda de qué IP están libres.
     """
     try:
-        directivas = easyrsa.server_conf(c).get("directivas", [])
+        return easyrsa.server_conf(c).get("directivas", []), None
     except easyrsa.ErrorHelper as e:
-        return None, None, "No se pudo leer el server.conf: %s" % e
-    return serverconf.red(directivas), serverconf.gancho(directivas), None
+        return None, "No se pudo leer el server.conf: %s" % e
 
 
 def _politica_del_formulario(anterior, ip_fija, destinos, franjas, expira, max_sesion_min):
@@ -525,7 +524,9 @@ def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
 
     c = cfg(request)
     politica = db.obtener_politica(c.seguridad.db_path, cn) or pol.vacia()
-    red, gancho, error = _servidor(c)
+    directivas, error = _servidor(c)
+    red = serverconf.red(directivas) if directivas is not None else None
+    gancho = serverconf.gancho(directivas) if directivas is not None else None
 
     franjas = list(politica["horario"])
     franjas += [{"dias": [], "desde": "", "hasta": ""}] * (FRANJAS_FORMULARIO - len(franjas))
@@ -541,7 +542,101 @@ def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
         "max_sesion_global": db.max_sesion_global(c.seguridad.db_path),
         "describir_minutos": pol.describir_minutos,
         "rechazo": pol.TEXTO_MOTIVO.get(pol.motivo_rechazo(politica, datetime.now())),
+        "dos_pasos": _estado_dos_pasos(c, cn, directivas),
     })
+
+
+# --------------------------------------------- verificación en dos pasos (VPN)
+
+EMISOR_VPN = "BridgesMGR VPN"
+
+
+def _estado_dos_pasos(c, cn, directivas, **extra):
+    """Contexto de partials/dos_pasos_vpn.html"""
+    estado = {"cn": cn, "activada": None, "faltan": None, "error": None,
+              "recien": False, "qr": None, "fallo_qr": None, "uri": None,
+              "secreto_legible": None, "mensaje": None}
+    if directivas is not None:
+        estado["faltan"] = serverconf.dos_pasos(directivas)
+    try:
+        estado["activada"] = cn in easyrsa.totp_vpn(c, "listar")
+    except easyrsa.ErrorHelper as e:
+        estado["error"] = "No se pudo consultar: %s" % e
+    estado.update(extra)
+    return estado
+
+
+@router.post("/{cn}/dos-pasos/activar")
+def activar_dos_pasos(
+    request: Request,
+    cn: str,
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Genera un secreto, se lo da al helper y lo enseña UNA vez como QR.
+
+    El panel no lo guarda: lo tiene en memoria lo que dura esta respuesta. Si
+    se pierde antes de escanearlo, se vuelve a activar y sale uno nuevo; el
+    anterior deja de valer en ese momento.
+    """
+    from .. import qr
+    from ..core import totp
+
+    try:
+        cn = validar_cn(cn)
+    except CNInvalido as e:
+        return error_htmx(request, str(e))
+
+    c = cfg(request)
+    secreto = totp.generar_secreto()
+    try:
+        easyrsa.totp_vpn(c, "alta", cn, secreto)
+    except easyrsa.ErrorHelper as e:
+        auditar(request, sesion, "dos_pasos_vpn", cn, "error", str(e))
+        return render(request, "partials/dos_pasos_vpn.html",
+                      {"d": _estado_dos_pasos(c, cn, None, error=str(e))})
+
+    auditar(request, sesion, "dos_pasos_vpn", cn, detalle="activada (secreto nuevo)")
+
+    uri = totp.uri_otpauth(secreto, cn, EMISOR_VPN)
+    imagen, fallo = None, None
+    try:
+        imagen = qr.data_uri(uri)
+    except qr.QRNoDisponible as e:
+        fallo = str(e)
+
+    return render(request, "partials/dos_pasos_vpn.html", {"d": _estado_dos_pasos(
+        c, cn, None, recien=True, qr=imagen, fallo_qr=fallo, uri=uri,
+        secreto_legible=totp.formatear_secreto(secreto),
+    )})
+
+
+@router.post("/{cn}/dos-pasos/quitar")
+def quitar_dos_pasos(
+    request: Request,
+    cn: str,
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    try:
+        cn = validar_cn(cn)
+    except CNInvalido as e:
+        return error_htmx(request, str(e))
+
+    c = cfg(request)
+    try:
+        easyrsa.totp_vpn(c, "baja", cn)
+    except easyrsa.ErrorHelper as e:
+        auditar(request, sesion, "dos_pasos_vpn", cn, "error", str(e))
+        return render(request, "partials/dos_pasos_vpn.html",
+                      {"d": _estado_dos_pasos(c, cn, None, error=str(e))})
+
+    auditar(request, sesion, "dos_pasos_vpn", cn, detalle="quitada")
+    return render(request, "partials/dos_pasos_vpn.html", {"d": _estado_dos_pasos(
+        c, cn, None, mensaje="Quitada. Su perfil actual sigue pidiendo usuario y "
+                             "contraseña: descárgale uno nuevo, o que deje la "
+                             "contraseña en blanco.")})
 
 
 @router.post("/{cn}/politica")

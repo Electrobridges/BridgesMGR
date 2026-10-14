@@ -130,4 +130,19 @@
   {% endif %}
   </fieldset>
 </form>
+
+{# Fuera del formulario de políticas: tiene sus propios botones y su propio
+   ciclo, y el QR no puede acabar dentro de un <form> que se envía entero. #}
+<section class="panel-accion">
+  <h2>Verificación en dos pasos</h2>
+  <p class="tenue">
+    Además del certificado, pide al conectar el código de 6 dígitos de una app
+    como Google Authenticator o Aegis. Un <code>.ovpn</code> robado deja de
+    bastar: hace falta también su móvil. Solo se pide al conectar, no en cada
+    renovación de claves.
+  </p>
+  <div id="dos-pasos-vpn">
+    {% with d = dos_pasos %}{% include "partials/dos_pasos_vpn.html" %}{% endwith %}
+  </div>
+</section>
 {% endblock %}

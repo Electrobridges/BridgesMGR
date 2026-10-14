@@ -1,0 +1,60 @@
+{# Estado de la verificación en dos pasos de un cliente VPN, en 'd'. Se
+   recarga entero en cada acción, igual que el del perfil del panel. #}
+{% set e = d %}
+
+{% if e.mensaje %}<div class="aviso aviso-ok" role="status">{{ e.mensaje }}</div>{% endif %}
+{% if e.error %}<div class="aviso aviso-error" role="alert">{{ e.error }}</div>{% endif %}
+
+{% if e.faltan %}
+<div class="aviso aviso-aviso">
+  El servidor aún no puede pedir el código. Añade al <code>server.conf</code>
+  y reinicia OpenVPN:
+  {% for linea in e.faltan %}<code>{{ linea }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+  y <code>auth-gen-token 0</code>.
+</div>
+{% endif %}
+
+{% if e.recien %}
+  <div class="alta-totp">
+    {% if e.qr %}
+    <figure class="qr"><img src="{{ e.qr }}" alt="Código QR con la clave de {{ e.cn }}" width="200" height="200"></figure>
+    {% endif %}
+    <div class="alta-totp-manual">
+      <p><span class="etiqueta etiqueta-ok">activada</span>
+        <strong>Esta clave solo se enseña ahora.</strong> Que {{ e.cn }} la
+        escanee con su app, o que la teclee:</p>
+      <p class="secreto"><code>{{ e.secreto_legible }}</code></p>
+      {% if e.fallo_qr %}<p class="tenue">Sin QR: {{ e.fallo_qr }}</p>{% endif %}
+      <ol class="pasos">
+        <li><strong>Descárgale un <code>.ovpn</code> nuevo</strong>: el de ahora no pide código.</li>
+        <li>Al conectar, su cliente pedirá usuario y contraseña: el usuario da igual
+          (que ponga <code>{{ e.cn }}</code>) y la <strong>contraseña es el código</strong> de la app.</li>
+      </ol>
+    </div>
+  </div>
+{% elif e.activada %}
+  <p><span class="etiqueta etiqueta-ok">activada</span> Se le pide el código al conectar.</p>
+{% elif e.activada is not none %}
+  <p><span class="etiqueta">desactivada</span> Entra solo con su certificado.</p>
+{% endif %}
+
+{% if manda and e.activada is not none %}
+<div class="acciones">
+  <button class="boton {{ '' if e.activada or e.recien else 'boton-principal' }}"
+          hx-disabled-elt="this"
+          hx-post="/clientes/{{ e.cn }}/dos-pasos/activar"
+          hx-target="#dos-pasos-vpn" hx-swap="innerHTML"
+          {% if e.activada or e.recien %}hx-confirm="Se generará una clave nueva y la de su app dejará de valer. ¿Continuar?"{% endif %}>
+    {{ 'Generar clave nueva' if e.activada or e.recien else 'Activar' }}
+  </button>
+  {% if e.activada or e.recien %}
+  <button class="boton boton-peligro"
+          hx-disabled-elt="this"
+          hx-post="/clientes/{{ e.cn }}/dos-pasos/quitar"
+          hx-target="#dos-pasos-vpn" hx-swap="innerHTML"
+          hx-confirm="¿Quitar la verificación en dos pasos de {{ e.cn }}? Volverá a entrar solo con el certificado.">
+    Quitar
+  </button>
+  {% endif %}
+</div>
+{% endif %}
