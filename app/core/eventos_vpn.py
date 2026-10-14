@@ -86,6 +86,16 @@ FALLOS = {RECHAZO_REVOCADO, RECHAZO_CERTIFICADO, RECHAZO_TLS, RECHAZO_CLAVE,
 _RECHAZO_POLITICA = re.compile(r'^ovpn-web client-connect: RECHAZO cn=(\S+) motivo=(\S+)')
 _DUPLICADA = re.compile(r"MULTI: new connection by client '([^']+)' will cause previous active sessions")
 
+# Cómo escribe OpenVPN un paquete que no pasa la clave tls-crypt/tls-auth. La
+# IP no va en el prefijo de la línea sino al final: '… failed from
+# [AF_INET]203.0.113.5:4444'.
+_SIN_CLAVE = (
+    "tls-crypt unwrapping failed",
+    "incoming packet authentication failed",
+    "cannot locate HMAC in incoming packet",
+)
+_ORIGEN_EN_MENSAJE = re.compile(r'from \[AF_INET6?\](\d{1,3}(?:\.\d{1,3}){3}):(\d+)')
+
 MOTIVOS_POLITICA = {
     "bloqueado": "bloqueado por el panel",
     "caducado": "acceso caducado",
@@ -128,6 +138,12 @@ def _clasificar(msg):
 
     if "AUTH_FAILED" in msg:
         return RECHAZO_CERTIFICADO, "autenticación rechazada"
+
+    if any(t in msg for t in _SIN_CLAVE):
+        # Antes del handshake: el paquete ni siquiera trae la clave tls-crypt o
+        # tls-auth. Es lo que deja un escáner o un ataque desde internet, y lo
+        # que más pesa al decidir si se bloquea una IP.
+        return RECHAZO_CLAVE, "paquete sin la clave tls-crypt/tls-auth"
 
     if "TLS Error" in msg or "TLS_ERROR" in msg:
         # El síntoma clásico de una clave tls-crypt que no coincide: el cliente
@@ -304,6 +320,10 @@ def parse_eventos(lineas):
         msg = m.group("msg")
         ip = m.group("ip")
         puerto = m.group("puerto")
+        if not ip:
+            origen = _ORIGEN_EN_MENSAJE.search(msg)
+            if origen:
+                ip, puerto = origen.groups()
         clave = "%s:%s" % (ip, puerto) if ip else None
 
         # 'VERIFY OK: depth=0, CN=daniel' identifica la sesión aunque después

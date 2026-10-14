@@ -38,7 +38,7 @@ aplicación cientos de veces, no levantan un hilo cada vez.
 import threading
 from datetime import datetime, timezone
 
-from . import db, eventos, notificar, politicas, respaldar
+from . import bloqueos, db, eventos, notificar, politicas, respaldar
 from .core import conexiones, easyrsa, mgmt, respaldos, salud
 from .core import politicas as pol
 
@@ -225,6 +225,9 @@ def _ingerir_eventos(cfg):
     aguanta que una vuelta falle sin llevarse por delante a las demás.
     """
     eventos.ingerir(cfg)
+
+    # Justo después de ingerir, que es cuando hay sucesos nuevos que contar.
+    bloqueos.revisar(cfg)
 
 
 # Accesos temporales cuyo certificado ya consta revocado, como (cn, expira).

@@ -197,6 +197,20 @@ CREATE TABLE IF NOT EXISTS politicas (
     por         TEXT
 );
 
+-- Bloqueos de IP en el cortafuegos, automáticos o a mano. El que manda es el
+-- set de nftables, que caduca solo; esto es el historial y lo que permite
+-- decir por qué y quién bloqueó cada una.
+CREATE TABLE IF NOT EXISTS ip_bloqueos (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip        TEXT NOT NULL,
+    desde     TEXT NOT NULL,
+    hasta     TEXT NOT NULL,
+    motivo    TEXT,
+    por       TEXT,
+    levantado TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ip_bloqueos_hasta ON ip_bloqueos(hasta);
 CREATE INDEX IF NOT EXISTS idx_auditoria_ts ON auditoria(ts DESC);
 -- Por 'visto' purga la limpieza; por 'tipo' filtran las pestañas de la VPN.
 CREATE INDEX IF NOT EXISTS idx_eventos_vpn_visto ON eventos_vpn(visto);
@@ -1362,3 +1376,55 @@ def duplicadas_recientes(ruta, desde):
     for f in filas:
         resultado.setdefault(f["cn"], []).append(f["ip"])
     return resultado
+
+
+# ----------------------------------------------------------- bloqueos de IP
+
+def rechazos_por_ip(ruta, tipos, desde):
+    """{ip: n} de los sucesos de esos tipos ingeridos desde 'desde' (ISO UTC)."""
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT ip, COUNT(*) AS n FROM eventos_vpn"
+            " WHERE " + _tipos_sql(tipos) + " AND visto >= ? AND ip != ''"
+            " GROUP BY ip",
+            (desde,),
+        ).fetchall()
+    return {f["ip"]: f["n"] for f in filas}
+
+
+def registrar_bloqueo(ruta, ip, minutos, motivo, por):
+    ahora = _ahora()
+    with conexion(ruta) as con:
+        con.execute(
+            "INSERT INTO ip_bloqueos (ip, desde, hasta, motivo, por) VALUES (?, ?, ?, ?, ?)",
+            (ip, _iso(ahora), _iso(ahora + timedelta(minutes=minutos)), motivo, por),
+        )
+
+
+def levantar_bloqueo(ruta, ip):
+    with conexion(ruta) as con:
+        con.execute(
+            "UPDATE ip_bloqueos SET levantado = ? WHERE ip = ? AND levantado IS NULL"
+            " AND hasta > ?",
+            (_iso(_ahora()), ip, _iso(_ahora())),
+        )
+
+
+def bloqueos_activos(ruta):
+    """Los bloqueos en vigor según el registro, el más reciente de cada IP."""
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT ip, MAX(desde) AS desde, MAX(hasta) AS hasta, motivo, por"
+            "  FROM ip_bloqueos WHERE levantado IS NULL AND hasta > ?"
+            " GROUP BY ip ORDER BY desde DESC",
+            (_iso(_ahora()),),
+        ).fetchall()
+    return [dict(f) for f in filas]
+
+
+def historial_bloqueos(ruta, limite=50):
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT * FROM ip_bloqueos ORDER BY id DESC LIMIT ?", (limite,)
+        ).fetchall()
+    return [dict(f) for f in filas]

@@ -27,6 +27,8 @@ Uso:
     ovpn-web-helper rotar-tls-crypt
     ovpn-web-helper server-conf
     ovpn-web-helper aplicar-politicas      (documento JSON por stdin)
+    ovpn-web-helper bloqueos               (documento JSON por stdin)
+    ovpn-web-helper listar-bloqueos
 
 Lo que NO está aquí y no debe estarlo: reconstruir la CA. Necesitaría escribir
 en server.conf, y quien pueda hacerlo mete un 'script-security 2' con un script
@@ -1034,6 +1036,158 @@ def cmd_aplicar_politicas(cfg):
     }
 
 
+# ------------------------------------------------------- bloqueo de IPs
+
+TABLA_BLOQUEO = "ovpnweb_bloqueo"
+MAX_BLOQUEO_MIN = 30 * 24 * 60
+MAX_IPS_POR_LLAMADA = 256
+
+# Lo que no se bloquea nunca, se pida como se pida: el propio bucle local, y
+# direcciones que no pueden ser el origen de un ataque desde internet. Las de
+# la LAN SÍ se pueden —un atacante también puede estar dentro—, pero el panel
+# las pone por defecto en su lista blanca para no dejar fuera a quien lo usa.
+def _ip_bloqueable(texto):
+    import ipaddress
+    try:
+        ip = ipaddress.IPv4Address(texto)
+    except ValueError:
+        return None
+    if ip.is_loopback or ip.is_unspecified or ip.is_multicast or ip.is_reserved \
+            or ip.is_link_local:
+        return None
+    return ip
+
+
+def _nft():
+    nft = shutil.which("nft")
+    if not nft:
+        error("'nft' no está instalado (apt install nftables)")
+    return nft
+
+
+def _nft_ejecutar(args, entrada=None):
+    proc = subprocess.run([_nft()] + args, input=entrada, capture_output=True,
+                          text=True, timeout=30)
+    if proc.returncode != 0:
+        error("nftables falló: %s" % (proc.stderr or proc.stdout).strip())
+    return proc.stdout
+
+
+def _asegurar_tabla_bloqueo():
+    """
+    Crea la tabla de bloqueos si no existe. NO se reescribe si ya está: eso
+    vaciaría el set y levantaría todos los bloqueos en curso.
+
+    Prioridad -10 en 'input': antes que las reglas de acceso y que ufw, para
+    que el paquete de una IP bloqueada no llegue ni a OpenVPN. Los elementos
+    llevan su propio 'timeout' y el núcleo los quita solos: no hace falta un
+    temporizador que los levante, ni que el panel siga vivo.
+    """
+    proc = subprocess.run([_nft(), "list", "table", "inet", TABLA_BLOQUEO],
+                          capture_output=True, text=True, timeout=30)
+    if proc.returncode == 0:
+        return
+    _nft_ejecutar(["-f", "-"], entrada=(
+        "table inet %s {\n"
+        "    set bloqueadas {\n"
+        "        type ipv4_addr\n"
+        "        flags timeout\n"
+        "    }\n"
+        "    chain entrada {\n"
+        "        type filter hook input priority -10; policy accept;\n"
+        "        ip saddr @bloqueadas drop\n"
+        "    }\n"
+        "}\n" % TABLA_BLOQUEO
+    ))
+
+
+def _listar_bloqueadas():
+    """[{'ip', 'expira_s'}] de lo que hay ahora mismo en el set."""
+    proc = subprocess.run([_nft(), "-j", "list", "set", "inet", TABLA_BLOQUEO, "bloqueadas"],
+                          capture_output=True, text=True, timeout=30)
+    if proc.returncode != 0:
+        return []
+    try:
+        datos = json.loads(proc.stdout)
+    except ValueError:
+        return []
+
+    resultado = []
+    for objeto in datos.get("nftables", []):
+        conjunto = objeto.get("set")
+        if not conjunto:
+            continue
+        for elem in conjunto.get("elem", []):
+            if isinstance(elem, dict) and "elem" in elem:
+                interior = elem["elem"]
+                resultado.append({"ip": str(interior.get("val")),
+                                  "expira_s": int(interior.get("expires", 0))})
+            else:
+                resultado.append({"ip": str(elem), "expira_s": 0})
+    return resultado
+
+
+def cmd_listar_bloqueos(cfg):
+    if not shutil.which("nft"):
+        return {"bloqueadas": [], "nft": False}
+    return {"bloqueadas": _listar_bloqueadas(), "nft": True}
+
+
+def cmd_bloqueos(cfg):
+    """
+    Bloquea y desbloquea IPs. Documento JSON por stdin:
+
+        {"bloquear": [{"ip": "203.0.113.5", "minutos": 60}], "desbloquear": ["…"]}
+
+    Cada IP se revalida aquí y se escribe en la orden de nft desde el objeto
+    ipaddress, nunca desde el texto recibido.
+    """
+    bruto = sys.stdin.read(MAX_STDIN + 1)
+    if len(bruto) > MAX_STDIN:
+        error("Documento demasiado grande")
+    try:
+        doc = json.loads(bruto)
+    except ValueError:
+        error("El documento de bloqueos no es JSON válido")
+    if not isinstance(doc, dict) or not set(doc) <= {"bloquear", "desbloquear"}:
+        error("Documento de bloqueos mal formado")
+
+    bloquear = doc.get("bloquear") or []
+    desbloquear = doc.get("desbloquear") or []
+    if not isinstance(bloquear, list) or not isinstance(desbloquear, list) \
+            or len(bloquear) + len(desbloquear) > MAX_IPS_POR_LLAMADA:
+        error("Documento de bloqueos mal formado")
+
+    ordenes = []
+    for b in bloquear:
+        if not isinstance(b, dict) or set(b) != {"ip", "minutos"}:
+            error("Bloqueo mal formado")
+        ip = _ip_bloqueable(b["ip"]) if isinstance(b["ip"], str) else None
+        if ip is None:
+            error("IP no bloqueable: %r" % b["ip"])
+        minutos = b["minutos"]
+        if isinstance(minutos, bool) or not isinstance(minutos, int) \
+                or not 1 <= minutos <= MAX_BLOQUEO_MIN:
+            error("Duración de bloqueo no válida para %s" % ip)
+        ordenes.append("add element inet %s bloqueadas { %s timeout %dm }"
+                       % (TABLA_BLOQUEO, ip, minutos))
+
+    for texto in desbloquear:
+        ip = _ip_bloqueable(texto) if isinstance(texto, str) else None
+        if ip is None:
+            error("IP no válida: %r" % texto)
+        # 'delete' falla si no está; se comprueba antes para que desbloquear
+        # algo que ya caducó no sea un error.
+        if any(b["ip"] == str(ip) for b in _listar_bloqueadas()):
+            ordenes.append("delete element inet %s bloqueadas { %s }" % (TABLA_BLOQUEO, ip))
+
+    _asegurar_tabla_bloqueo()
+    if ordenes:
+        _nft_ejecutar(["-f", "-"], entrada="\n".join(ordenes) + "\n")
+
+    return {"ok": True, "accion": "bloqueos", "bloqueadas": _listar_bloqueadas()}
+
+
 COMANDOS_CON_CN = {
     "revocar": cmd_revocar,
     "restaurar": cmd_restaurar,
@@ -1047,6 +1201,8 @@ COMANDOS_SIN_CN = {
     "rotar-tls-crypt": cmd_rotar_tls_crypt,
     "server-conf": cmd_server_conf,
     "aplicar-politicas": cmd_aplicar_politicas,
+    "bloqueos": cmd_bloqueos,
+    "listar-bloqueos": cmd_listar_bloqueos,
 }
 
 # Los únicos que emiten una clave privada nueva y, por tanto, los únicos que

@@ -80,6 +80,12 @@ ACCIONES = {
     "expulsar_politica": CERTIFICADOS,
     "caducar_cliente": CERTIFICADOS,
     "perfil_compartido": CERTIFICADOS,
+
+    # El cortafuegos cerrándole la puerta a una IP: la primera señal de que
+    # alguien está llamando desde fuera.
+    "bloquear_ip": RECHAZOS,
+    "desbloquear_ip": RECHAZOS,
+    "ajustar_bloqueo": RECHAZOS,
 }
 
 # Acciones que solo avisan cuando salen mal. Un login correcto es ruido; uno

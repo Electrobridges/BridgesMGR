@@ -183,3 +183,20 @@ def aplicar_politicas(cfg, documento):
     """
     return _ejecutar(cfg, ["aplicar-politicas"],
                      entrada=json.dumps(documento), timeout=60)
+
+
+def bloqueos(cfg, bloquear=(), desbloquear=()):
+    """
+    Bloquea ([(ip, minutos)]) y desbloquea ([ip]) en el cortafuegos.
+
+    Devuelve la lista de lo que queda bloqueado: [{'ip', 'expira_s'}].
+    """
+    doc = {
+        "bloquear": [{"ip": ip, "minutos": int(minutos)} for ip, minutos in bloquear],
+        "desbloquear": list(desbloquear),
+    }
+    return _ejecutar(cfg, ["bloqueos"], entrada=json.dumps(doc), timeout=60)["bloqueadas"]
+
+
+def listar_bloqueos(cfg):
+    return _ejecutar(cfg, ["listar-bloqueos"], timeout=30)
