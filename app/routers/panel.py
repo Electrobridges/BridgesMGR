@@ -10,7 +10,7 @@ from fastapi.responses import Response
 from ..auth import ip_cliente, solo_admin, usuario_actual, verificar_csrf
 from ..core import logs as core_logs
 from ..core.conexiones import obtener_conexiones, resumen_trafico, top_por_trafico
-from .. import db, exportacion, notificar, respaldar
+from .. import db, estadisticas, exportacion, notificar, respaldar
 from ..core import easyrsa, respaldos
 from ..core.easyrsa import ErrorHelper, estado_servicio, listar_certificados
 from ..core.parsers import format_bytes
@@ -37,6 +37,7 @@ def dashboard(request: Request, sesion=Depends(usuario_actual)):
         errores.append("No se pudo consultar el servicio: %s" % e)
 
     return render(request, "dashboard.html", {
+        "graficas": estadisticas.panel(c.seguridad.db_path),
         "resumen": resumen_trafico(conexiones),
         "top": top_por_trafico(conexiones),
         "certificados": certificados,

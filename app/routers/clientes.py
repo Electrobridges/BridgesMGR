@@ -12,7 +12,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import Response
 
-from .. import caducidades, db, trafico
+from .. import caducidades, db, estadisticas, trafico
 from .. import politicas as aplicar_politicas
 from ..auth import solo_admin, usuario_actual, verificar_csrf
 from ..core import easyrsa, serverconf
@@ -570,7 +570,7 @@ def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
         "rechazo": pol.TEXTO_MOTIVO.get(pol.motivo_rechazo(politica, datetime.now())),
         "dos_pasos": _estado_dos_pasos(c, cn, directivas),
         "uso_mes": trafico.uso_mes(c.seguridad.db_path).get(cn, 0),
-        "dias_trafico": db.trafico_cliente(c.seguridad.db_path, cn, 31),
+        "grafica_trafico": estadisticas.trafico_diario(c.seguridad.db_path, cn),
         "bytes_decimales": trafico.bytes_decimales,
         "bytes_mb": pol.BYTES_MB,
     })

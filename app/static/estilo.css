@@ -184,6 +184,7 @@ a { color: var(--cian); }
 .tarjeta-valor.pequeno { font-size: .9375rem; font-weight: 600; letter-spacing: 0; }
 .tarjeta-valor.ok { color: var(--verde); }
 .tarjeta-valor.mal { color: var(--rojo); }
+.tarjeta-detalle { font-size: .78rem; line-height: 1.4; margin-top: .35rem; overflow-wrap: anywhere; }
 
 /* -------------------------------------------------------------------- tablas */
 /* El contenedor scrollea, no la página: una tabla ancha no debe provocar
@@ -700,3 +701,59 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
 .arreglo code { color: var(--cian-claro); white-space: pre-wrap; }
 @media (max-width: 600px) { .hallazgo { grid-template-columns: 1fr; } }
 input.corto { width: 6rem; }
+
+/* ----------------------------------------------------------------- gráficas */
+/* Colores de serie: los dos primeros de la paleta categórica de referencia en
+   su versión oscura, validados contra este fondo (#0b1b34) con el validador de
+   la guía de visualización: contraste >= 3:1 y separación para daltonismo
+   (ΔE 26.8) muy por encima del mínimo. El texto nunca lleva el color de la
+   serie: va en las tintas del panel. */
+:root {
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --rejilla: rgba(255, 255, 255, .07);
+  --eje-base: rgba(255, 255, 255, .22);
+}
+.graficas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+            gap: 1rem; margin: 1rem 0 1.5rem; }
+.grafica { margin: 0; padding: 1rem 1.1rem .75rem; background: var(--fondo-2);
+           border: 1px solid var(--linea); border-radius: var(--radio); min-width: 0; }
+.grafica-titulo { font-weight: 600; color: var(--texto); margin-bottom: .35rem; }
+.grafica-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.grafica-svg .serie-1, .ranking-barra .serie-1, .muestra.serie-1 { fill: var(--serie-1); background: var(--serie-1); }
+.grafica-svg .serie-2, .muestra.serie-2 { fill: var(--serie-2); background: var(--serie-2); }
+.grafica-svg .rejilla { stroke: var(--rejilla); stroke-width: 1; shape-rendering: crispEdges; }
+.grafica-svg .rejilla.base { stroke: var(--eje-base); }
+.grafica-svg .eje { fill: var(--tenue); font-size: 11px; font-variant-numeric: tabular-nums; }
+.grafica-svg .zona { fill: transparent; }
+.grafica-svg .columna:hover .zona { fill: rgba(255, 255, 255, .04); }
+.grafica-leyenda { display: flex; flex-wrap: wrap; gap: .25rem 1rem; list-style: none;
+                   margin: 0 0 .4rem; padding: 0; font-size: .8rem; color: var(--texto-2); }
+.grafica-leyenda li { display: inline-flex; align-items: center; gap: .4rem; }
+.muestra { display: inline-block; width: .7rem; height: .7rem; border-radius: 3px; }
+.grafica-vacia { margin: .25rem 0 0; }
+.grafica-tabla { margin-top: .4rem; }
+.grafica-tabla summary { cursor: pointer; }
+.grafica-tip {
+  position: absolute; z-index: 50; pointer-events: none; white-space: pre-line;
+  padding: .45rem .6rem; border-radius: var(--radio-sm); font-size: .8rem; line-height: 1.45;
+  background: var(--fondo-3); color: var(--texto); border: 1px solid var(--linea-fuerte);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .35); opacity: 0; transition: opacity .08s;
+}
+.grafica-tip.visible { opacity: 1; }
+
+.ranking { list-style: none; margin: .25rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+.ranking-fila { display: grid; grid-template-columns: minmax(5rem, 9rem) 1fr auto; gap: .75rem; align-items: center; }
+.ranking-nombre { font-weight: 600; color: var(--texto); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranking-barra { width: 100%; height: .75rem; display: block; }
+.ranking-valor { color: var(--texto-2); font-size: .85rem; }
+
+/* Medidor de cuota: el relleno lleva la gravedad, la pista es un tono del mismo color. */
+.medidor { width: 100%; max-width: 28rem; height: .6rem; display: block; margin: .35rem 0; }
+.medidor .pista { fill: rgba(57, 135, 229, .18); }
+.medidor .relleno { fill: var(--serie-1); }
+.medidor .relleno.aviso { fill: var(--amarillo); }
+.medidor .relleno.mal { fill: var(--rojo); }
+/* Dentro del formulario de políticas la gráfica no ocupa todo el ancho: a
+   1200 px el SVG escala y el texto del eje se vuelve enorme. */
+.politica .grafica { max-width: 44rem; }

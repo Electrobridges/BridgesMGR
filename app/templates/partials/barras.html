@@ -1,0 +1,21 @@
+{# Ranking en barras horizontales de app/core/graficas.barras(), en 'filas'.
+   Cada barra es un SVG con el largo en el atributo 'width': la CSP no deja
+   un 'style' en línea. El nombre y el valor van en texto, no en el color. #}
+<figure class="grafica">
+  {% if titulo %}<figcaption class="grafica-titulo">{{ titulo }}</figcaption>{% endif %}
+  {% if filas %}
+  <ol class="ranking">
+    {% for f in filas %}
+    <li class="ranking-fila" data-tip="{{ f.nombre }}: {{ f.valor }}">
+      <span class="ranking-nombre">{{ f.nombre }}</span>
+      <svg class="ranking-barra" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+        <rect class="{{ f.clase }}" x="0" y="0" width="{{ f.largo }}" height="10" rx="1.2"></rect>
+      </svg>
+      <span class="ranking-valor num">{{ f.valor }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="tenue pequeno">Sin datos todavía en este periodo.</p>
+  {% endif %}
+</figure>

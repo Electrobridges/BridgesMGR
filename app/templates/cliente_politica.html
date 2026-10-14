@@ -92,32 +92,27 @@
       Subida más bajada. Al agotarla se le desconecta y no puede volver a entrar
       hasta el día 1 del mes siguiente, cuando se levanta sola. Vacío = sin cuota.
     </p>
+    {% set limite = politica.cuota_mb_mes * bytes_mb %}
     <p>
       Este mes lleva <strong>{{ bytes_decimales(uso_mes) }}</strong>
-      {% if politica.cuota_mb_mes %}de {{ bytes_decimales(politica.cuota_mb_mes * bytes_mb) }}
-      ({{ (100 * uso_mes / (politica.cuota_mb_mes * bytes_mb)) | round | int }} %){% endif %}.
+      {% if limite %}de {{ bytes_decimales(limite) }}
+      ({{ (100 * uso_mes / limite) | round | int }} %){% endif %}.
     </p>
+    {% if limite %}
+    {% set pct = [100, 100 * uso_mes / limite] | min %}
+    {# Medidor en SVG: el largo va en un atributo, que la CSP deja. El relleno
+       lleva la gravedad; el porcentaje está también en el texto de arriba. #}
+    <svg class="medidor" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+      <rect class="pista" x="0" y="0" width="100" height="6" rx="3"></rect>
+      <rect class="relleno {{ 'mal' if pct >= 100 else ('aviso' if pct >= 80 else '') }}"
+            x="0" y="0" width="{{ [pct, 1] | max }}" height="6" rx="3"></rect>
+    </svg>
+    {% endif %}
     <label for="cuota_gb">GB al mes</label>
     <input type="number" id="cuota_gb" name="cuota_gb" min="0" step="0.1"
            value="{{ (politica.cuota_mb_mes / 1000) if politica.cuota_mb_mes else '' }}"
            placeholder="sin cuota">
-    {% if dias_trafico %}
-    <details>
-      <summary class="tenue pequeno">Tráfico de los últimos días</summary>
-      <div class="tabla-scroll">
-      <table class="tabla">
-        <thead><tr><th>Día</th><th class="num">Subida</th><th class="num">Bajada</th></tr></thead>
-        <tbody>
-          {% for d in dias_trafico %}
-          <tr><td>{{ d.dia }}</td>
-              <td class="num">{{ bytes_decimales(d.recibido) }}</td>
-              <td class="num">{{ bytes_decimales(d.enviado) }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      </div>
-    </details>
-    {% endif %}
+    {% with g = grafica_trafico, titulo = 'Su tráfico, últimos 30 días' %}{% include "partials/grafica.html" %}{% endwith %}
   </section>
 
   <section class="panel-accion">

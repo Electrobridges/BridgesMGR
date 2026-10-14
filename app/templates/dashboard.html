@@ -24,9 +24,13 @@
   </div>
   <div class="tarjeta">
     <span class="tarjeta-etiqueta">Servicio</span>
+    {# El estado en grande es una palabra; el detalle de por qué, debajo y en
+       pequeño. Antes iba el mensaje entero en el tamaño del valor, y un error
+       de systemctl llenaba la tarjeta. #}
     <span class="tarjeta-valor {{ 'ok' if servicio.activo else 'mal' }}">
-      {{ 'activo' if servicio.activo else servicio.estado }}
+      {{ 'activo' if servicio.activo else ('inactivo' if servicio.estado in ('inactive', 'failed') else 'caído') }}
     </span>
+    {% if not servicio.activo %}<span class="tarjeta-detalle tenue">{{ servicio.estado }}</span>{% endif %}
   </div>
 </section>
 
@@ -49,7 +53,15 @@
   </div>
 </section>
 
-<h2>Top por tráfico</h2>
+<h2>Últimos 30 días</h2>
+<div class="graficas">
+  {% with g = graficas.trafico, titulo = 'Tráfico por día' %}{% include "partials/grafica.html" %}{% endwith %}
+  {% with filas = graficas.ranking, titulo = 'Quién más tráfico lleva este mes' %}{% include "partials/barras.html" %}{% endwith %}
+  {% with g = graficas.conexiones, titulo = 'Conexiones por día' %}{% include "partials/grafica.html" %}{% endwith %}
+  {% with g = graficas.rechazos, titulo = 'Conexiones rechazadas por día' %}{% include "partials/grafica.html" %}{% endwith %}
+</div>
+
+<h2>Conectados ahora, por tráfico</h2>
 {% if top %}
 <div class="tabla-scroll">
 <table class="tabla">

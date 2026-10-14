@@ -25,6 +25,9 @@
      nunca en línea: la CSP es script-src 'self'. Si no cargara, HTMX vuelve a
      su confirm nativo y la guarda sigue puesta. #}
   <script src="/static/confirmar.js" defer></script>
+  {# Tooltip de las gráficas. Local por la misma CSP; sin él quedan el
+     <title> de cada columna y la tabla de datos. #}
+  <script src="/static/graficas.js" defer></script>
 </head>
 {# El token CSRF viaja en todas las peticiones HTMX. Una web ajena no puede
    poner cabeceras propias, así que esto corta el CSRF de raíz. #}

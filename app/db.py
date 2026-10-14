@@ -1485,3 +1485,36 @@ def purgar_trafico(ruta, dias):
     corte = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
     with conexion(ruta) as con:
         return con.execute("DELETE FROM trafico_diario WHERE dia < ?", (corte,)).rowcount
+
+
+# ---------------------------------------------------------- series por día
+
+def trafico_por_dia(ruta, desde, cn=None):
+    """{dia: (recibido, enviado)} desde el día 'desde' (YYYY-MM-DD), de todos o de un cliente."""
+    consulta = ("SELECT dia, SUM(recibido) AS r, SUM(enviado) AS e FROM trafico_diario"
+                " WHERE dia >= ?")
+    params = [desde]
+    if cn is not None:
+        consulta += " AND cn = ?"
+        params.append(cn)
+    with conexion(ruta) as con:
+        filas = con.execute(consulta + " GROUP BY dia", params).fetchall()
+    return {f["dia"]: (f["r"], f["e"]) for f in filas}
+
+
+def eventos_por_dia(ruta, tipos, desde):
+    """
+    {dia: n} de los sucesos de esos tipos desde 'desde' (YYYY-MM-DD).
+
+    El día sale de la fecha que escribió OpenVPN cuando la hay, y si no —un
+    log con '--suppress-timestamps'— de cuándo lo leyó el panel, que como
+    mucho se desvía los cinco minutos de una vuelta del vigilante.
+    """
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT CASE WHEN ts != '' THEN substr(ts, 1, 10) ELSE substr(visto, 1, 10) END AS dia,"
+            "       COUNT(*) AS n FROM eventos_vpn WHERE " + _tipos_sql(tipos) +
+            " GROUP BY dia HAVING dia >= ?",
+            (desde,),
+        ).fetchall()
+    return {f["dia"]: f["n"] for f in filas}
