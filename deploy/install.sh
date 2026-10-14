@@ -11,7 +11,8 @@
 # script haya decidido. Con --sin-openvpn se salta el ofrecimiento; con
 # --con-openvpn lo monta sin preguntar.
 
-set -euo pipefail
+# -E para que la trampa de ERR también salte dentro de las funciones.
+set -Eeuo pipefail
 
 DESTINO=/opt/ovpn-web
 CONFIG_DIR=/etc/ovpn-web
@@ -31,6 +32,21 @@ HECHOS_VPN=/run/ovpn-web-instalacion.env
 # Un servidor OpenVPN se da por montado si tiene PKI y configuración.
 PKI_ESPERADA=/etc/openvpn/easy-rsa/pki/ca.crt
 
+# Todo lo que sale por pantalla queda también aquí, con fecha. Cuando una
+# actualización falla, lo que se ve en la terminal ya se ha ido con el scroll
+# o con la sesión SSH; esto no.
+REGISTRO=/var/log/ovpn-web-instalacion.log
+CERROJO=/run/ovpn-web-instalacion.lock
+
+# Lo que hay que tener del repo para instalar. Se comprueba antes de tocar
+# nada: un clon incompleto debe parar al principio, no a mitad.
+NECESARIOS=(
+  app/main.py requirements.txt deploy/ovpn-web-helper deploy/ovpn-web-client-connect
+  deploy/ovpn-web-verificar-totp deploy/ovpn-web-acceso.service deploy/ovpn-web.service
+  deploy/ovpnweb.sudoers deploy/config.ejemplo.yaml
+)
+PAQUETES=(python3 python3-venv python3-pip python3-yaml openssl curl ca-certificates nftables)
+
 OPENVPN=preguntar          # preguntar | si | no
 ASUMIR_SI=0
 HTMX_CONFIAR=0
@@ -40,6 +56,65 @@ rojo()  { printf '\033[31m%s\033[0m\n' "$*"; }
 amar()  { printf '\033[33m%s\033[0m\n' "$*"; }
 verde() { printf '\033[32m%s\033[0m\n' "$*"; }
 info()  { printf '\033[36m==>\033[0m %s\n' "$*"; }
+
+# ------------------------------------------------- fallos y avisos
+#
+# Dos clases de problema, y no se tratan igual:
+#
+#   - Lo que impide instalar (un archivo del repo que falta, pip que no puede
+#     instalar las dependencias, un HTMX cuyo hash no cuadra) PARA, y dice en
+#     qué paso, en qué línea, con qué orden y qué mirar.
+#   - Lo que no lo impide (sin red para apt pero con los paquetes ya puestos,
+#     el CDN de HTMX caído con un HTMX válido ya instalado, pip sin poder
+#     actualizarse a sí mismo) AVISA y sigue. Y se repite todo junto al final,
+#     porque un aviso en mitad de trescientas líneas no lo lee nadie.
+#
+# Volver a lanzar el instalador después de un fallo es siempre seguro.
+PASO="preparación"
+PISTA=""
+AVISOS=()
+
+paso() {
+  PASO=$1
+  PISTA=""
+  info "$1"
+}
+
+aviso_final() {
+  amar "  AVISO: $1"
+  AVISOS+=("$1")
+}
+
+al_fallar() {
+  local codigo=$1 linea=$2 orden=$3
+  trap - ERR
+  echo
+  rojo "════════ LA INSTALACIÓN SE HA DETENIDO ════════"
+  echo "  Paso:     $PASO"
+  echo "  Línea:    $linea de deploy/install.sh"
+  echo "  Orden:    $orden"
+  echo "  Código:   $codigo"
+  [[ -n $PISTA ]] && echo "  Qué mirar: $PISTA"
+  echo "  Registro completo: $REGISTRO"
+  echo
+  echo "  Corregido el motivo, vuelve a lanzar el instalador: es seguro repetirlo."
+  if [[ ${VUELTA_ATRAS:-0} == 1 ]]; then
+    echo "  Se ha vuelto a la versión anterior y el panel corre con ella."
+    echo "  La que falló está en $DESTINO/app.fallida, por si hay que mirarla."
+  elif [[ ${APP_CAMBIADA:-0} == 0 ]]; then
+    echo "  El panel en marcha NO se ha tocado: sigue con la versión anterior."
+  fi
+  exit "$codigo"
+}
+trap 'al_fallar $? $LINENO "$BASH_COMMAND"' ERR
+
+# Para lo que no se puede arreglar sobre la marcha y no es un comando que
+# falle por sí solo (una comprobación propia que no se cumple).
+morir() {
+  PISTA=${2:-$PISTA}
+  rojo "$1"
+  al_fallar 1 "${BASH_LINENO[0]}" "(comprobación del instalador) $1"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -70,6 +145,43 @@ done
 
 [[ $EUID -eq 0 ]] || { rojo "Ejecuta como root"; exit 1; }
 [[ -f app/main.py ]] || { rojo "Lanza el script desde la raíz del repo"; exit 1; }
+
+# Dos instalaciones a la vez se pisarían el venv y la copia de la aplicación.
+exec 9>"$CERROJO"
+flock -n 9 || { rojo "Ya hay otra instalación en marcha (cerrojo $CERROJO)."; exit 1; }
+
+touch "$REGISTRO" && chmod 0600 "$REGISTRO"
+exec > >(tee -a "$REGISTRO") 2>&1
+echo
+echo "════════ $(date '+%Y-%m-%d %H:%M:%S') · install.sh $* ════════"
+echo "  Repo:   $(pwd) · commit $(git rev-parse --short HEAD 2>/dev/null || echo 'desconocido')"
+echo "  Sistema: $(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || uname -sr)"
+echo "  Registro: $REGISTRO"
+echo
+
+# --------------------------------------------------- comprobaciones previas
+paso "Comprobaciones previas"
+for archivo in "${NECESARIOS[@]}"; do
+  [[ -f $archivo ]] || morir "Falta $archivo en el repo." \
+    "El clon está incompleto: 'git status' y 'git pull', o clónalo de nuevo."
+done
+
+# Espacio: el venv son unos 150 MB y se guarda una copia de la versión
+# anterior para poder volver atrás. Por debajo de 100 MB no se empieza.
+LIBRE_MB=$(df -Pm "$(dirname "$DESTINO")" 2>/dev/null | awk 'NR==2 {print $4}' || true)
+if [[ -n ${LIBRE_MB:-} ]]; then
+  if (( LIBRE_MB < 100 )); then
+    morir "Solo quedan ${LIBRE_MB} MB libres en $(dirname "$DESTINO")." "Libera espacio y repite."
+  elif (( LIBRE_MB < 400 )); then
+    aviso_final "Quedan ${LIBRE_MB} MB libres en $(dirname "$DESTINO"); la instalación puede quedarse corta."
+  fi
+fi
+
+VERSION_ANTERIOR=""
+if [[ -f "$DESTINO/app/__init__.py" ]]; then
+  VERSION_ANTERIOR=$(sed -n 's/^__version__ = "\([^"]*\)"/\1/p' "$DESTINO/app/__init__.py")
+  info "Actualización: hay instalada la versión ${VERSION_ANTERIOR:-desconocida}"
+fi
 
 # --------------------------------------------------- servidor OpenVPN
 # Va lo primero para que todas las preguntas caigan juntas al principio, en vez
@@ -108,12 +220,31 @@ else
 fi
 
 # --------------------------------------------------------------- paquetes
-info "Instalando dependencias del sistema"
-apt-get update -qq
-apt-get install -y --no-install-recommends \
-  python3 python3-venv python3-pip python3-yaml openssl curl ca-certificates nftables
+# Solo se instala lo que falta. Si todo está y no hay red para apt —un mirror
+# caído, una LAN sin salida—, actualizar el panel no tiene por qué fallar.
+paso "Dependencias del sistema"
+FALTAN=()
+for paquete in "${PAQUETES[@]}"; do
+  dpkg -s "$paquete" >/dev/null 2>&1 || FALTAN+=("$paquete")
+done
+
+if (( ${#FALTAN[@]} )); then
+  PISTA="apt no puede descargar: revisa la red y /etc/apt/sources.list, o instala a mano: apt-get install ${FALTAN[*]}"
+  info "Faltan: ${FALTAN[*]}"
+  apt-get update -qq
+  apt-get install -y --no-install-recommends "${FALTAN[@]}"
+else
+  verde "Todas las dependencias del sistema ya están instaladas"
+fi
+
+# Python 3.9 es el mínimo del panel (Debian 11). Se mira ahora porque antes
+# de apt podía no estar instalado.
+PISTA="Hace falta Python 3.9 o posterior (Debian 11, Ubuntu 20.04 o más nuevos)."
+python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' \
+  || morir "Python $(python3 -V 2>&1) es demasiado antiguo."
 
 # --------------------------------------------------------------- usuario
+paso "Usuario y grupos del sistema"
 if ! id -u "$USUARIO" >/dev/null 2>&1; then
   info "Creando usuario de sistema '$USUARIO'"
   useradd --system --no-create-home --shell /usr/sbin/nologin "$USUARIO"
@@ -125,11 +256,18 @@ info "Añadiendo '$USUARIO' al grupo adm (lectura de logs)"
 usermod -aG adm "$USUARIO"
 
 # --------------------------------------------------------------- archivos
-info "Copiando la aplicación a $DESTINO"
+# La versión nueva se prepara al lado, en app.nuevo, y solo sustituye a la que
+# corre cuando todo lo demás —HTMX, dependencias— ha salido bien. Antes se
+# copiaba encima con 'cp -r': un fallo a mitad dejaba mezcladas las dos
+# versiones, y los archivos que la nueva ya no trae se quedaban para siempre.
+paso "Preparando la versión nueva de la aplicación"
 mkdir -p "$DESTINO"
-cp -r app "$DESTINO/"
+rm -rf "$DESTINO/app.nuevo"
+cp -r app "$DESTINO/app.nuevo"
+find "$DESTINO/app.nuevo" -name __pycache__ -type d -prune -exec rm -rf {} +
 cp requirements.txt "$DESTINO/"
 
+paso "Helper privilegiado y scripts de OpenVPN"
 info "Instalando el helper privilegiado en $HELPER"
 install -o root -g root -m 0750 deploy/ovpn-web-helper "$HELPER"
 
@@ -163,45 +301,58 @@ install -m 0644 deploy/ovpn-web-acceso.service /etc/systemd/system/ovpn-web-acce
 # script de una red ajena es exactamente lo que la verificación evita. Para el
 # caso legítimo de subir de versión está --htmx-confiar, que hay que teclear a
 # conciencia.
-info "Obteniendo HTMX $HTMX_VERSION"
-TMP_HTMX=$(mktemp)
-curl -fsSL "$HTMX_URL" -o "$TMP_HTMX"
-HASH_ACTUAL=$(sha256sum "$TMP_HTMX" | cut -d' ' -f1)
+paso "HTMX $HTMX_VERSION"
+HTMX_INSTALADO="$DESTINO/app/static/htmx.min.js"
+HASH_ESPERADO=""
+[[ -f deploy/htmx.sha256 ]] && HASH_ESPERADO=$(tr -d '[:space:]' < deploy/htmx.sha256)
 
-if [[ -f deploy/htmx.sha256 ]]; then
-  HASH_ESPERADO=$(tr -d '[:space:]' < deploy/htmx.sha256)
-  if [[ "$HASH_ACTUAL" != "$HASH_ESPERADO" ]]; then
+TMP_HTMX=$(mktemp)
+if curl -fsSL --retry 2 --max-time 60 "$HTMX_URL" -o "$TMP_HTMX"; then
+  HASH_ACTUAL=$(sha256sum "$TMP_HTMX" | cut -d' ' -f1)
+
+  if [[ -n $HASH_ESPERADO ]]; then
+    if [[ "$HASH_ACTUAL" != "$HASH_ESPERADO" ]]; then
+      rm -f "$TMP_HTMX"
+      rojo "El hash de HTMX no coincide con deploy/htmx.sha256"
+      rojo "  esperado: $HASH_ESPERADO"
+      rojo "  obtenido: $HASH_ACTUAL"
+      morir "Revísalo antes de continuar." \
+        "Puede ser un CDN manipulado o una versión distinta. No sigas sin entender por qué."
+    fi
+    verde "Hash de HTMX verificado"
+  elif [[ "$HTMX_CONFIAR" == "1" ]]; then
+    echo "$HASH_ACTUAL" > deploy/htmx.sha256
+    amar "Hash de HTMX aceptado sin verificar (--htmx-confiar): $HASH_ACTUAL"
+    echo "    Súbelo al repo AHORA, o la próxima instalación volverá a confiar a ciegas."
+  else
     rm -f "$TMP_HTMX"
-    rojo "El hash de HTMX no coincide con deploy/htmx.sha256"
-    rojo "  esperado: $HASH_ESPERADO"
-    rojo "  obtenido: $HASH_ACTUAL"
-    rojo "Revísalo antes de continuar."
-    exit 1
+    rojo "Falta deploy/htmx.sha256 y no se acepta lo que devuelva el CDN sin más."
+    echo
+    echo "  HTMX se sirve desde el propio panel, así que la CSP lo da por bueno:"
+    echo "  un archivo manipulado sería JavaScript corriendo con tu sesión de"
+    echo "  administrador. Por eso se verifica contra un hash del repo."
+    echo
+    echo "  El hash obtenido ahora ha sido:"
+    echo "      $HASH_ACTUAL"
+    echo
+    echo "  Si tu copia del repo debería traer ese archivo, es que el clon está"
+    echo "  incompleto. Si estás subiendo de versión a conciencia, compáralo con"
+    echo "  el que publica htmx y repite con:"
+    echo "      sudo bash deploy/install.sh --htmx-confiar"
+    morir "Sin hash de HTMX con el que comparar."
   fi
-  verde "Hash de HTMX verificado"
-elif [[ "$HTMX_CONFIAR" == "1" ]]; then
-  echo "$HASH_ACTUAL" > deploy/htmx.sha256
-  amar "Hash de HTMX aceptado sin verificar (--htmx-confiar): $HASH_ACTUAL"
-  echo "    Súbelo al repo AHORA, o la próxima instalación volverá a confiar a ciegas."
+  install -m 0644 "$TMP_HTMX" "$DESTINO/app.nuevo/static/htmx.min.js"
+elif [[ -n $HASH_ESPERADO && -f $HTMX_INSTALADO ]] \
+     && [[ $(sha256sum "$HTMX_INSTALADO" | cut -d' ' -f1) == "$HASH_ESPERADO" ]]; then
+  # Sin red hacia el CDN pero con el mismo HTMX ya instalado y verificado: no
+  # hay nada que descargar, y una actualización no tiene por qué fallar por esto.
+  aviso_final "No se pudo descargar HTMX; se conserva el instalado, que coincide con el hash esperado."
+  install -m 0644 "$HTMX_INSTALADO" "$DESTINO/app.nuevo/static/htmx.min.js"
 else
   rm -f "$TMP_HTMX"
-  rojo "Falta deploy/htmx.sha256 y no se acepta lo que devuelva el CDN sin más."
-  echo
-  echo "  HTMX se sirve desde el propio panel, así que la CSP lo da por bueno:"
-  echo "  un archivo manipulado sería JavaScript corriendo con tu sesión de"
-  echo "  administrador. Por eso se verifica contra un hash del repo."
-  echo
-  echo "  El hash obtenido ahora ha sido:"
-  echo "      $HASH_ACTUAL"
-  echo
-  echo "  Si tu copia del repo debería traer ese archivo, es que el clon está"
-  echo "  incompleto. Si estás subiendo de versión a conciencia, compáralo con"
-  echo "  el que publica htmx y repite con:"
-  echo "      sudo bash deploy/install.sh --htmx-confiar"
-  exit 1
+  morir "No se pudo descargar HTMX de $HTMX_URL y no hay uno válido instalado." \
+    "Sin HTMX el panel no funciona. Comprueba la salida a internet: curl -I $HTMX_URL"
 fi
-
-install -m 0644 "$TMP_HTMX" "$DESTINO/app/static/htmx.min.js"
 rm -f "$TMP_HTMX"
 
 # --------------------------------------------------------------- venv
@@ -209,14 +360,19 @@ rm -f "$TMP_HTMX"
 # generado de requirements.in. Con --require-hashes, si PyPI o un espejo
 # devuelven algo distinto de lo que se probó, pip aborta en vez de instalarlo.
 # Es la misma idea que el hash de HTMX, aplicada a las 30 dependencias.
-info "Creando entorno virtual"
+paso "Entorno virtual y dependencias de Python"
+PISTA="¿Está instalado python3-venv? apt-get install python3-venv"
 python3 -m venv "$DESTINO/venv"
 
 # Única descarga que no va con hash fijado, y conviene saberlo: el pip que trae
 # Debian 11 es de 2020 y tropieza con metadatos de paquetes actuales. Se
-# actualiza desde PyPI con TLS y nada más.
-"$DESTINO/venv/bin/pip" install --quiet --upgrade pip
+# actualiza desde PyPI con TLS y nada más. Si no puede, se sigue con el que
+# hay: a menudo basta, y si no, el paso siguiente lo dirá.
+if ! "$DESTINO/venv/bin/pip" install --quiet --upgrade pip; then
+  aviso_final "No se pudo actualizar pip; se sigue con el que trae el venv."
+fi
 
+PISTA="pip no pudo instalar las dependencias: mira el error justo encima (red hacia PyPI, un hash que no cuadra, falta de espacio). El panel en marcha no se ha tocado."
 if grep -q -- "--hash=sha256:" "$DESTINO/requirements.txt"; then
   info "Instalando dependencias con hashes verificados"
   "$DESTINO/venv/bin/pip" install --quiet --require-hashes -r "$DESTINO/requirements.txt"
@@ -228,7 +384,53 @@ else
   "$DESTINO/venv/bin/pip" install --quiet -r "$DESTINO/requirements.txt"
 fi
 
+# Comprobación de humo: que la versión nueva al menos importa con las
+# dependencias recién instaladas. Un error de sintaxis o una dependencia que
+# falta se ven aquí, con la versión anterior todavía en marcha, y no después
+# de reiniciar el panel.
+if ! (cd "$DESTINO" && "$DESTINO/venv/bin/python" -c "
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('app', 'app.nuevo/__init__.py',
+                                              submodule_search_locations=['app.nuevo'])
+mod = importlib.util.module_from_spec(spec); sys.modules['app'] = mod; spec.loader.exec_module(mod)
+import app.main, app.vigilante, app.cli
+print('  La versión nueva importa bien:', mod.__version__)
+"); then
+  morir "La versión nueva no arranca con estas dependencias." \
+    "El error de Python está justo encima. El panel en marcha no se ha tocado."
+fi
+
+# Y que el config.yaml que ya hay se pueda cargar con ESTE código. Una clave
+# que la versión nueva no conoce, o una errata, tumbaría el panel al
+# reiniciarlo; mejor pararse aquí, con la versión anterior todavía en marcha
+# y el motivo delante.
+if [[ -f "$CONFIG_DIR/config.yaml" ]]; then
+  if ! ERROR_CFG=$(cd "$DESTINO" && OVPN_WEB_CONFIG="$CONFIG_DIR/config.yaml" \
+       "$DESTINO/venv/bin/python" -c "
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('app', 'app.nuevo/__init__.py',
+                                              submodule_search_locations=['app.nuevo'])
+mod = importlib.util.module_from_spec(spec); sys.modules['app'] = mod; spec.loader.exec_module(mod)
+from app.config import cargar_config
+cargar_config()
+" 2>&1); then
+    echo "$ERROR_CFG" | tail -3 | sed 's/^/    /'
+    morir "$CONFIG_DIR/config.yaml no se puede cargar con la versión nueva." \
+      "Corrige la clave que dice el error (docs/configuracion.md lista todas) y repite. El panel en marcha no se ha tocado."
+  fi
+fi
+
+# --------------------------------------------------------------- cambio
+# Ahora sí: la nueva pasa a ser la que corre y la anterior se guarda al lado,
+# para poder volver a ella si el panel no arranca. Solo se conserva una.
+paso "Instalando la versión nueva"
+rm -rf "$DESTINO/app.anterior"
+[[ -d "$DESTINO/app" ]] && mv "$DESTINO/app" "$DESTINO/app.anterior"
+mv "$DESTINO/app.nuevo" "$DESTINO/app"
+APP_CAMBIADA=1
+
 # --------------------------------------------------------------- config
+paso "Configuración"
 mkdir -p "$CONFIG_DIR/tls" "$DATOS_DIR"
 
 IP_LAN=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}' || true)
@@ -291,6 +493,7 @@ else
 fi
 
 # --------------------------------------------------------------- TLS
+paso "Certificado TLS del panel"
 if [[ ! -f "$CONFIG_DIR/tls/cert.pem" ]]; then
   info "Generando certificado autofirmado para $IP_LAN (10 años)"
 
@@ -312,12 +515,13 @@ chmod 0750 "$DATOS_DIR"
 chown -R root:root "$DESTINO"
 
 # --------------------------------------------------------------- sudoers
-info "Instalando regla de sudo"
+paso "Regla de sudo"
+PISTA="visudo rechaza deploy/ovpnweb.sudoers: no se instala, para no romper sudo. ¿Lo has editado?"
 visudo -c -f deploy/ovpnweb.sudoers >/dev/null
 install -o root -g root -m 0440 deploy/ovpnweb.sudoers /etc/sudoers.d/ovpnweb
 
 # --------------------------------------------------------------- systemd
-info "Instalando servicio systemd"
+paso "Servicio systemd"
 install -m 0644 deploy/ovpn-web.service /etc/systemd/system/ovpn-web.service
 systemctl daemon-reload
 systemctl enable ovpn-web >/dev/null
@@ -341,26 +545,49 @@ case "$(systemctl is-active ovpn-web 2>/dev/null || true)" in
     PANEL_REINICIADO=1
     ;;
 esac
-if [[ "$PANEL_REINICIADO" == "1" ]]; then
-  # La unidad es Type=simple: systemd la da por activa en cuanto lanza el
-  # proceso, así que preguntar al instante diría "activo" también de un
-  # código que revienta al importar. Se dejan pasar unos segundos —un fallo de
-  # arranque cae en uno o dos— y luego se comprueba de verdad: un reinicio
-  # que deja el servicio caído tiene que salir en rojo aquí, no en el
-  # navegador media hora después. Con Restart=on-failure el estado entre
-  # intentos es 'activating', que is-active tampoco da por bueno.
+# Espera a que el panel esté de verdad en pie. La unidad es Type=simple:
+# systemd la da por activa en cuanto lanza el proceso, así que preguntar al
+# instante diría "activo" también de un código que revienta al importar. Se
+# dejan pasar unos segundos —un fallo de arranque cae en uno o dos— y luego se
+# comprueba de verdad. Con Restart=on-failure el estado entre intentos es
+# 'activating', que is-active tampoco da por bueno.
+panel_en_pie() {
   sleep 4
   for _ in 1 2 3 4 5 6; do
-    systemctl is-active --quiet ovpn-web && break
+    systemctl is-active --quiet ovpn-web && return 0
     sleep 1
   done
-  if systemctl is-active --quiet ovpn-web; then
+  systemctl is-active --quiet ovpn-web
+}
+
+if [[ "$PANEL_REINICIADO" == "1" ]]; then
+  if panel_en_pie; then
     verde "Panel reiniciado y activo"
+    # Lo que quedó de una actualización fallida anterior ya no hace falta.
+    rm -rf "$DESTINO/app.fallida"
   else
-    rojo "El panel no ha vuelto a arrancar tras el reinicio."
-    echo "  Mira por qué con:"
-    echo "      journalctl -u ovpn-web -n 50 --no-pager"
-    exit 1
+    rojo "El panel no arranca con el código nuevo. Lo último que dijo:"
+    journalctl -u ovpn-web -n 30 --no-pager 2>/dev/null | sed 's/^/    /' || true
+
+    # Volver atrás: un panel caído es peor que uno sin actualizar. La versión
+    # que falla se deja en app.fallida para poder mirarla.
+    if [[ -d "$DESTINO/app.anterior" ]]; then
+      amar "Volviendo a la versión anterior (${VERSION_ANTERIOR:-desconocida})…"
+      rm -rf "$DESTINO/app.fallida"
+      mv "$DESTINO/app" "$DESTINO/app.fallida"
+      mv "$DESTINO/app.anterior" "$DESTINO/app"
+      systemctl restart ovpn-web || true
+      if panel_en_pie; then
+        amar "El panel vuelve a correr con la versión anterior. La nueva está en $DESTINO/app.fallida."
+        VUELTA_ATRAS=1
+      else
+        rojo "Tampoco arranca la versión anterior: el problema no es del código nuevo."
+        echo "  Lo más probable es config.yaml o la base de datos. Mira:"
+        echo "      journalctl -u ovpn-web -n 50 --no-pager"
+      fi
+    fi
+    PISTA="journalctl -u ovpn-web -n 50 --no-pager  (registro: $REGISTRO)"
+    morir "La actualización no se ha completado."
   fi
 fi
 
@@ -407,7 +634,12 @@ echo
 # se imprime es lo que hay en disco, no lo que dice el clon. Sin esto, saber
 # qué versión corre un servidor obligaba a comparar hashes contra git.
 VERSION_PANEL=$(sed -n 's/^__version__ = "\([^"]*\)"/\1/p' "$DESTINO/app/__init__.py")
-verde "Instalación completada: BridgesMGR ${VERSION_PANEL:-versión desconocida}."
+if [[ -n $VERSION_ANTERIOR ]]; then
+  verde "Actualización completada: BridgesMGR ${VERSION_ANTERIOR} → ${VERSION_PANEL:-desconocida}."
+  echo "  La versión anterior queda en $DESTINO/app.anterior por si hay que volver a ella."
+else
+  verde "Instalación completada: BridgesMGR ${VERSION_PANEL:-versión desconocida}."
+fi
 echo
 if [[ "$CONFIG_NUEVA" == "1" && "$CONFIG_RELLENA" == "1" ]]; then
   echo "La configuración ya está rellena con lo que se acaba de montar."
@@ -459,3 +691,15 @@ if [[ "$VPN_PREEXISTENTE" == "1" && -f "$(dirname "$0")/comprobar-servidor.sh" ]
     echo "      sudo bash deploy/comprobar-servidor.sh"
   fi
 fi
+
+# ------------------------------------------------------------ resumen
+# Lo que no paró la instalación pero hay que mirar, todo junto y al final.
+if (( ${#AVISOS[@]} )); then
+  echo
+  amar "════════ ${#AVISOS[@]} AVISO(S) QUE REVISAR ════════"
+  for a in "${AVISOS[@]}"; do
+    amar "  · $a"
+  done
+fi
+echo
+echo "Registro completo de esta instalación: $REGISTRO"

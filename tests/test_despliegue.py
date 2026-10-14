@@ -497,7 +497,7 @@ def test_sin_hash_el_instalador_aborta():
 
     assert "HTMX_CONFIAR" in fuente, "debe hacer falta una opción explícita"
     # La rama que fija el hash sin verificar va detrás de esa opción
-    m = re.search(r"^elif \[\[ \"\$HTMX_CONFIAR\" == \"1\" \]\]; then$", fuente, re.M)
+    m = re.search(r"^\s*elif \[\[ \"\$HTMX_CONFIAR\" == \"1\" \]\]; then$", fuente, re.M)
     assert m, "guardar el hash debe depender de --htmx-confiar"
 
 
@@ -985,8 +985,11 @@ def test_el_instalador_reinicia_el_panel_si_ya_corria():
     # Y un reinicio que deja el servicio caído tiene que decirlo y fallar,
     # no terminar en verde
     despues = fuente[reinicio.end():]
-    assert "is-active --quiet ovpn-web" in despues and "exit 1" in despues, (
+    assert "is-active --quiet ovpn-web" in despues, (
         "Tras reiniciar no se comprueba que el panel haya vuelto a arrancar"
+    )
+    assert 'morir "La actualización no se ha completado."' in despues, (
+        "Un reinicio que deja el panel caído tiene que acabar en error, no en verde"
     )
 
 
@@ -1129,3 +1132,52 @@ def test_el_servidor_nuevo_corre_con_el_grupo_propio():
 
 def test_los_secretos_no_los_lee_cualquiera():
     assert '0o640, grupo=gid' in _leer(HELPER)
+
+
+# --------------------------------------------- actualizar sin miedo
+
+def test_el_instalador_dice_donde_y_por_que_se_para():
+    """
+    Con 'set -e' a secas, un fallo cortaba en seco sin decir en qué paso ni
+    qué mirar, y lo de la pantalla se perdía con la sesión SSH.
+    """
+    texto = _leer(INSTALADOR)
+    assert "set -Eeuo pipefail" in texto
+    assert "trap 'al_fallar $? $LINENO \"$BASH_COMMAND\"' ERR" in texto
+    assert 'exec > >(tee -a "$REGISTRO") 2>&1' in texto
+    assert "REGISTRO=/var/log/ovpn-web-instalacion.log" in texto
+
+
+def test_dos_instalaciones_no_pueden_pisarse():
+    assert 'flock -n 9' in _leer(INSTALADOR)
+
+
+def test_la_version_nueva_se_prepara_al_lado_y_se_prueba_antes_de_cambiar():
+    """
+    'cp -r app' encima de la que corre dejaba las dos mezcladas si fallaba a
+    mitad, y los archivos que la nueva ya no trae se quedaban para siempre.
+    """
+    texto = _leer(INSTALADOR)
+    assert 'cp -r app "$DESTINO/"' not in texto
+    preparar = texto.index('cp -r app "$DESTINO/app.nuevo"')
+    humo = texto.index("La versión nueva importa bien")
+    config = texto.index("no se puede cargar con la versión nueva")
+    cambio = texto.index('mv "$DESTINO/app.nuevo" "$DESTINO/app"')
+    assert preparar < humo < cambio
+    assert config < cambio
+
+
+def test_si_el_panel_no_arranca_se_vuelve_a_la_version_anterior():
+    texto = _leer(INSTALADOR)
+    reinicio = texto.index("El panel no arranca con el código nuevo")
+    tramo = texto[reinicio:reinicio + 1500]
+    assert 'mv "$DESTINO/app.anterior" "$DESTINO/app"' in tramo
+    assert "journalctl -u ovpn-web -n 30" in tramo
+
+
+def test_sin_red_no_se_para_lo_que_no_hace_falta():
+    """apt solo si falta algo; HTMX ya instalado y verificado vale si el CDN cae."""
+    texto = _leer(INSTALADOR)
+    assert 'dpkg -s "$paquete"' in texto
+    assert "se conserva el instalado, que coincide con el hash esperado" in texto
+    assert "No se pudo actualizar pip; se sigue" in texto
