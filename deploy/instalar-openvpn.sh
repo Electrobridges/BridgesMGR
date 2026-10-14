@@ -41,6 +41,11 @@ SYSCTL_FILE=/etc/sysctl.d/99-ovpn-web-forward.conf
 MGMT_HOST=127.0.0.1
 MGMT_PORT=7505
 
+# Lo instala también install.sh; se pone aquí para que OpenVPN no arranque con
+# una directiva client-connect que apunta a un archivo que todavía no existe,
+# que rechazaría a todo el mundo hasta terminar de instalar el panel.
+HOOK_CLIENT_CONNECT=/usr/local/lib/ovpn-web/client-connect
+
 # ----------------------------------------------------------------- opciones
 SALIDA=""              # lan | todo
 HOST_CLIENTES=""
@@ -193,6 +198,18 @@ case "$PROTO" in udp|tcp) ;; *) rojo "--proto solo admite 'udp' o 'tcp'"; exit 1
 [[ "$PUERTO" =~ ^[0-9]+$ ]] || { rojo "--puerto debe ser un número"; exit 1; }
 
 read -r RED_VPN_DIR RED_VPN_MASK <<<"$(cidr_a_red_y_mascara "$RED_VPN")"
+
+# El pool dinámico se queda con las tres cuartas partes bajas de la red y deja
+# el resto para las IP fijas que se asignen desde el panel. Con el pool que
+# monta 'server' a secas —toda la red— una IP fija acabaría repartida también
+# a otro cliente, y el helper se niega a asignarla.
+pool_dinamico() {
+  python3 -c 'import ipaddress,sys
+r = ipaddress.ip_network(sys.argv[1], strict=False)
+hosts = r.num_addresses - 2
+print(r.network_address + 2, r.network_address + max(2, hosts * 3 // 4))' "$1"
+}
+read -r POOL_INI POOL_FIN <<<"$(pool_dinamico "$RED_VPN")"
 
 # ------------------------------------------------------------------- resumen
 echo
@@ -356,8 +373,17 @@ tls-crypt ${TLS_CRYPT}
 crl-verify ${EASYRSA_DIR}/pki/crl.pem
 
 topology subnet
-server ${RED_VPN_DIR} ${RED_VPN_MASK}
+# 'nopool' + un pool explícito: lo que queda por encima de ${POOL_FIN} es para
+# las IP fijas que se asignan desde el panel (Clientes VPN → Políticas).
+server ${RED_VPN_DIR} ${RED_VPN_MASK} nopool
+ifconfig-pool ${POOL_INI} ${POOL_FIN} ${RED_VPN_MASK}
 ifconfig-pool-persist ${LOG_DIR}/ipp.txt
+
+# Políticas por cliente del panel: horario, caducidad e IP fija se deciden al
+# conectar. El script lo instala el panel en una ruta de root que el propio
+# panel no puede escribir, y corre como 'nobody'.
+script-security 2
+client-connect ${HOOK_CLIENT_CONNECT}
 
 keepalive 10 120
 persist-key
@@ -475,6 +501,11 @@ fi
 # Sin --reiniciar porque la unidad se arranca unas líneas más abajo, y no tiene
 # sentido reiniciar dos veces.
 bash "$(dirname "$0")/fechas-log.sh" "$UNIDAD"
+
+# ------------------------------------------------------- script de políticas
+info "Instalando el script de políticas en $HOOK_CLIENT_CONNECT"
+install -d -o root -g root -m 0755 "$(dirname "$HOOK_CLIENT_CONNECT")"
+install -o root -g root -m 0755 "$(dirname "$0")/ovpn-web-client-connect" "$HOOK_CLIENT_CONNECT"
 
 # --------------------------------------------------------------------- unidad
 if [[ "$SIN_ARRANCAR" == "1" ]]; then

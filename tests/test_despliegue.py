@@ -866,9 +866,25 @@ def test_reconstruir_la_ca_sigue_fuera_del_helper():
     # El invariante no es "no escribe" —escribe en index.txt al restaurar un
     # cliente, y debe— sino "solo escribe dentro de la PKI", cuyas rutas salen
     # todas de rutas_pki().
+    #
+    # La otra excepción es _escribir_atomico(), que escribe las políticas por
+    # cliente. Se admite porque comprueba en tiempo de ejecución que el destino
+    # está en DIR_POLITICAS, una constante bajo /etc/openvpn/ovpn-web, y nunca
+    # en otro sitio.
     arbol = ast.parse(_leer(HELPER), str(HELPER))
+    atomico = next(n for n in ast.walk(arbol)
+                   if isinstance(n, ast.FunctionDef) and n.name == "_escribir_atomico")
+    assert "DIR_POLITICAS" in ast.unparse(atomico.body[1]), (
+        "_escribir_atomico() tiene que rechazar cualquier destino fuera de DIR_POLITICAS "
+        "antes de abrir nada"
+    )
+    assert re.search(r'^DIR_POLITICAS = "/etc/openvpn/ovpn-web"$', _leer(HELPER), re.M)
+    dentro_de_atomico = {id(n) for n in ast.walk(atomico)}
+
     for nodo in ast.walk(arbol):
         if not (isinstance(nodo, ast.Call) and getattr(nodo.func, "id", "") == "open"):
+            continue
+        if id(nodo) in dentro_de_atomico:
             continue
         modo = nodo.args[1].value if len(nodo.args) > 1 and isinstance(
             nodo.args[1], ast.Constant) else "r"
@@ -973,3 +989,69 @@ def test_el_instalador_reinicia_el_panel_si_ya_corria():
         "Tras reiniciar no se comprueba que el panel haya vuelto a arrancar"
     )
 
+
+
+# ------------------------------------------------- políticas por cliente
+
+GANCHO = DEPLOY / "ovpn-web-client-connect"
+UNIDAD_ACCESO = DEPLOY / "ovpn-web-acceso.service"
+RUTA_GANCHO = "/usr/local/lib/ovpn-web/client-connect"
+
+
+def test_el_script_de_conexion_corre_aislado():
+    """
+    '-I' ignora PYTHONPATH, PYTHONSTARTUP y el directorio de trabajo: nada del
+    entorno en el que OpenVPN lo lance puede cambiar qué código corre.
+    """
+    assert _leer(GANCHO).splitlines()[0] == "#!/usr/bin/python3 -I"
+
+
+def test_el_script_de_conexion_solo_usa_stdlib():
+    arbol = ast.parse(_leer(GANCHO))
+    modulos = set()
+    for nodo in ast.walk(arbol):
+        if isinstance(nodo, ast.Import):
+            modulos |= {a.name.split(".")[0] for a in nodo.names}
+        elif isinstance(nodo, ast.ImportFrom):
+            modulos.add(nodo.module.split(".")[0])
+    assert modulos <= {"json", "os", "re", "sys", "datetime"}
+
+
+def test_los_dos_instaladores_ponen_el_script_en_su_sitio():
+    """
+    Los dos, y no solo el del panel: instalar-openvpn.sh arranca OpenVPN con la
+    directiva client-connect puesta, y si el archivo aún no existiera rechazaría
+    a todo el mundo hasta terminar de instalar el panel.
+    """
+    for instalador in (INSTALADOR, INSTALA_VPN):
+        texto = _leer(instalador)
+        assert RUTA_GANCHO in texto
+        assert "ovpn-web-client-connect" in texto
+        assert "-o root -g root -m 0755" in texto
+
+
+def test_el_panel_no_puede_reescribir_el_script_de_conexion():
+    """
+    El panel decide las políticas, pero no el código que OpenVPN corre con
+    ellas. La unidad solo deja escribir /var/lib/ovpn-web y /etc/openvpn.
+    """
+    rw = re.search(r"^ReadWritePaths=(.*)$", _leer(SERVICIO), re.M).group(1)
+    assert "/usr/local/lib" not in rw
+    assert not RUTA_GANCHO.startswith(("/etc/openvpn", "/var/lib/ovpn-web"))
+
+
+def test_el_servidor_nuevo_deja_hueco_para_ips_fijas_y_engancha_el_script():
+    texto = _leer(INSTALA_VPN)
+    assert "nopool" in texto and "ifconfig-pool ${POOL_INI} ${POOL_FIN}" in texto
+    assert "script-security 2" in texto
+    assert "client-connect ${HOOK_CLIENT_CONNECT}" in texto
+    assert "duplicate-cn" not in texto
+
+
+def test_las_reglas_de_acceso_sobreviven_a_un_reinicio():
+    unidad = _leer(UNIDAD_ACCESO)
+    assert "ExecStart=/usr/sbin/nft -f /etc/openvpn/ovpn-web/acceso.nft" in unidad
+    assert "ConditionPathExists=/etc/openvpn/ovpn-web/acceso.nft" in unidad
+    texto = _leer(INSTALADOR)
+    assert "ovpn-web-acceso.service" in texto
+    assert "systemctl enable ovpn-web-acceso" in texto

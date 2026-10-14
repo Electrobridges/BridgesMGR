@@ -17,6 +17,7 @@ DESTINO=/opt/ovpn-web
 CONFIG_DIR=/etc/ovpn-web
 DATOS_DIR=/var/lib/ovpn-web
 HELPER=/usr/local/sbin/ovpn-web-helper
+HOOK_CLIENT_CONNECT=/usr/local/lib/ovpn-web/client-connect
 USUARIO=ovpnweb
 HTMX_VERSION=2.0.4
 HTMX_URL="https://unpkg.com/htmx.org@${HTMX_VERSION}/dist/htmx.min.js"
@@ -107,7 +108,7 @@ fi
 info "Instalando dependencias del sistema"
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-  python3 python3-venv python3-pip python3-yaml openssl curl ca-certificates
+  python3 python3-venv python3-pip python3-yaml openssl curl ca-certificates nftables
 
 # --------------------------------------------------------------- usuario
 if ! id -u "$USUARIO" >/dev/null 2>&1; then
@@ -128,6 +129,18 @@ cp requirements.txt "$DESTINO/"
 
 info "Instalando el helper privilegiado en $HELPER"
 install -o root -g root -m 0750 deploy/ovpn-web-helper "$HELPER"
+
+# Lo ejecuta OpenVPN en cada conexión para aplicar las políticas por cliente.
+# Fuera de ReadWritePaths y de root: el panel decide las políticas, pero no
+# puede cambiar el código que OpenVPN corre con ellas.
+info "Instalando el script de políticas en $HOOK_CLIENT_CONNECT"
+install -d -o root -g root -m 0755 "$(dirname "$HOOK_CLIENT_CONNECT")"
+install -o root -g root -m 0755 deploy/ovpn-web-client-connect "$HOOK_CLIENT_CONNECT"
+
+# Recarga las reglas de acceso por cliente al arrancar la máquina. Las escribe
+# el helper en /etc/openvpn/ovpn-web/acceso.nft; sin esta unidad se perderían
+# en el primer reinicio y los clientes limitados volverían a llegar a todo.
+install -m 0644 deploy/ovpn-web-acceso.service /etc/systemd/system/ovpn-web-acceso.service
 
 # --------------------------------------------------------------- htmx
 # El panel tiene una CSP estricta (script-src 'self'), así que HTMX se sirve
@@ -298,6 +311,7 @@ info "Instalando servicio systemd"
 install -m 0644 deploy/ovpn-web.service /etc/systemd/system/ovpn-web.service
 systemctl daemon-reload
 systemctl enable ovpn-web >/dev/null
+systemctl enable ovpn-web-acceso >/dev/null
 
 # Si el panel ya corría, esto es una actualización: el código nuevo está en
 # disco pero el proceso sigue siendo el viejo, y sin reiniciarlo se cree haber

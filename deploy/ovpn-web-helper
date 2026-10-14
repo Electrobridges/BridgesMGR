@@ -25,6 +25,8 @@ Uso:
     ovpn-web-helper ovpn <CN>
     ovpn-web-helper estado-servicio
     ovpn-web-helper rotar-tls-crypt
+    ovpn-web-helper server-conf
+    ovpn-web-helper aplicar-politicas      (documento JSON por stdin)
 
 Lo que NO está aquí y no debe estarlo: reconstruir la CA. Necesitaría escribir
 en server.conf, y quien pueda hacerlo mete un 'script-security 2' con un script
@@ -639,6 +641,388 @@ def cmd_rotar_tls_crypt(cfg):
     }
 
 
+# ------------------------------------------------- server.conf y políticas
+
+# Dónde vive lo que el helper escribe para OpenVPN. Constantes y no claves del
+# config.yaml: no hay ninguna razón para moverlas y cada ruta configurable es
+# una ruta más que validar. Dentro de /etc/openvpn porque es lo único de /etc
+# que la unidad del panel deja escribir (ReadWritePaths), y el helper hereda
+# ese espacio de nombres.
+DIR_POLITICAS = "/etc/openvpn/ovpn-web"
+ARCHIVO_POLITICAS = os.path.join(DIR_POLITICAS, "politicas.json")
+ARCHIVO_ACCESO = os.path.join(DIR_POLITICAS, "acceso.nft")
+
+# El script que lee ARCHIVO_POLITICAS al conectar. Lo instala install.sh y no
+# lo escribe nunca este helper: está fuera de ReadWritePaths a propósito, para
+# que nadie desde el panel pueda cambiar lo que OpenVPN ejecuta.
+HOOK_CLIENT_CONNECT = "/usr/local/lib/ovpn-web/client-connect"
+
+TABLA_ACCESO = "ovpnweb_acceso"
+
+# Techo de lo que se acepta por stdin. Un documento de políticas real son unos
+# pocos KB; esto solo existe para que un panel comprometido no pueda hacer
+# que root se trague un archivo de gigas.
+MAX_STDIN = 1024 * 1024
+
+# Debe coincidir con app/core/politicas.py (hay una prueba que lo compara).
+VERSION_POLITICAS = 1
+MAX_DESTINOS = 32
+MAX_FRANJAS = 14
+MAX_SESION_MIN = 30 * 24 * 60
+BLOQUEOS = {"cuota"}
+CAMPOS_POLITICA = {"ip_fija", "destinos", "horario", "expira", "max_sesion_min", "bloqueo"}
+HORA_RE = re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$|^24:00$')
+DESTINO_RE = re.compile(r'^(?P<red>[0-9./]+)(?::(?P<puerto>\d{1,5})/(?P<proto>tcp|udp))?$')
+EXPIRA_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$')
+
+
+def leer_server_conf(cfg):
+    """
+    Las directivas del server.conf, una lista por línea, sin material de clave.
+
+    Un server.conf puede llevar claves EN LÍNEA —<tls-crypt>…</tls-crypt>,
+    <key>…</key>— y este resultado acaba en el panel, que no debe ver ni una.
+    De un bloque así solo se devuelve que existe, nunca su contenido.
+    """
+    ruta = _ruta_server_conf(cfg)
+    if not ruta:
+        return None, []
+
+    directivas = []
+    dentro = None
+    with open(ruta, "r", encoding="utf-8", errors="replace") as f:
+        for linea in f:
+            linea = linea.strip()
+            if dentro:
+                if linea.lower() == "</%s>" % dentro:
+                    dentro = None
+                continue
+            if not linea or linea[0] in "#;":
+                continue
+            m = re.match(r'^<([a-z0-9-]+)>$', linea, re.I)
+            if m:
+                dentro = m.group(1).lower()
+                directivas.append(["<%s>" % dentro])
+                continue
+            directivas.append(linea.split())
+
+    return ruta, directivas
+
+
+def cmd_server_conf(cfg):
+    """
+    Solo lectura. El panel no puede leer server.conf (0600 root) y lo necesita
+    para saber si el script de políticas está enganchado y para auditar.
+    """
+    ruta, directivas = leer_server_conf(cfg)
+    if ruta is None:
+        error("No se encontró el server.conf (declara openvpn.server_conf)")
+    return {"ruta": ruta, "directivas": directivas}
+
+
+def red_vpn(cfg):
+    """
+    La red de la VPN y el pool dinámico, deducidos del server.conf.
+
+    Devuelve None si no hay forma de saberlo. Hace falta para validar las IP
+    fijas: una dentro del pool dinámico acabaría repartida a otro cliente y
+    los dos se pisarían el enrutado, sin un error que lo explique.
+    """
+    import ipaddress
+
+    _ruta, directivas = leer_server_conf(cfg)
+    red = None
+    nopool = False
+    pool = None
+    topologia = "net30"
+
+    for d in directivas:
+        if d[0] == "server" and len(d) >= 3:
+            try:
+                red = ipaddress.IPv4Network("%s/%s" % (d[1], d[2]), strict=False)
+            except ValueError:
+                return None
+            nopool = len(d) >= 4 and d[3] == "nopool"
+        elif d[0] == "ifconfig-pool" and len(d) >= 3:
+            try:
+                pool = (ipaddress.IPv4Address(d[1]), ipaddress.IPv4Address(d[2]))
+            except ValueError:
+                return None
+        elif d[0] == "topology" and len(d) >= 2:
+            topologia = d[1]
+
+    if red is None:
+        return None
+
+    if pool is None and not nopool:
+        # Lo que expande 'server' según su página de manual: con topology
+        # subnet reparte de .2 a la penúltima antes del broadcast.
+        pool = (red.network_address + 2, red.broadcast_address - 2)
+
+    return {
+        "red": red,
+        "servidor": red.network_address + 1,
+        "pool": pool,
+        "topologia": topologia,
+    }
+
+
+def _validar_politica(cn, p, red):
+    """Revalidación independiente de una política. Aborta al primer fallo."""
+    import ipaddress
+
+    if not isinstance(p, dict) or set(p) != CAMPOS_POLITICA:
+        error("Política de '%s' mal formada" % cn)
+
+    ip = p["ip_fija"]
+    if not isinstance(ip, str):
+        error("ip_fija de '%s' no es texto" % cn)
+    if ip:
+        try:
+            dir_ip = ipaddress.IPv4Address(ip)
+        except ValueError:
+            error("ip_fija no válida para '%s': %r" % (cn, ip))
+        if red is None:
+            error("No se pudo deducir la red de la VPN del server.conf: sin ella "
+                  "no se puede comprobar que %s sea una IP asignable" % ip)
+        if red["topologia"] != "subnet":
+            error("Las IP fijas exigen 'topology subnet' en el server.conf")
+        if dir_ip not in red["red"] or dir_ip in (
+                red["red"].network_address, red["red"].broadcast_address, red["servidor"]):
+            error("%s no es una IP de cliente de la red %s" % (ip, red["red"]))
+        if red["pool"] and red["pool"][0] <= dir_ip <= red["pool"][1]:
+            error("%s está dentro del pool dinámico (%s–%s): OpenVPN podría dársela "
+                  "a otro cliente. Elige una fuera, o reduce el pool con "
+                  "'server %s %s nopool' más 'ifconfig-pool'."
+                  % (ip, red["pool"][0], red["pool"][1],
+                     red["red"].network_address, red["red"].netmask))
+
+    destinos = p["destinos"]
+    if not isinstance(destinos, list) or len(destinos) > MAX_DESTINOS:
+        error("Destinos de '%s' mal formados" % cn)
+    if destinos and not ip:
+        error("'%s' limita destinos sin IP fija" % cn)
+    for d in destinos:
+        m = DESTINO_RE.match(d) if isinstance(d, str) else None
+        if not m:
+            error("Destino no válido para '%s': %r" % (cn, d))
+        try:
+            ipaddress.IPv4Network(m.group("red"), strict=False)
+        except ValueError:
+            error("Red no válida para '%s': %r" % (cn, d))
+        if m.group("puerto") and not 1 <= int(m.group("puerto")) <= 65535:
+            error("Puerto fuera de rango para '%s': %r" % (cn, d))
+
+    horario = p["horario"]
+    if not isinstance(horario, list) or len(horario) > MAX_FRANJAS:
+        error("Horario de '%s' mal formado" % cn)
+    for f in horario:
+        if not isinstance(f, dict) or set(f) != {"dias", "desde", "hasta"}:
+            error("Franja de '%s' mal formada" % cn)
+        dias = f["dias"]
+        if not isinstance(dias, list) or not dias or any(
+                not isinstance(x, int) or isinstance(x, bool) or not 0 <= x <= 6 for x in dias):
+            error("Días no válidos en una franja de '%s'" % cn)
+        for hora in (f["desde"], f["hasta"]):
+            if not isinstance(hora, str) or not HORA_RE.match(hora):
+                error("Hora no válida en una franja de '%s'" % cn)
+        a = int(f["desde"][:2]) * 60 + int(f["desde"][3:])
+        b = int(f["hasta"][:2]) * 60 + int(f["hasta"][3:])
+        if a >= b:
+            error("Franja vacía o invertida para '%s'" % cn)
+
+    expira = p["expira"]
+    if not isinstance(expira, str) or (expira and not EXPIRA_RE.match(expira)):
+        error("Caducidad no válida para '%s'" % cn)
+    if expira:
+        try:
+            datetime.strptime(expira, "%Y-%m-%dT%H:%M")
+        except ValueError:
+            error("Caducidad no válida para '%s'" % cn)
+
+    maximo = p["max_sesion_min"]
+    if isinstance(maximo, bool) or not isinstance(maximo, int) or not 0 <= maximo <= MAX_SESION_MIN:
+        error("Duración máxima no válida para '%s'" % cn)
+
+    if p["bloqueo"] not in BLOQUEOS and p["bloqueo"] != "":
+        error("Bloqueo desconocido para '%s'" % cn)
+
+
+def reglas_nft(clientes):
+    """
+    El conjunto de reglas de acceso, en sintaxis de 'nft -f'.
+
+    Se genera desde datos ya validados y nunca se interpola texto libre: cada
+    pieza sale de una IP o un número que ya pasaron por ipaddress o int().
+
+    Tabla propia y con nombre, como la del NAT: borrarla no toca las reglas de
+    nadie más, y el 'add + delete' del principio hace el archivo reaplicable
+    sin duplicar. Solo se filtra lo que SALE de un cliente restringido; las
+    respuestas hacia él no coinciden con 'ip saddr', así que siguen pasando.
+    Las mismas reglas en 'input' y en 'forward': si no, un cliente limitado a
+    una impresora seguiría alcanzando el propio servidor, panel incluido.
+    """
+    import ipaddress
+
+    reglas = []
+    for cn in sorted(clientes):
+        p = clientes[cn]
+        if not p["destinos"]:
+            continue
+        origen = str(ipaddress.IPv4Address(p["ip_fija"]))
+        reglas.append("        # %s" % cn)
+        for d in p["destinos"]:
+            m = DESTINO_RE.match(d)
+            red = ipaddress.IPv4Network(m.group("red"), strict=False)
+            if m.group("puerto"):
+                reglas.append("        ip saddr %s ip daddr %s %s dport %d accept"
+                              % (origen, red, m.group("proto"), int(m.group("puerto"))))
+            else:
+                reglas.append("        ip saddr %s ip daddr %s accept" % (origen, red))
+        reglas.append("        ip saddr %s drop" % origen)
+
+    cuerpo = "\n".join(reglas)
+    cadenas = []
+    for nombre, gancho in (("entrada", "input"), ("reenvio", "forward")):
+        cadenas.append(
+            "    chain %s {\n"
+            "        type filter hook %s priority filter; policy accept;\n"
+            "%s\n"
+            "    }" % (nombre, gancho, cuerpo)
+        )
+
+    texto = (
+        "#!/usr/sbin/nft -f\n"
+        "# Reglas de acceso por cliente de BridgesMGR. Lo escribe ovpn-web-helper:\n"
+        "# no lo edites a mano, se reescribe entero en cada cambio de políticas.\n"
+        "add table inet %s\n"
+        "delete table inet %s\n"
+        "table inet %s {\n%s\n}\n"
+        % (TABLA_ACCESO, TABLA_ACCESO, TABLA_ACCESO, "\n".join(cadenas))
+    )
+    return texto, sum(1 for r in reglas if r.strip().startswith("ip "))
+
+
+def _escribir_atomico(ruta, contenido, modo):
+    """
+    Escribe un archivo de DIR_POLITICAS de forma atómica.
+
+    Es la única escritura del helper fuera de la PKI, y por eso se niega a
+    escribir en cualquier otro sitio: lo que no pueda acabar nunca aquí es el
+    server.conf, que en manos de quien controle el panel sería un
+    'script-security 2' con un 'up' propio y código corriendo como root.
+    """
+    if os.path.dirname(os.path.realpath(ruta)) != os.path.realpath(DIR_POLITICAS):
+        error("Escritura fuera de %s rechazada: %s" % (DIR_POLITICAS, ruta))
+    temporal = "%s.nuevo" % ruta
+    with open(temporal, "w", encoding="utf-8") as f:
+        f.write(contenido)
+    os.chmod(temporal, modo)
+    os.chown(temporal, 0, 0)
+    os.replace(temporal, ruta)
+
+
+def cmd_aplicar_politicas(cfg):
+    """
+    Recibe por stdin el documento entero de políticas y lo aplica.
+
+    Por stdin y no por argumento por tamaño, no por secreto: no hay nada
+    secreto aquí. Siempre el conjunto completo, así que aplicar dos veces lo
+    mismo deja lo mismo.
+
+    El orden importa: primero nftables, comprobado con 'nft -c' antes de
+    cargarlo, y solo si entra se escribe el archivo de políticas. Al revés, un
+    fallo de nftables dejaría escrita una restricción de destinos que no se
+    está aplicando.
+    """
+    bruto = sys.stdin.read(MAX_STDIN + 1)
+    if len(bruto) > MAX_STDIN:
+        error("Documento de políticas demasiado grande")
+    try:
+        doc = json.loads(bruto)
+    except ValueError:
+        error("El documento de políticas no es JSON válido")
+
+    if not isinstance(doc, dict) or set(doc) != {"version", "global", "clientes"}:
+        error("Documento de políticas mal formado")
+    if doc["version"] != VERSION_POLITICAS:
+        error("Versión de políticas no soportada: %r" % doc["version"])
+
+    glob = doc["global"]
+    if not isinstance(glob, dict) or set(glob) != {"max_sesion_min"}:
+        error("Sección 'global' mal formada")
+    maximo = glob["max_sesion_min"]
+    if isinstance(maximo, bool) or not isinstance(maximo, int) or not 0 <= maximo <= MAX_SESION_MIN:
+        error("Duración máxima global no válida")
+
+    clientes = doc["clientes"]
+    if not isinstance(clientes, dict):
+        error("'clientes' debe ser un mapa")
+
+    necesita_red = any(isinstance(p, dict) and p.get("ip_fija") for p in clientes.values())
+    red = red_vpn(cfg) if necesita_red else None
+
+    ips = []
+    for cn, p in clientes.items():
+        validar_cn(cn)
+        _validar_politica(cn, p, red)
+        if p["ip_fija"]:
+            ips.append(p["ip_fija"])
+    if len(ips) != len(set(ips)):
+        error("Hay una IP fija asignada a más de un cliente")
+
+    texto_nft, n_reglas = reglas_nft(clientes)
+
+    os.makedirs(DIR_POLITICAS, mode=0o755, exist_ok=True)
+    os.chmod(DIR_POLITICAS, 0o755)
+
+    nft = shutil.which("nft")
+    estado_nft = "sin_reglas"
+    if nft:
+        temporal = ARCHIVO_ACCESO + ".nuevo"
+        _escribir_atomico(temporal, texto_nft, 0o644)
+        try:
+            for args in ([nft, "-c", "-f", temporal], [nft, "-f", temporal]):
+                proc = subprocess.run(args, capture_output=True, text=True, timeout=30)
+                if proc.returncode != 0:
+                    error("nftables rechazó las reglas de acceso: %s"
+                          % (proc.stderr or proc.stdout).strip())
+            os.replace(temporal, ARCHIVO_ACCESO)
+        finally:
+            if os.path.exists(temporal):
+                os.unlink(temporal)
+        estado_nft = "aplicado"
+    elif n_reglas:
+        error("Hay destinos limitados pero 'nft' no está instalado (apt install nftables)")
+
+    salida = {
+        "version": VERSION_POLITICAS,
+        "global": glob,
+        "clientes": clientes,
+    }
+    if red is not None:
+        salida["mascara"] = str(red["red"].netmask)
+
+    # 0644: lo lee el script de conexión, que corre como 'nobody' después de
+    # que OpenVPN suelte privilegios. No hay nada secreto: nombres, horarios y
+    # direcciones de la propia VPN.
+    _escribir_atomico(ARCHIVO_POLITICAS, json.dumps(salida, indent=1, sort_keys=True) + "\n",
+                      0o644)
+
+    _ruta, directivas = leer_server_conf(cfg)
+    enganchado = any(d[0] == "client-connect" and len(d) >= 2 and d[1] == HOOK_CLIENT_CONNECT
+                     for d in directivas)
+
+    return {
+        "ok": True,
+        "accion": "aplicar-politicas",
+        "clientes": len(clientes),
+        "reglas": n_reglas,
+        "nft": estado_nft,
+        "enganchado": enganchado,
+    }
+
+
 COMANDOS_CON_CN = {
     "revocar": cmd_revocar,
     "restaurar": cmd_restaurar,
@@ -650,6 +1034,8 @@ COMANDOS_SIN_CN = {
     "listar": cmd_listar,
     "estado-servicio": cmd_estado_servicio,
     "rotar-tls-crypt": cmd_rotar_tls_crypt,
+    "server-conf": cmd_server_conf,
+    "aplicar-politicas": cmd_aplicar_politicas,
 }
 
 # Los únicos que emiten una clave privada nueva y, por tanto, los únicos que
@@ -662,7 +1048,7 @@ def main():
         error("Este helper debe ejecutarse como root (vía sudo)")
 
     if len(sys.argv) < 2:
-        error("Uso: ovpn-web-helper <listar|revocar|restaurar|crear|ovpn|estado-servicio|rotar-tls-crypt> [CN]")
+        error("Uso: ovpn-web-helper <%s> [CN]" % "|".join(sorted(set(COMANDOS_CON_CN) | set(COMANDOS_SIN_CN))))
 
     sub = sys.argv[1]
     cfg = cargar_config()

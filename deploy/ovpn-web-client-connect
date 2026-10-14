@@ -1,0 +1,136 @@
+#!/usr/bin/python3 -I
+# -*- coding: utf-8 -*-
+"""
+Script client-connect de BridgesMGR. Lo ejecuta OpenVPN en cada conexión.
+
+Se engancha en el server.conf con:
+
+    script-security 2
+    client-connect /usr/local/lib/ovpn-web/client-connect
+
+Lee /etc/openvpn/ovpn-web/politicas.json —lo escribe ovpn-web-helper, nunca el
+panel— y decide si el cliente puede entrar ahora: rechaza a quien esté fuera
+de su horario, con el acceso caducado o bloqueado por el panel, y le fija la
+IP a quien la tenga asignada.
+
+Corre como 'nobody', después de que OpenVPN suelte privilegios, así que no
+puede escribir nada fuera del archivo que OpenVPN le pasa. Su salida va al log
+de OpenVPN (con log-append, OpenVPN redirige ahí stdout y stderr), y de ahí la
+recoge el panel como un suceso más.
+
+Reglas, en orden de importancia:
+
+  1. Solo stdlib y '-I' en el shebang: nada del entorno ni del directorio de
+     trabajo puede cambiar qué código corre aquí.
+  2. Sin archivo de políticas se deja pasar: es una instalación sin políticas
+     todavía, y bloquearla dejaría fuera a todo el mundo por no haber hecho
+     nada. Con un archivo ilegible se rechaza: alguien ha puesto políticas y
+     no se puede saber cuáles, así que lo prudente es no saltárselas.
+  3. La evaluación repite la de app/core/politicas.py a propósito: este lado
+     no se fía del panel. Hay una prueba que compara las dos.
+"""
+
+import json
+import os
+import re
+import sys
+from datetime import datetime
+
+ARCHIVO = "/etc/openvpn/ovpn-web/politicas.json"
+
+CN_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$')
+IP_RE = re.compile(r'^\d{1,3}(?:\.\d{1,3}){3}$')
+
+PREFIJO = "ovpn-web client-connect:"
+
+
+def _minutos(hora):
+    return int(hora[:2]) * 60 + int(hora[3:])
+
+
+def dentro_de_horario(horario, ahora):
+    if not horario:
+        return True
+    minuto = ahora.hour * 60 + ahora.minute
+    dia = ahora.weekday()
+    return any(
+        dia in f["dias"] and _minutos(f["desde"]) <= minuto < _minutos(f["hasta"])
+        for f in horario
+    )
+
+
+def motivo_rechazo(politica, ahora):
+    if politica.get("bloqueo"):
+        return "bloqueado"
+    expira = politica.get("expira")
+    if expira and ahora >= datetime.strptime(expira, "%Y-%m-%dT%H:%M"):
+        return "caducado"
+    if not dentro_de_horario(politica.get("horario") or [], ahora):
+        return "fuera_de_horario"
+    return None
+
+
+def decidir(doc, cn, ahora):
+    """
+    Devuelve (motivo_de_rechazo, lineas_de_configuracion).
+
+    Sin política para ese CN: entra y no se le añade nada.
+    """
+    politica = (doc.get("clientes") or {}).get(cn)
+    if not politica:
+        return None, []
+
+    motivo = motivo_rechazo(politica, ahora)
+    if motivo:
+        return motivo, []
+
+    lineas = []
+    ip = politica.get("ip_fija")
+    mascara = doc.get("mascara")
+    if ip:
+        if not (IP_RE.match(ip) and mascara and IP_RE.match(mascara)):
+            return "politica_ilegible", []
+        lineas.append("ifconfig-push %s %s" % (ip, mascara))
+
+    return None, lineas
+
+
+def rechazar(cn, motivo):
+    sys.stdout.write("%s RECHAZO cn=%s motivo=%s\n" % (PREFIJO, cn or "-", motivo))
+    sys.stdout.flush()
+    sys.exit(1)
+
+
+def main():
+    cn = os.environ.get("common_name", "")
+
+    # El CN lo verificó OpenVPN contra la CA, pero se valida igual: va a parar
+    # al log y a un diccionario, y un salto de línea en él inventaría sucesos.
+    if not CN_RE.match(cn):
+        rechazar("", "cn_no_valido")
+
+    try:
+        with open(ARCHIVO, "r", encoding="utf-8") as f:
+            doc = json.load(f)
+    except FileNotFoundError:
+        sys.exit(0)
+    except (OSError, ValueError):
+        rechazar(cn, "politica_ilegible")
+
+    try:
+        motivo, lineas = decidir(doc, cn, datetime.now())
+    except (KeyError, TypeError, ValueError, AttributeError):
+        rechazar(cn, "politica_ilegible")
+
+    if motivo:
+        rechazar(cn, motivo)
+
+    if lineas and len(sys.argv) >= 2:
+        with open(sys.argv[-1], "a", encoding="utf-8") as f:
+            f.write("\n".join(lineas) + "\n")
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

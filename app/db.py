@@ -186,6 +186,17 @@ CREATE TABLE IF NOT EXISTS eventos_vpn (
     detalle TEXT
 );
 
+-- Políticas de acceso por cliente (app/core/politicas.py). La forma canónica
+-- va como JSON en una columna: se valida entera al entrar, se aplica entera al
+-- helper y nunca se consulta por un campo suelto, así que partirla en columnas
+-- solo añadiría migraciones.
+CREATE TABLE IF NOT EXISTS politicas (
+    cn          TEXT PRIMARY KEY,
+    datos       TEXT NOT NULL,
+    actualizada TEXT NOT NULL,
+    por         TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_auditoria_ts ON auditoria(ts DESC);
 -- Por 'visto' purga la limpieza; por 'tipo' filtran las pestañas de la VPN.
 CREATE INDEX IF NOT EXISTS idx_eventos_vpn_visto ON eventos_vpn(visto);
@@ -1278,3 +1289,49 @@ def cerrar_reparto(ruta, reparto_id, usuario):
             (_iso(_ahora()), usuario, int(reparto_id)),
         )
         return cur.rowcount > 0
+
+
+# ----------------------------------------------------- políticas por cliente
+
+# Duración máxima de sesión para quien no tenga una propia, en minutos. 0 es
+# sin límite. Ajuste y no config.yaml: es una decisión de operación que se
+# cambia desde el panel.
+AJUSTE_MAX_SESION = "max_sesion_min"
+
+
+def listar_politicas(ruta):
+    """{cn: politica} de todos los clientes con alguna restricción"""
+    import json
+
+    with conexion(ruta) as con:
+        filas = con.execute("SELECT cn, datos FROM politicas ORDER BY cn").fetchall()
+    return {f["cn"]: json.loads(f["datos"]) for f in filas}
+
+
+def obtener_politica(ruta, cn):
+    return listar_politicas(ruta).get(cn)
+
+
+def guardar_politica(ruta, cn, politica, usuario):
+    """Guarda la política ya normalizada. Vacía = se borra la fila."""
+    import json
+
+    from .core import politicas as pol
+
+    with conexion(ruta) as con:
+        if politica == pol.vacia():
+            con.execute("DELETE FROM politicas WHERE cn = ?", (cn,))
+        else:
+            con.execute(
+                "INSERT INTO politicas (cn, datos, actualizada, por) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT(cn) DO UPDATE SET datos = excluded.datos,"
+                " actualizada = excluded.actualizada, por = excluded.por",
+                (cn, json.dumps(politica, sort_keys=True), _iso(_ahora()), usuario),
+            )
+
+
+def max_sesion_global(ruta):
+    try:
+        return max(0, int(obtener_ajuste(ruta, AJUSTE_MAX_SESION, "0") or 0))
+    except ValueError:
+        return 0

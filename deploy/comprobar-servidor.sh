@@ -283,6 +283,26 @@ else
   aviso "Falta 'status-version 3'" "Es el formato que el panel lee mejor; con v1 pierde la IP real y la virtual por separado"
 fi
 
+# Políticas por cliente. No es crítico: sin el script el panel funciona igual,
+# pero los horarios, las caducidades y las IP fijas solo se aplican al expulsar
+# por el management, y un cliente expulsado vuelve a entrar en segundos.
+HOOK=/usr/local/lib/ovpn-web/client-connect
+if [[ $(directiva client-connect) == "$HOOK" ]]; then
+  bien "client-connect apunta al script de políticas del panel"
+  [[ $(directiva script-security) =~ ^[23] ]] || \
+    critico "client-connect sin 'script-security 2'" \
+            "OpenVPN no ejecutará el script y rechazará a todo el mundo. Añade: script-security 2"
+  [[ -x $HOOK ]] || critico "Falta $HOOK" "Vuelve a pasar deploy/install.sh: lo instala él"
+elif [[ -n $(directiva client-connect) ]]; then
+  aviso "client-connect apunta a otro script: $(directiva client-connect)" \
+        "Las políticas por cliente del panel no se aplicarán al conectar"
+else
+  aviso "Sin client-connect: las políticas por cliente solo se aplican a medias" \
+        "Añade: script-security 2  y  client-connect $HOOK"
+fi
+[[ -n $(directiva duplicate-cn) ]] && aviso "'duplicate-cn' activo" \
+    "Un mismo perfil puede estar conectado varias veces a la vez; quítalo para una sola sesión por certificado"
+
 MGMT=$(directiva management)
 if [[ -z $MGMT ]]; then
   aviso "Sin 'management': el panel usará solo el archivo de estado" \

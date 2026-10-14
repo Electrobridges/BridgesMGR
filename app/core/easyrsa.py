@@ -162,3 +162,24 @@ def rotar_tls_crypt(cfg):
     sabríamos si quedó bien.
     """
     return _ejecutar(cfg, ["rotar-tls-crypt"], timeout=90)
+
+
+def server_conf(cfg):
+    """
+    Las directivas del server.conf, sin material de clave.
+
+    Devuelve {'ruta': str, 'directivas': [[nombre, args...], ...]}. De un
+    bloque en línea (<tls-crypt>…) solo llega su nombre entre ángulos.
+    """
+    return _ejecutar(cfg, ["server-conf"], timeout=30)
+
+
+def aplicar_politicas(cfg, documento):
+    """
+    Le pasa al helper el documento ENTERO de políticas y lo aplica.
+
+    Por stdin: es un JSON de tamaño variable y no tiene sitio en argv. El
+    helper lo revalida todo por su cuenta antes de escribir nada.
+    """
+    return _ejecutar(cfg, ["aplicar-politicas"],
+                     entrada=json.dumps(documento), timeout=60)
