@@ -10,6 +10,7 @@
       <th>Cliente</th>
       <th>Certificado</th>
       <th>Conexión</th>
+      <th>Acceso</th>
       {% if manda %}<th>Acciones</th>{% endif %}
     </tr>
   </thead>
@@ -28,6 +29,18 @@
         {% else %}
         <span class="tenue">—</span>
         {% endif %}
+      </td>
+      <td>
+        <div class="acceso">
+        {% if f.rechazo and f.estado == 'valido' %}
+        <span class="etiqueta etiqueta-aviso">{{ f.rechazo }}</span>
+        {% endif %}
+        {% for parte in f.politica %}
+        <span class="etiqueta etiqueta-info">{{ parte }}</span>
+        {% endfor %}
+        <a class="pequeno" href="/clientes/{{ f.cn }}/politica">
+          {{- 'Políticas' if manda else 'Ver' }}</a>
+        </div>
       </td>
       {% if manda %}
       <td class="acciones">

@@ -71,6 +71,15 @@ ACCIONES = {
     "desarchivar": CERTIFICADOS,
     "descargar_ovpn": CERTIFICADOS,
     "desconectar": CERTIFICADOS,
+    "politica_cliente": CERTIFICADOS,
+    "politica_global": CERTIFICADOS,
+
+    # Lo que hace el propio panel, sin nadie detrás, en nombre de una política:
+    # expulsar a quien se queda fuera, revocar un acceso temporal que caduca y
+    # señalar un perfil que parece estar usándose desde dos sitios a la vez.
+    "expulsar_politica": CERTIFICADOS,
+    "caducar_cliente": CERTIFICADOS,
+    "perfil_compartido": CERTIFICADOS,
 }
 
 # Acciones que solo avisan cuando salen mal. Un login correcto es ruido; uno
@@ -78,7 +87,7 @@ ACCIONES = {
 SOLO_SI_FALLA = {"login": SEGURIDAD}
 
 # Lo que se considera grave y sale en rojo
-GRAVES = {"revocar", "borrar_usuario_panel", "cambiar_rol_panel",
+GRAVES = {"revocar", "caducar_cliente", "perfil_compartido", "borrar_usuario_panel", "cambiar_rol_panel",
           "totp_restablecer", "designar_superusuario",
           # Destruyen registro o lo sacan del servidor: si alguien lo hace sin
           # haberlo acordado, el aviso tiene que llegar como los demás graves.
@@ -93,6 +102,49 @@ def categoria_de(accion, resultado):
     if resultado == "ok":
         return ACCIONES.get(accion)
     return None
+
+
+# Quién firma en la auditoría lo que hace el panel por su cuenta. No es una
+# cuenta: db.crear_usuario() rechaza los nombres que empiezan por paréntesis,
+# así que nadie puede hacerse pasar por el panel en el registro.
+ACTOR_SISTEMA = "(sistema)"
+
+
+def notificar_accion(cfg, accion, objetivo, usuario, ip, resultado="ok", detalle=None):
+    """Avisa de una acción ya auditada, si su categoría está en la lista."""
+    categoria = categoria_de(accion, resultado)
+    if not categoria:
+        return
+
+    estado = "FALLÓ" if resultado != "ok" else "correcto"
+    avisar(
+        cfg, categoria,
+        "[%s] %s%s" % (cfg.servidor.host_bind, accion,
+                       "" if resultado == "ok" else " (falló)"),
+        "\n".join([
+            "Acción:    %s" % accion,
+            "Objetivo:  %s" % (objetivo or "—"),
+            "Usuario:   %s" % (usuario or "—"),
+            "Desde:     %s" % (ip or "—"),
+            "Resultado: %s" % estado,
+        ] + (["Detalle:   %s" % detalle] if detalle else [])),
+        grave=(resultado != "ok" or accion in GRAVES),
+    )
+
+
+def auditar_sistema(cfg, accion, objetivo=None, resultado="ok", detalle=None):
+    """
+    Lo mismo que routers.comun.auditar(), para lo que hace el panel solo.
+
+    El vigilante no tiene petición ni sesión, pero lo que hace en nombre de una
+    política —expulsar, revocar— cambia quién está dentro de la VPN igual que si
+    lo hubiera hecho una persona, y tiene que constar igual.
+    """
+    from . import db
+
+    db.registrar(cfg.seguridad.db_path, usuario=ACTOR_SISTEMA, accion=accion,
+                 objetivo=objetivo, resultado=resultado, detalle=detalle)
+    notificar_accion(cfg, accion, objetivo, ACTOR_SISTEMA, None, resultado, detalle)
 
 
 # Claves en la tabla `ajustes`

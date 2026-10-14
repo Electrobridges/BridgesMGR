@@ -169,22 +169,7 @@ def auditar(request, sesion, accion, objetivo=None, resultado="ok", detalle=None
     # pasa por la auditoría, así que enganchar en un solo sitio evita que una
     # acción nueva se quede sin avisar por olvido. avisar() no lanza nunca —un
     # correo caído no puede tumbar la revocación que lo provocó.
-    categoria = notificar.categoria_de(accion, resultado)
-    if categoria:
-        estado = "FALLÓ" if resultado != "ok" else "correcto"
-        notificar.avisar(
-            c, categoria,
-            "[%s] %s%s" % (c.servidor.host_bind, accion,
-                           "" if resultado == "ok" else " (falló)"),
-            "\n".join([
-                "Acción:    %s" % accion,
-                "Objetivo:  %s" % (objetivo or "—"),
-                "Usuario:   %s" % (usuario or "—"),
-                "Desde:     %s" % (ip or "—"),
-                "Resultado: %s" % estado,
-            ] + (["Detalle:   %s" % detalle] if detalle else [])),
-            grave=(resultado != "ok" or accion in notificar.GRAVES),
-        )
+    notificar.notificar_accion(c, accion, objetivo, usuario, ip, resultado, detalle)
 
 
 def vacio(status_code=200):

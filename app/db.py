@@ -416,6 +416,10 @@ def crear_usuario(ruta, usuario, password, rol=ROL_SUPERVISOR):
     usuario = usuario.strip()
     if not usuario:
         raise ValueError("El nombre de usuario no puede estar vacío")
+    if usuario.startswith("("):
+        # '(sistema)' firma en la auditoría lo que hace el panel por su cuenta.
+        # Una cuenta llamada así podría hacerse pasar por él en el registro.
+        raise ValueError("Los nombres entre paréntesis están reservados para el propio panel")
     if len(password) < 12:
         raise ValueError("La contraseña debe tener al menos 12 caracteres")
 
@@ -886,7 +890,9 @@ FILTROS_AUDITORIA = {
     "todo": "",
     "fallos": "resultado NOT IN (%s)" % _NO_FALLO_SQL,
     "certificados": ("accion IN ('crear_cliente', 'revocar', 'restaurar',"
-                     " 'descargar_ovpn', 'desconectar', 'archivar', 'desarchivar')"),
+                     " 'descargar_ovpn', 'desconectar', 'archivar', 'desarchivar',"
+                     " 'politica_cliente', 'politica_global', 'expulsar_politica',"
+                     " 'fin_sesion', 'caducar_cliente', 'perfil_compartido')"),
     "sesiones": "accion IN ('login', 'logout')",
 }
 
@@ -1005,6 +1011,7 @@ FILTROS_EVENTOS_VPN = {
     "todo": "",
     "conexiones": _tipos_sql(eventos_vpn.ENTRADAS_Y_SALIDAS),
     "fallos": _tipos_sql(eventos_vpn.FALLOS),
+    "duplicadas": _tipos_sql({eventos_vpn.SESION_DUPLICADA}),
 }
 
 
@@ -1335,3 +1342,23 @@ def max_sesion_global(ruta):
         return max(0, int(obtener_ajuste(ruta, AJUSTE_MAX_SESION, "0") or 0))
     except ValueError:
         return 0
+
+
+def duplicadas_recientes(ruta, desde):
+    """
+    {cn: [ip, ...]} de las sesiones desplazadas vistas desde 'desde' (ISO UTC).
+
+    Las IP van en el orden en que entraron, repetidas incluidas: lo que se busca
+    es el vaivén entre dos sitios, y eso solo se ve con la secuencia entera.
+    """
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT cn, ip FROM eventos_vpn WHERE tipo = ? AND visto >= ? AND cn != ''"
+            " ORDER BY id",
+            (eventos_vpn.SESION_DUPLICADA, desde),
+        ).fetchall()
+
+    resultado = {}
+    for f in filas:
+        resultado.setdefault(f["cn"], []).append(f["ip"])
+    return resultado

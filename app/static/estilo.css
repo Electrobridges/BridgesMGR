@@ -236,6 +236,8 @@ a { color: var(--cian); }
 }
 .etiqueta-ok { color: var(--verde); background: rgba(91, 241, 168, .12); }
 .etiqueta-mal { color: var(--rojo); background: rgba(248, 113, 113, .12); }
+.etiqueta-aviso { color: var(--amarillo); background: rgba(251, 191, 36, .12); }
+.etiqueta-info { color: var(--cian-claro); background: rgba(16, 196, 216, .12); }
 
 /* --------------------------------------------------- barra sobre una tabla */
 /* El texto a la izquierda y las acciones a la derecha, en una fila que se
@@ -306,15 +308,27 @@ a { color: var(--cian); }
   display: none;
 }
 
+/* ------------------------------------------------- políticas por cliente */
+.politica fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.politica .panel-accion { display: flex; flex-direction: column; gap: .5rem; }
+.politica .panel-accion p { margin: 0; }
+.politica input[type="text"], .politica input[type="number"],
+.politica input[type="datetime-local"] { max-width: 22rem; }
+.franja { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center;
+          padding: .5rem 0; border-top: 1px solid var(--linea); }
+.franja-titulo { font-size: .8rem; font-weight: 600; color: var(--texto-3); min-width: 4.5rem; }
+.franja-dias { display: flex; flex-wrap: wrap; gap: .25rem .75rem; }
+.acceso { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+
 /* El campo se hunde respecto a la tarjeta que lo contiene. */
-input, select {
+input, select, textarea {
   padding: .55rem .75rem;
   background: var(--fondo); color: var(--texto);
   border: 1px solid var(--linea-fuerte); border-radius: var(--radio-sm);
   font: 400 .9375rem/1.4 var(--tipo);
 }
 input::placeholder { color: var(--tenue); }
-input:focus-visible, select:focus-visible {
+input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: none; border-color: var(--cian); box-shadow: var(--foco);
 }
 label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }

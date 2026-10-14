@@ -70,9 +70,29 @@ RECHAZO_TLS = "rechazo_tls"
 RECHAZO_CLAVE = "rechazo_clave"
 ARRANQUE = "arranque"
 CRL = "crl"
+# El script client-connect del panel dijo que no: fuera de horario, caducado…
+RECHAZO_POLITICA = "rechazo_politica"
+# Entró un perfil que ya estaba conectado y OpenVPN cerró la sesión anterior.
+# No es un fallo: un portátil que cambia de red lo provoca una vez. Lo que
+# delata un perfil compartido es que se repita alternando entre IP.
+SESION_DUPLICADA = "sesion_duplicada"
 
 # Qué cuenta como fallo al filtrar en pantalla
-FALLOS = {RECHAZO_REVOCADO, RECHAZO_CERTIFICADO, RECHAZO_TLS, RECHAZO_CLAVE}
+FALLOS = {RECHAZO_REVOCADO, RECHAZO_CERTIFICADO, RECHAZO_TLS, RECHAZO_CLAVE,
+          RECHAZO_POLITICA}
+
+# Lo que escribe deploy/ovpn-web-client-connect al rechazar. OpenVPN no le
+# pone fecha ni prefijo: la línea llega tal cual la imprime el script.
+_RECHAZO_POLITICA = re.compile(r'^ovpn-web client-connect: RECHAZO cn=(\S+) motivo=(\S+)')
+_DUPLICADA = re.compile(r"MULTI: new connection by client '([^']+)' will cause previous active sessions")
+
+MOTIVOS_POLITICA = {
+    "bloqueado": "bloqueado por el panel",
+    "caducado": "acceso caducado",
+    "fuera_de_horario": "fuera de su horario",
+    "politica_ilegible": "no se pudo leer el archivo de políticas",
+    "cn_no_valido": "nombre de certificado no válido",
+}
 
 # Las dos caras del mismo hecho: quién entró y quién salió. El filtro de
 # 'Conexiones' las trata juntas porque seguir a un cliente exige ver el par;
@@ -91,6 +111,13 @@ def _clasificar(msg):
     """
     if "Peer Connection Initiated" in msg:
         return CONEXION, None
+
+    m = _RECHAZO_POLITICA.match(msg)
+    if m:
+        return RECHAZO_POLITICA, MOTIVOS_POLITICA.get(m.group(2), m.group(2))
+
+    if _DUPLICADA.search(msg):
+        return SESION_DUPLICADA, "se cerró la sesión anterior de este perfil"
 
     if "VERIFY ERROR" in msg:
         if "certificate revoked" in msg:
@@ -298,6 +325,10 @@ def parse_eventos(lineas):
             entre_corchetes = re.search(r'\[([^\]\s]+)\]\s+Peer Connection', msg)
             if entre_corchetes:
                 cn = entre_corchetes.group(1)
+        if not cn and tipo == RECHAZO_POLITICA:
+            cn = _RECHAZO_POLITICA.match(msg).group(1)
+        if not cn and tipo == SESION_DUPLICADA:
+            cn = _DUPLICADA.search(msg).group(1)
         if not cn and tipo in FALLOS:
             en_mensaje = _CN_EN_MENSAJE.search(msg)
             if en_mensaje:

@@ -333,3 +333,34 @@ TEXTO_MOTIVO = {
     MOTIVO_HORARIO: "fuera de su horario",
     MOTIVO_DURACION: "superó la duración máxima de sesión",
 }
+
+
+def resumen(politica):
+    """Etiquetas cortas para la tabla de clientes, en orden de importancia."""
+    p = politica or vacia()
+    partes = []
+    if p.get("bloqueo"):
+        partes.append("bloqueado (%s)" % p["bloqueo"])
+    if p.get("expira"):
+        fecha = datetime.strptime(p["expira"], FORMATO_EXPIRA)
+        partes.append("caduca %s" % fecha.strftime("%d/%m/%Y %H:%M"))
+    if p.get("horario"):
+        partes.append(describir_horario(p["horario"]))
+    if p.get("max_sesion_min"):
+        partes.append("sesión máx. %s" % describir_minutos(p["max_sesion_min"]))
+    if p.get("ip_fija"):
+        partes.append("IP %s" % p["ip_fija"])
+    if p.get("destinos"):
+        n = len(p["destinos"])
+        partes.append("%d destino%s" % (n, "" if n == 1 else "s"))
+    return partes
+
+
+def describir_minutos(minutos):
+    if minutos % 1440 == 0:
+        return "%d d" % (minutos // 1440)
+    if minutos % 60 == 0:
+        return "%d h" % (minutos // 60)
+    if minutos > 60:
+        return "%d h %d min" % divmod(minutos, 60)
+    return "%d min" % minutos
