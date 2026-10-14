@@ -12,7 +12,7 @@ Clientes, políticas de acceso, verificación en dos pasos y endurecimiento,<br>
 sin ceder root a una página web.
 
 [![Pruebas](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml/badge.svg)](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml)
-![Versión](https://img.shields.io/badge/versión-0.4.0-10c4d8.svg)
+![Versión](https://img.shields.io/badge/versión-0.5.0-10c4d8.svg)
 ![Licencia](https://img.shields.io/badge/licencia-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![OpenVPN](https://img.shields.io/badge/OpenVPN-2.5%20%7C%202.6-orange.svg)

@@ -5,7 +5,7 @@ Todos los cambios relevantes de este proyecto se anotan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 el versionado es [SemVer](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [0.5.0] — 2026-10-14
 
 ### Añadido
 
@@ -682,7 +682,8 @@ servidor OpenVPN desde el navegador, con el núcleo portado de
   endurecida y certificado TLS autofirmado.
 - 84 pruebas.
 
-[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.4.0...HEAD
+[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.4.0
 [0.3.1]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.3.0
