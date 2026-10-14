@@ -43,6 +43,14 @@
     <strong>Bridges<span>MGR</span></strong>
   </a>
 
+  {# Por debajo de 1200px la navegación no cabe en una fila y se pliega tras
+     este botón, como en electrobridges.com. Nace oculto por CSS y lo enseña
+     menu.js: sin JavaScript no hay botón que no haga nada, y la barra se
+     queda desplegada como siempre. #}
+  <button type="button" class="menu-boton" aria-controls="menu-principal"
+          aria-expanded="false" aria-label="Abrir menú"><span></span></button>
+
+  <div class="menu" id="menu-principal">
   {# El activo lleva aria-current además de la clase: el subrayado cian y el
      texto en blanco solo los ve quien ve. Sin él, un lector de pantalla
      anuncia siete enlaces indistinguibles y no dice dónde estás. #}
@@ -76,7 +84,13 @@
       <button type="submit" class="boton-plano">Salir</button>
     </form>
   </div>
+  </div>
 </header>
+{# Justo detrás de la barra y sin defer, a propósito: con defer corre al final
+   del documento, y en una conexión lenta el navegador pintaba antes la barra
+   desplegada —195px en un teléfono— y luego la plegaba, con toda la página
+   dando un salto. Aquí la barra ya existe y todavía no se ha pintado nada. #}
+<script src="/static/menu.js"></script>
 {% endif %}
 
 <main class="contenido">
