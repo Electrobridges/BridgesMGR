@@ -90,13 +90,17 @@ def test_declarado_en_config_no_toca_el_disco(helper):
     assert helper.cn_del_servidor(cfg) == "mi-servidor"
 
 
-def test_sin_nada_que_leer_devuelve_none(helper, tmp_path):
+def test_sin_nada_que_leer_devuelve_none(helper, tmp_path, monkeypatch):
     """
     Degrada a RESERVADOS en vez de reventar.
 
     Es una capa por encima del filtro de siempre, no un sustituto: si no hay
     forma de averiguar el CN, listar tiene que seguir funcionando.
+
+    Las rutas estándar se apartan: si no, la prueba depende de que la máquina
+    que la corre no tenga OpenVPN instalado.
     """
+    monkeypatch.setattr(helper, "SERVER_CONF_ESTANDAR", (str(tmp_path / "tampoco.conf"),))
     cfg = {"openvpn": {"server_conf": str(tmp_path / "no-existe.conf")}}
     assert helper.cn_del_servidor(cfg) is None
 

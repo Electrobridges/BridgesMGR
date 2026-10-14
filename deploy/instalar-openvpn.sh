@@ -23,7 +23,8 @@
 #   management en 127.0.0.1:7505
 #   unidad openvpn-server@server
 
-set -euo pipefail
+# -E para que la trampa de ERR también salte dentro de las funciones.
+set -Eeuo pipefail
 
 # ----------------------------------------------------------------- constantes
 EASYRSA_DIR=/etc/openvpn/easy-rsa
@@ -67,6 +68,44 @@ rojo()  { printf '\033[31m%s\033[0m\n' "$*"; }
 amar()  { printf '\033[33m%s\033[0m\n' "$*"; }
 verde() { printf '\033[32m%s\033[0m\n' "$*"; }
 info()  { printf '\033[36m==>\033[0m %s\n' "$*"; }
+
+# Mismo trato de fallos que install.sh: lo que impide montar el servidor para
+# y dice en qué paso, en qué línea y qué mirar; lo que no lo impide avisa,
+# sigue y se repite al final. Volver a lanzarlo es siempre seguro.
+PASO="preparación"
+PISTA=""
+AVISOS=()
+
+paso() { PASO=$1; PISTA=""; info "$1"; }
+aviso_final() { amar "  AVISO: $1"; AVISOS+=("$1"); }
+
+al_fallar() {
+  local codigo=$1 linea=$2 orden=$3
+  trap - ERR
+  echo
+  rojo "════════ EL MONTAJE DEL SERVIDOR SE HA DETENIDO ════════"
+  echo "  Paso:     $PASO"
+  echo "  Línea:    $linea de deploy/instalar-openvpn.sh"
+  echo "  Orden:    $orden"
+  echo "  Código:   $codigo"
+  [[ -n $PISTA ]] && echo "  Qué mirar: $PISTA"
+  echo
+  echo "  Corregido el motivo, vuelve a lanzarlo: continúa donde se quedó y no"
+  echo "  rehace lo que ya está (la PKI, la clave tls-crypt, el server.conf)."
+  exit "$codigo"
+}
+trap 'al_fallar $? $LINENO "$BASH_COMMAND"' ERR
+
+morir() {
+  PISTA=${2:-$PISTA}
+  rojo "$1"
+  al_fallar 1 "${BASH_LINENO[0]}" "(comprobación del script) $1"
+}
+
+# Marca de los server.conf que escribe este script. Con ella se distingue un
+# servidor ajeno —que no se toca— de uno que montó este mismo script y se
+# quedó a medias: ese se termina de montar al volver a lanzarlo.
+MARCA_PROPIA="# Generado por deploy/instalar-openvpn.sh"
 
 uso() {
   cat <<'FIN'
@@ -113,8 +152,21 @@ done
 command -v apt-get >/dev/null || { rojo "Este script es para Debian/Ubuntu"; exit 1; }
 
 # ------------------------------------------------------------- comprobaciones
-# Antes de instalar nada: si ya hay un servidor montado, no es asunto nuestro.
-if [[ -f "$SERVER_CONF" ]]; then
+# Antes de instalar nada: si ya hay un servidor montado por otro, no es asunto
+# nuestro. Si lo montó este script y se quedó a medias —un fallo de red, un
+# sysctl que no carga—, se termina: si no, relanzarlo tras un fallo decía «no
+# se toca» y salía en verde con el servidor sin NAT y sin arrancar.
+CONF_PROPIA=0
+if [[ -f "$SERVER_CONF" ]] && head -1 "$SERVER_CONF" | grep -qF "$MARCA_PROPIA"; then
+  CONF_PROPIA=1
+  info "$SERVER_CONF lo escribió este script: se continúa el montaje sin reescribirlo"
+  # La red de la VPN sale del server.conf que ya hay, no de las opciones: el
+  # NAT tiene que cuadrar con lo que OpenVPN reparte de verdad.
+  RED_CONF=$(awk '$1 == "server" {print $2 "/" $3}' "$SERVER_CONF" | tail -1)
+  if [[ -n $RED_CONF ]]; then
+    RED_VPN=$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1], strict=False))' "$RED_CONF")
+  fi
+elif [[ -f "$SERVER_CONF" ]]; then
   amar "Ya existe $SERVER_CONF: no se toca."
   echo "  Este script solo monta un servidor nuevo. Para adaptar uno que ya"
   echo "  funciona, ajusta /etc/ovpn-web/config.yaml a mano — el panel necesita"
@@ -128,12 +180,21 @@ if [[ -f "$SERVER_CONF" ]]; then
 fi
 
 # ------------------------------------------------------------------- paquetes
-info "Instalando OpenVPN y easy-rsa"
-apt-get update -qq
-apt-get install -y --no-install-recommends \
-  openvpn easy-rsa iproute2 nftables python3 curl ca-certificates
+# Solo si falta algo: relanzarlo sin red para apt no tiene por qué fallar.
+paso "Instalando OpenVPN y easy-rsa"
+FALTAN=()
+for paquete in openvpn easy-rsa iproute2 nftables python3 curl ca-certificates; do
+  dpkg -s "$paquete" >/dev/null 2>&1 || FALTAN+=("$paquete")
+done
+if (( ${#FALTAN[@]} )); then
+  PISTA="apt no puede descargar: revisa la red y /etc/apt/sources.list, o instala a mano: apt-get install ${FALTAN[*]}"
+  apt-get update -qq
+  apt-get install -y --no-install-recommends "${FALTAN[@]}"
+else
+  verde "Ya están instalados"
+fi
 
-command -v openvpn >/dev/null || { rojo "No se pudo instalar openvpn"; exit 1; }
+command -v openvpn >/dev/null || morir "No se pudo instalar openvpn"
 
 ORIGEN_EASYRSA=""
 for candidato in /usr/share/easy-rsa /usr/share/easy-rsa3; do
@@ -346,7 +407,12 @@ FIN
 fi
 
 # --------------------------------------------------------------- server.conf
-info "Escribiendo $SERVER_CONF"
+# Si ya es nuestro no se reescribe: puede tener cambios a mano, y lo que se
+# está haciendo es terminar un montaje, no rehacerlo.
+if [[ "$CONF_PROPIA" == "1" ]]; then
+  info "Se conserva $SERVER_CONF"
+else
+paso "Escribiendo $SERVER_CONF"
 mkdir -p "$SERVER_DIR"
 
 {
@@ -440,6 +506,7 @@ push "dhcp-option DNS ${DNS2}"
 FIN
   fi
 } > "$SERVER_CONF"
+fi
 
 chown root:root "$SERVER_CONF"
 chmod 0600 "$SERVER_CONF"
@@ -449,16 +516,26 @@ if [[ "$SIN_RED" == "1" ]]; then
   amar "Reenvío IP y NAT sin tocar (--sin-red)."
   echo "  Los clientes conectarán, pero no encaminarán a ningún sitio hasta que"
   echo "  actives esto a mano:"
-  echo "      echo 'net.ipv4.ip_forward=1' > $SYSCTL_FILE && sysctl --system"
+  echo "      echo 'net.ipv4.ip_forward=1' > $SYSCTL_FILE && sysctl -p $SYSCTL_FILE"
   echo "      nft add table ip ovpnweb"
   echo "      nft 'add chain ip ovpnweb postrouting { type nat hook postrouting priority srcnat; }'"
   echo "      nft add rule ip ovpnweb postrouting ip saddr $RED_VPN oifname \"$IFACE\" masquerade"
 else
-  info "Activando el reenvío IP"
+  paso "Activando el reenvío IP"
   echo "net.ipv4.ip_forward=1" > "$SYSCTL_FILE"
-  sysctl -q --system
+  # Solo NUESTRO archivo, no 'sysctl --system': ese recarga todos los del
+  # sistema, y uno ajeno que no cargue —un módulo que falta, un contenedor que
+  # no deja tocar cierta clave— paraba el montaje a medias. Pasó probándolo.
+  if ! sysctl -q -p "$SYSCTL_FILE"; then
+    if [[ $(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null) == 1 ]]; then
+      aviso_final "sysctl no pudo cargar $SYSCTL_FILE, pero el reenvío IP ya estaba activo."
+    else
+      aviso_final "No se pudo activar el reenvío IP: los clientes conectarán pero no llegarán a la red. Actívalo a mano: sysctl -w net.ipv4.ip_forward=1"
+    fi
+  fi
 
-  info "Instalando la regla de NAT"
+  paso "Instalando la regla de NAT"
+  PISTA="nftables rechazó la regla: ¿hay otro cortafuegos (firewalld, iptables-legacy) gestionando la máquina? Prueba con --sin-red y monta el NAT a mano."
   # Tabla propia y con nombre: así se ve de quién es, y borrarla no se lleva
   # por delante las reglas de nadie más. El 'delete' inicial la hace
   # reaplicable sin duplicar, y el '|| true' cubre la primera vez, cuando
@@ -529,6 +606,7 @@ getent group "$GRUPO_VPN" >/dev/null || groupadd --system "$GRUPO_VPN"
 install -d -o root -g "$GRUPO_VPN" -m 0770 "$ESTADO_TOTP"
 
 # --------------------------------------------------------------------- unidad
+paso "Arrancando OpenVPN"
 if [[ "$SIN_ARRANCAR" == "1" ]]; then
   amar "Todo escrito, sin arrancar (--sin-arrancar). Cuando quieras:"
   echo "    systemctl enable --now $UNIDAD"
@@ -541,9 +619,12 @@ else
   if systemctl is-active --quiet "$UNIDAD"; then
     verde "OpenVPN en marcha"
   else
-    rojo "OpenVPN no ha arrancado. Mira qué dice:"
-    echo "    journalctl -u $UNIDAD -n 40 --no-pager"
-    exit 1
+    # Con 'log-append' OpenVPN escribe sus errores en su log y no en el
+    # journal, que se queda casi vacío: se enseña lo que de verdad dijo.
+    rojo "OpenVPN no ha arrancado. Lo último de $LOG_FILE:"
+    tail -n 15 "$LOG_FILE" 2>/dev/null | sed 's/^/    /' || true
+    morir "OpenVPN no arranca con la configuración montada." \
+      "El error está justo encima. Más contexto: journalctl -u $UNIDAD -n 40 --no-pager"
   fi
 fi
 
@@ -566,4 +647,10 @@ printf '  %-22s %s\n' "Unidad"         "$UNIDAD"
 echo
 if [[ -z "$HOST_CLIENTES" ]]; then
   amar "Falta poner cliente_ovpn.remote_host en /etc/ovpn-web/config.yaml."
+fi
+
+if (( ${#AVISOS[@]} )); then
+  echo
+  amar "════════ ${#AVISOS[@]} AVISO(S) QUE REVISAR ════════"
+  for a in "${AVISOS[@]}"; do amar "  · $a"; done
 fi

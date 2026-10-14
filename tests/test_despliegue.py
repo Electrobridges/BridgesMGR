@@ -1181,3 +1181,38 @@ def test_sin_red_no_se_para_lo_que_no_hace_falta():
     assert 'dpkg -s "$paquete"' in texto
     assert "se conserva el instalado, que coincide con el hash esperado" in texto
     assert "No se pudo actualizar pip; se sigue" in texto
+
+
+# ---------------------------------------- montar el servidor sin quedarse a medias
+
+def test_el_montaje_solo_carga_su_propio_sysctl():
+    """
+    'sysctl --system' recarga TODOS los archivos de sysctl del sistema, y uno
+    ajeno que no cargue paraba el montaje a medias. Pasó probándolo en un
+    contenedor con 'net.core.default_qdisc'.
+    """
+    texto = _leer(INSTALA_VPN)
+    assert "sysctl -q --system" not in texto
+    assert 'sysctl -q -p "$SYSCTL_FILE"' in texto
+
+
+def test_relanzar_el_montaje_lo_termina_en_vez_de_salir_en_verde():
+    """
+    Tras un fallo a mitad, relanzarlo veía el server.conf ya escrito, decía
+    «no se toca» y salía con 0, dejando el servidor sin NAT y sin arrancar.
+    Un server.conf que escribió este script se conserva y el montaje sigue;
+    uno ajeno sigue sin tocarse.
+    """
+    texto = _leer(INSTALA_VPN)
+    assert 'MARCA_PROPIA="# Generado por deploy/instalar-openvpn.sh"' in texto
+    assert "# Generado por deploy/instalar-openvpn.sh" in texto.split("cat <<FIN\n", 2)[-1] \
+        or "${MARCA_PROPIA}" in texto or texto.count("# Generado por deploy/instalar-openvpn.sh") >= 2
+    assert 'if [[ "$CONF_PROPIA" == "1" ]]; then' in texto
+
+
+def test_el_montaje_dice_donde_y_por_que_se_para():
+    texto = _leer(INSTALA_VPN)
+    assert "set -Eeuo pipefail" in texto
+    assert "trap 'al_fallar $? $LINENO \"$BASH_COMMAND\"' ERR" in texto
+    # Con log-append los errores de OpenVPN van a su log, no al journal
+    assert 'tail -n 15 "$LOG_FILE"' in texto

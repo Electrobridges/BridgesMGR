@@ -143,7 +143,7 @@ bien "Encontrado en $SERVER_CONF"
 
 # Aviso temprano: si las rutas son relativas, todo lo que sigue depende de
 # resolverlas bien, y es de donde salen la mitad de las sorpresas.
-if grep -qE '^[[:space:]]*(ca|cert|key|crl-verify|tls-crypt|tls-auth)[[:space:]]+[^/]' "$SERVER_CONF"; then
+if grep -qE '^[[:space:]]*(ca|cert|key|crl-verify|tls-crypt|tls-auth)[[:space:]]+[^/[:space:]]' "$SERVER_CONF"; then
   aviso "Usa rutas relativas, que OpenVPN resuelve contra $(dirname "$SERVER_CONF")" \
         "No es un error, pero es de donde salen las confusiones: comprueba que apuntan a donde crees"
 fi
