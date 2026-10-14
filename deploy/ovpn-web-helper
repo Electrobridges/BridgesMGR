@@ -30,6 +30,7 @@ Uso:
     ovpn-web-helper bloqueos               (documento JSON por stdin)
     ovpn-web-helper listar-bloqueos
     ovpn-web-helper totp-vpn               (documento JSON por stdin)
+    ovpn-web-helper caducidades
 
 Lo que NO está aquí y no debe estarlo: reconstruir la CA. Necesitaría escribir
 en server.conf, y quien pueda hacerlo mete un 'script-security 2' con un script
@@ -721,8 +722,10 @@ VERSION_POLITICAS = 1
 MAX_DESTINOS = 32
 MAX_FRANJAS = 14
 MAX_SESION_MIN = 30 * 24 * 60
+MAX_CUOTA_MB = 100_000_000
 BLOQUEOS = {"cuota"}
-CAMPOS_POLITICA = {"ip_fija", "destinos", "horario", "expira", "max_sesion_min", "bloqueo"}
+CAMPOS_POLITICA = {"ip_fija", "destinos", "horario", "expira", "max_sesion_min",
+                   "cuota_mb_mes", "bloqueo"}
 HORA_RE = re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$|^24:00$')
 DESTINO_RE = re.compile(r'^(?P<red>[0-9./]+)(?::(?P<puerto>\d{1,5})/(?P<proto>tcp|udp))?$')
 EXPIRA_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$')
@@ -907,6 +910,10 @@ def _validar_politica(cn, p, red):
     if isinstance(maximo, bool) or not isinstance(maximo, int) or not 0 <= maximo <= MAX_SESION_MIN:
         error("Duración máxima no válida para '%s'" % cn)
 
+    cuota = p["cuota_mb_mes"]
+    if isinstance(cuota, bool) or not isinstance(cuota, int) or not 0 <= cuota <= MAX_CUOTA_MB:
+        error("Cuota no válida para '%s'" % cn)
+
     if p["bloqueo"] not in BLOQUEOS and p["bloqueo"] != "":
         error("Bloqueo desconocido para '%s'" % cn)
 
@@ -1083,6 +1090,76 @@ def cmd_aplicar_politicas(cfg):
         "reglas": n_reglas,
         "nft": estado_nft,
         "enganchado": enganchado,
+    }
+
+
+# ----------------------------------------------------------- caducidades
+
+def _fecha_index(texto):
+    """'270125234826Z' (index.txt, UTCTime) -> ISO 8601 UTC, o None."""
+    for formato in ("%y%m%d%H%M%SZ", "%Y%m%d%H%M%SZ"):
+        try:
+            return datetime.strptime(texto, formato).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            continue
+    return None
+
+
+def _fecha_certificado(ruta):
+    """notAfter de un certificado en ISO UTC, o None si no se puede leer."""
+    if not ruta or not os.path.isfile(ruta):
+        return None
+    try:
+        salida = subprocess.run(
+            ["openssl", "x509", "-noout", "-enddate", "-in", ruta],
+            capture_output=True, text=True, timeout=10,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.match(r'notAfter=(.+)$', salida)
+    if not m:
+        return None
+    for formato in ("%b %d %H:%M:%S %Y %Z", "%b %d %H:%M:%S %Y"):
+        try:
+            return datetime.strptime(m.group(1).strip(), formato).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            continue
+    return None
+
+
+def cmd_caducidades(cfg):
+    """
+    Cuándo caduca cada certificado de cliente válido, la CA y el del servidor.
+
+    Solo fechas: ningún material de certificado sale de aquí. Las de los
+    clientes salen de index.txt, que ya las tiene, en vez de abrir cada .crt.
+    """
+    rutas = rutas_pki(cfg)
+    propio = cn_del_servidor(cfg)
+    clientes = {}
+
+    if os.path.isfile(rutas["index"]):
+        with open(rutas["index"], "r", encoding="utf-8", errors="replace") as f:
+            for linea in f:
+                partes = linea.rstrip("\n").split("\t")
+                if len(partes) < 6 or partes[0] != "V":
+                    continue
+                m = re.search(r'/CN=([^/\n]+)', partes[5])
+                if not m or _es_del_servidor(m.group(1), propio):
+                    continue
+                fecha = _fecha_index(partes[1])
+                if fecha:
+                    clientes[m.group(1)] = fecha
+
+    servidor = None
+    if propio:
+        servidor = _fecha_certificado(os.path.join(rutas["issued"], "%s.crt" % propio))
+
+    return {
+        "clientes": clientes,
+        "ca": _fecha_certificado(rutas["ca"]),
+        "servidor": servidor,
+        "servidor_cn": propio,
     }
 
 
@@ -1351,6 +1428,7 @@ COMANDOS_SIN_CN = {
     "bloqueos": cmd_bloqueos,
     "listar-bloqueos": cmd_listar_bloqueos,
     "totp-vpn": cmd_totp_vpn,
+    "caducidades": cmd_caducidades,
 }
 
 # Los únicos que emiten una clave privada nueva y, por tanto, los únicos que

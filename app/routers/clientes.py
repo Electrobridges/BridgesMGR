@@ -12,7 +12,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import Response
 
-from .. import db
+from .. import caducidades, db, trafico
 from .. import politicas as aplicar_politicas
 from ..auth import solo_admin, usuario_actual, verificar_csrf
 from ..core import easyrsa, serverconf
@@ -47,6 +47,8 @@ def _estado_clientes(request):
     archivados = db.cn_archivados(c.seguridad.db_path)
 
     politicas = db.listar_politicas(c.seguridad.db_path)
+    caducan = caducidades.por_cliente(c.seguridad.db_path)
+    uso = trafico.uso_mes(c.seguridad.db_path)
     ahora = datetime.now()
 
     def fila(cn, estado, conectado):
@@ -57,6 +59,11 @@ def _estado_clientes(request):
             # Lo que impide entrar AHORA, aunque el certificado sea válido. Sin
             # esto la tabla diría 'válido' de alguien que no puede conectar.
             "rechazo": pol.TEXTO_MOTIVO.get(pol.motivo_rechazo(p, ahora)) if p else None,
+            # Días que le quedan al CERTIFICADO, solo si son pocos. Es otra
+            # cosa que la caducidad de la política: esta no se cambia en el
+            # panel, hay que reemitir.
+            "cert_caduca": caducan.get(cn) if estado == "valido" else None,
+            "uso_mes": trafico.bytes_decimales(uso[cn]) if uso.get(cn) else None,
         }
 
     filas = []
@@ -187,6 +194,7 @@ def crear_cliente(
         auditar(request, sesion, "crear_cliente", cn, "error", str(e))
         return error_htmx(request, "No se pudo crear '%s': %s" % (cn, e))
 
+    caducidades.invalidar(cfg(request).seguridad.db_path)
     # Se anota QUE lleva contraseña, nunca cuál
     auditar(request, sesion, "crear_cliente", cn, detalle=detalle)
 
@@ -222,6 +230,7 @@ def revocar_cliente(
         auditar(request, sesion, "revocar", cn, "error", str(e))
         return error_htmx(request, "No se pudo revocar '%s': %s" % (cn, e))
 
+    caducidades.invalidar(cfg(request).seguridad.db_path)
     auditar(request, sesion, "revocar", cn)
     return aviso(
         request,
@@ -278,6 +287,7 @@ def restaurar_cliente(
         auditar(request, sesion, "restaurar", cn, "error", str(e))
         return error_htmx(request, "No se pudo restaurar '%s': %s" % (cn, e))
 
+    caducidades.invalidar(cfg(request).seguridad.db_path)
     auditar(request, sesion, "restaurar", cn,
             detalle="clave privada cifrada" if secreto else "clave privada sin contraseña")
     return aviso(
@@ -477,7 +487,22 @@ def _servidor(c):
         return None, "No se pudo leer el server.conf: %s" % e
 
 
-def _politica_del_formulario(anterior, ip_fija, destinos, franjas, expira, max_sesion_min):
+def _cuota_mb(texto):
+    """'5' o '2,5' GB del formulario -> MB enteros. Vacío o 0 = sin cuota."""
+    texto = (texto or "").strip().replace(",", ".")
+    if not texto:
+        return 0
+    try:
+        gb = float(texto)
+    except ValueError:
+        raise pol.PoliticaInvalida("La cuota tiene que ser un número de GB")
+    if gb < 0:
+        raise pol.PoliticaInvalida("La cuota no puede ser negativa")
+    return int(round(gb * 1000))
+
+
+def _politica_del_formulario(anterior, ip_fija, destinos, franjas, expira, max_sesion_min,
+                             cuota_gb=""):
     """Lo que llega del formulario, en política normalizada."""
     horario = []
     for i, (dias, desde, hasta) in enumerate(franjas, 1):
@@ -510,6 +535,7 @@ def _politica_del_formulario(anterior, ip_fija, destinos, franjas, expira, max_s
         "horario": horario,
         "expira": expira,
         "max_sesion_min": maximo,
+        "cuota_mb_mes": _cuota_mb(cuota_gb),
         # Lo pone el propio panel (las cuotas), no el formulario: se conserva.
         "bloqueo": (anterior or {}).get("bloqueo", ""),
     })
@@ -543,6 +569,10 @@ def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
         "describir_minutos": pol.describir_minutos,
         "rechazo": pol.TEXTO_MOTIVO.get(pol.motivo_rechazo(politica, datetime.now())),
         "dos_pasos": _estado_dos_pasos(c, cn, directivas),
+        "uso_mes": trafico.uso_mes(c.seguridad.db_path).get(cn, 0),
+        "dias_trafico": db.trafico_cliente(c.seguridad.db_path, cn, 31),
+        "bytes_decimales": trafico.bytes_decimales,
+        "bytes_mb": pol.BYTES_MB,
     })
 
 
@@ -656,6 +686,7 @@ def guardar_politica(
     f3_hasta: str = Form(""),
     expira: str = Form(""),
     max_sesion_min: str = Form(""),
+    cuota_gb: str = Form(""),
     sesion=Depends(solo_admin),
     _csrf=Depends(verificar_csrf),
 ):
@@ -672,7 +703,7 @@ def guardar_politica(
             anterior, ip_fija, destinos,
             [(f1_dias, f1_desde, f1_hasta), (f2_dias, f2_desde, f2_hasta),
              (f3_dias, f3_desde, f3_hasta)],
-            expira, max_sesion_min,
+            expira, max_sesion_min, cuota_gb,
         )
         aplicar_politicas.aplicar(c, {cn: nueva}, usuario=sesion["usuario"])
     except pol.PoliticaInvalida as e:

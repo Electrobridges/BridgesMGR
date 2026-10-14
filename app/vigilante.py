@@ -38,7 +38,7 @@ aplicación cientos de veces, no levantan un hilo cada vez.
 import threading
 from datetime import datetime, timezone
 
-from . import bloqueos, db, eventos, notificar, politicas, respaldar
+from . import bloqueos, caducidades, db, eventos, notificar, politicas, respaldar, trafico
 from .core import conexiones, easyrsa, mgmt, respaldos, salud
 from .core import politicas as pol
 
@@ -259,6 +259,7 @@ def _caducar(cfg, todas, ahora):
                 # conexión sigue rechazándolo mientras tanto.
                 _caducados_confirmados.add((cn, p["expira"]))
                 continue
+            caducidades.invalidar(cfg.seguridad.db_path)
             notificar.auditar_sistema(
                 cfg, "caducar_cliente", cn,
                 detalle="acceso temporal vencido el %s" % p["expira"].replace("T", " "),
@@ -315,9 +316,14 @@ def _aplicar_politicas(cfg, ahora=None):
         notificar.auditar_sistema(cfg, accion, cn, detalle=pol.TEXTO_MOTIVO[motivo])
 
 
+def _revisar_caducidades(cfg):
+    """La CA, el certificado del servidor y los de cliente. Ver caducidades.py."""
+    caducidades.revisar(cfg)
+
+
 def _vuelta(cfg):
     for revision in (_revisar_crl, _revisar_servicio, _revisar_respaldo,
-                     _ingerir_eventos):
+                     _revisar_caducidades, _ingerir_eventos):
         try:
             revision(cfg)
         except Exception:  # noqa: BLE001
@@ -327,12 +333,22 @@ def _vuelta(cfg):
             pass
 
 
+def _medir_trafico(cfg):
+    """Suma el tráfico de cada sesión y bloquea o libera por cuota."""
+    activas, _fuente, _errores = conexiones.obtener_conexiones(cfg)
+    trafico.muestrear(cfg, activas)
+    trafico.revisar_cuotas(cfg)
+
+
 def _vuelta_politicas(cfg):
-    try:
-        _aplicar_politicas(cfg)
-    except Exception:  # noqa: BLE001
-        # Mismo criterio que _vuelta(): nada de aquí puede matar el hilo.
-        pass
+    # El tráfico antes que las políticas: si alguien acaba de agotar su cuota,
+    # su bloqueo ya está puesto cuando se mira a quién hay que sacar.
+    for tarea in (_medir_trafico, _aplicar_politicas):
+        try:
+            tarea(cfg)
+        except Exception:  # noqa: BLE001
+            # Mismo criterio que _vuelta(): nada de aquí puede matar el hilo.
+            pass
 
 
 def _bucle(cfg):

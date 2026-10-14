@@ -36,6 +36,12 @@ VERSION = 1
 MAX_DESTINOS = 32
 MAX_FRANJAS = 14
 MAX_SESION_MIN = 30 * 24 * 60
+# 100 TB al mes: un techo que solo existe para rechazar números absurdos.
+MAX_CUOTA_MB = 100_000_000
+
+# Un MB de cuota son 10^6 bytes, como los cuenta cualquier proveedor, y no
+# 2^20: así '5000 MB' es lo mismo que '5 GB' en la factura de quien paga.
+BYTES_MB = 1_000_000
 
 # Motivos por los que el propio panel bloquea a un cliente sin revocarlo. Son
 # cadenas fijas: el script de conexión las escribe en el log y la plantilla
@@ -70,6 +76,7 @@ def vacia():
         "horario": [],
         "expira": "",
         "max_sesion_min": 0,
+        "cuota_mb_mes": 0,
         "bloqueo": "",
     }
 
@@ -211,6 +218,11 @@ def normalizar(politica):
         raise PoliticaInvalida("Duración máxima de sesión fuera de rango")
     p["max_sesion_min"] = maximo
 
+    cuota = politica.get("cuota_mb_mes") or 0
+    if isinstance(cuota, bool) or not isinstance(cuota, int) or not 0 <= cuota <= MAX_CUOTA_MB:
+        raise PoliticaInvalida("Cuota mensual fuera de rango")
+    p["cuota_mb_mes"] = cuota
+
     bloqueo = politica.get("bloqueo") or ""
     if bloqueo and bloqueo not in BLOQUEOS:
         raise PoliticaInvalida("Bloqueo desconocido: %s" % bloqueo)
@@ -348,6 +360,8 @@ def resumen(politica):
         partes.append(describir_horario(p["horario"]))
     if p.get("max_sesion_min"):
         partes.append("sesión máx. %s" % describir_minutos(p["max_sesion_min"]))
+    if p.get("cuota_mb_mes"):
+        partes.append("cuota %s/mes" % describir_mb(p["cuota_mb_mes"]))
     if p.get("ip_fija"):
         partes.append("IP %s" % p["ip_fija"])
     if p.get("destinos"):
@@ -364,3 +378,11 @@ def describir_minutos(minutos):
     if minutos > 60:
         return "%d h %d min" % divmod(minutos, 60)
     return "%d min" % minutos
+
+
+def describir_mb(mb):
+    if mb >= 1000 and mb % 1000 == 0:
+        return "%d GB" % (mb // 1000)
+    if mb >= 1000:
+        return "%.1f GB" % (mb / 1000)
+    return "%d MB" % mb

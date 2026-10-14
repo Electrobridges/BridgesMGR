@@ -25,7 +25,7 @@ from .auth import (
 from .config import cargar_config
 from .core.eventos_vpn import formatear_duracion
 from .core.parsers import format_bytes
-from .routers import administracion, clientes, panel, perfil, seguridad, sesion
+from .routers import administracion, clientes, metricas, panel, perfil, seguridad, sesion
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
@@ -125,6 +125,7 @@ def crear_app(cfg=None):
     app.include_router(administracion.router)
     app.include_router(perfil.router)
     app.include_router(seguridad.router)
+    app.include_router(metricas.router)
 
     return app
 

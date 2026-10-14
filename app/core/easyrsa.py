@@ -215,3 +215,13 @@ def totp_vpn(cfg, accion, cn=None, secreto=None):
     if secreto is not None:
         doc["secreto"] = secreto
     return _ejecutar(cfg, ["totp-vpn"], entrada=json.dumps(doc), timeout=30)["clientes"]
+
+
+def caducidades(cfg):
+    """
+    {'clientes': {cn: iso}, 'ca': iso|None, 'servidor': iso|None, 'servidor_cn'}.
+
+    Fechas ISO en UTC. Solo de los certificados válidos: uno revocado ya no
+    da acceso, caduque cuando caduque.
+    """
+    return _ejecutar(cfg, ["caducidades"], timeout=60)

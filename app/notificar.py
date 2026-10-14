@@ -81,6 +81,8 @@ ACCIONES = {
     "expulsar_politica": CERTIFICADOS,
     "caducar_cliente": CERTIFICADOS,
     "perfil_compartido": CERTIFICADOS,
+    "cuota_agotada": CERTIFICADOS,
+    "cuota_restablecida": CERTIFICADOS,
 
     # El cortafuegos cerrándole la puerta a una IP: la primera señal de que
     # alguien está llamando desde fuera.

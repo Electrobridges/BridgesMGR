@@ -32,9 +32,14 @@
       </td>
       <td>
         <div class="acceso">
+        {% if f.cert_caduca is not none %}
+        <span class="etiqueta etiqueta-{{ 'mal' if f.cert_caduca < 7 else 'aviso' }}">
+          {{- 'certificado caducado' if f.cert_caduca < 0 else 'certificado caduca en %d d' % f.cert_caduca }}</span>
+        {% endif %}
         {% if f.rechazo and f.estado == 'valido' %}
         <span class="etiqueta etiqueta-aviso">{{ f.rechazo }}</span>
         {% endif %}
+        {% if f.uso_mes %}<span class="tenue pequeno" title="Tráfico este mes">{{ f.uso_mes }} este mes</span>{% endif %}
         {% for parte in f.politica %}
         <span class="etiqueta etiqueta-info">{{ parte }}</span>
         {% endfor %}

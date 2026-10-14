@@ -102,6 +102,10 @@ class SeguridadCfg:
     max_intentos_login: int = 5
     bloqueo_login_min: int = 15
     cookie_segura: bool = True
+    # Token del endpoint /metrics de Prometheus. Vacío = endpoint apagado (404).
+    # En el YAML y no en la base: el panel lo lee y no lo puede cambiar, así
+    # que quien entre en la web no puede abrirse una puerta nueva por aquí.
+    metricas_token: str = ""
 
 
 @dataclass

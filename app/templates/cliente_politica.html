@@ -87,6 +87,40 @@
   </section>
 
   <section class="panel-accion">
+    <h2>Cuota de tráfico mensual</h2>
+    <p class="tenue">
+      Subida más bajada. Al agotarla se le desconecta y no puede volver a entrar
+      hasta el día 1 del mes siguiente, cuando se levanta sola. Vacío = sin cuota.
+    </p>
+    <p>
+      Este mes lleva <strong>{{ bytes_decimales(uso_mes) }}</strong>
+      {% if politica.cuota_mb_mes %}de {{ bytes_decimales(politica.cuota_mb_mes * bytes_mb) }}
+      ({{ (100 * uso_mes / (politica.cuota_mb_mes * bytes_mb)) | round | int }} %){% endif %}.
+    </p>
+    <label for="cuota_gb">GB al mes</label>
+    <input type="number" id="cuota_gb" name="cuota_gb" min="0" step="0.1"
+           value="{{ (politica.cuota_mb_mes / 1000) if politica.cuota_mb_mes else '' }}"
+           placeholder="sin cuota">
+    {% if dias_trafico %}
+    <details>
+      <summary class="tenue pequeno">Tráfico de los últimos días</summary>
+      <div class="tabla-scroll">
+      <table class="tabla">
+        <thead><tr><th>Día</th><th class="num">Subida</th><th class="num">Bajada</th></tr></thead>
+        <tbody>
+          {% for d in dias_trafico %}
+          <tr><td>{{ d.dia }}</td>
+              <td class="num">{{ bytes_decimales(d.recibido) }}</td>
+              <td class="num">{{ bytes_decimales(d.enviado) }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="panel-accion">
     <h2>IP fija y destinos</h2>
     <p class="tenue">
       Con IP fija recibe siempre la misma dirección dentro de la VPN.

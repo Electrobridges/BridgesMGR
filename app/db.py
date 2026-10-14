@@ -210,6 +210,17 @@ CREATE TABLE IF NOT EXISTS ip_bloqueos (
     levantado TEXT
 );
 
+-- Tráfico por cliente y día (hora local del servidor), sumado a partir de los
+-- contadores de cada sesión que el vigilante lee cada minuto. 'recibido' es lo
+-- que el servidor recibe del cliente (su subida) y 'enviado' lo que le manda.
+CREATE TABLE IF NOT EXISTS trafico_diario (
+    cn       TEXT    NOT NULL,
+    dia      TEXT    NOT NULL,
+    recibido INTEGER NOT NULL DEFAULT 0,
+    enviado  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (cn, dia)
+);
+
 CREATE INDEX IF NOT EXISTS idx_ip_bloqueos_hasta ON ip_bloqueos(hasta);
 CREATE INDEX IF NOT EXISTS idx_auditoria_ts ON auditoria(ts DESC);
 -- Por 'visto' purga la limpieza; por 'tipo' filtran las pestañas de la VPN.
@@ -908,7 +919,7 @@ FILTROS_AUDITORIA = {
                      " 'descargar_ovpn', 'desconectar', 'archivar', 'desarchivar',"
                      " 'politica_cliente', 'politica_global', 'expulsar_politica',"
                      " 'fin_sesion', 'caducar_cliente', 'perfil_compartido',"
-                     " 'dos_pasos_vpn')"),
+                     " 'dos_pasos_vpn', 'cuota_agotada', 'cuota_restablecida')"),
     "sesiones": "accion IN ('login', 'logout')",
 }
 
@@ -1430,3 +1441,47 @@ def historial_bloqueos(ruta, limite=50):
             "SELECT * FROM ip_bloqueos ORDER BY id DESC LIMIT ?", (limite,)
         ).fetchall()
     return [dict(f) for f in filas]
+
+
+# ------------------------------------------------------ tráfico por cliente
+
+def sumar_trafico(ruta, dia, deltas):
+    """Suma {cn: (recibido, enviado)} al día dado ('YYYY-MM-DD')."""
+    if not deltas:
+        return
+    with conexion(ruta) as con:
+        con.executemany(
+            "INSERT INTO trafico_diario (cn, dia, recibido, enviado) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(cn, dia) DO UPDATE SET recibido = recibido + excluded.recibido,"
+            " enviado = enviado + excluded.enviado",
+            [(cn, dia, r, e) for cn, (r, e) in deltas.items()],
+        )
+
+
+def trafico_mes(ruta, mes):
+    """{cn: (recibido, enviado)} del mes 'YYYY-MM'."""
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT cn, SUM(recibido) AS r, SUM(enviado) AS e FROM trafico_diario"
+            " WHERE dia LIKE ? GROUP BY cn",
+            (mes + "-%",),
+        ).fetchall()
+    return {f["cn"]: (f["r"], f["e"]) for f in filas}
+
+
+def trafico_cliente(ruta, cn, limite=31):
+    """Los últimos días con tráfico de un cliente, del más reciente al más antiguo."""
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT dia, recibido, enviado FROM trafico_diario WHERE cn = ?"
+            " ORDER BY dia DESC LIMIT ?",
+            (cn, limite),
+        ).fetchall()
+    return [dict(f) for f in filas]
+
+
+def purgar_trafico(ruta, dias):
+    """Borra el tráfico de días anteriores a hace 'dias'. Devuelve cuántas filas."""
+    corte = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
+    with conexion(ruta) as con:
+        return con.execute("DELETE FROM trafico_diario WHERE dia < ?", (corte,)).rowcount

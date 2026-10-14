@@ -104,3 +104,6 @@ seguridad:
   # Solo desactívalo si sirves el panel por HTTP plano (no recomendado):
   # con true la cookie de sesión no viaja fuera de HTTPS.
   cookie_segura: true
+  # Token para que Prometheus lea /metrics (cabecera Authorization: Bearer …).
+  # Vacío = el endpoint no existe. Genera uno con:  openssl rand -hex 32
+  metricas_token: ""
