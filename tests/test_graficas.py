@@ -2,7 +2,7 @@
 Gráficas del panel: geometría en el servidor y su paso por la página.
 """
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -83,3 +83,22 @@ def test_series_por_dia(cfg):
     g = estadisticas.sucesos_diarios(ruta, eventos_vpn.FALLOS, "Rechazos")
     # Sin fecha en el log, cuenta el día en que se leyó
     assert g["tabla"]["filas"][-1][1] == ["3"]
+
+
+@pytest.mark.parametrize("visto, horas, dia", [
+    (datetime(2026, 10, 14, 23, 30, tzinfo=timezone.utc), 2, "2026-10-15"),
+    (datetime(2026, 10, 15, 2, 0, tzinfo=timezone.utc), -5, "2026-10-14"),
+])
+def test_un_suceso_sin_fecha_cuenta_en_el_dia_local(
+        cfg, monkeypatch, visto, horas, dia):
+    # `visto` va en UTC y las columnas son días locales: cerca de medianoche
+    # el día UTC es otro y el suceso caía en la columna equivocada
+    ruta = cfg.seguridad.db_path
+    db.init_db(ruta)
+    monkeypatch.setattr(db, "_ahora", lambda: visto)
+    db.guardar_eventos_vpn(ruta, [
+        {"ts": "", "tipo": eventos_vpn.RECHAZO_CLAVE, "cn": "", "ip": "1.1.1.1",
+         "puerto": "1", "detalle": None}])
+
+    zona = timezone(timedelta(hours=horas))
+    assert db.eventos_por_dia(ruta, eventos_vpn.FALLOS, "2026-10-01", zona) == {dia: 1}

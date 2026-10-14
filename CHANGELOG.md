@@ -5,7 +5,7 @@ Todos los cambios relevantes de este proyecto se anotan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 el versionado es [SemVer](https://semver.org/lang/es/).
 
-## [0.5.0] — 2026-10-14
+## [0.5.0] — 2026-10-15
 
 ### Añadido
 
@@ -81,6 +81,16 @@ el versionado es [SemVer](https://semver.org/lang/es/).
   activo `duplicate-cn`.
 - Ninguna cuenta del panel puede llamarse con un nombre entre paréntesis:
   `(sistema)` firma en la auditoría lo que el panel hace por su cuenta.
+
+### Corregido
+
+- **Las gráficas de sucesos contaban en el día equivocado lo que se leía cerca
+  de medianoche.** Con un log sin fechas (`--suppress-timestamps`, lo habitual
+  bajo systemd) el día sale de `visto`, que está en UTC, mientras que las
+  columnas son días locales: en Madrid, lo leído entre las 00:00 y las 02:00
+  caía en la columna de ayer. Ahora `visto` se pasa a la hora local antes de
+  sacarle el día. Lo destapó la prueba de las gráficas, que fallaba a esas
+  horas en cualquier máquina que no estuviera en UTC.
 
 ## [0.4.0] — 2026-09-22
 
