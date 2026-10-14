@@ -1502,19 +1502,43 @@ def trafico_por_dia(ruta, desde, cn=None):
     return {f["dia"]: (f["r"], f["e"]) for f in filas}
 
 
-def eventos_por_dia(ruta, tipos, desde):
+def eventos_por_dia(ruta, tipos, desde, zona=None):
     """
     {dia: n} de los sucesos de esos tipos desde 'desde' (YYYY-MM-DD).
 
     El día sale de la fecha que escribió OpenVPN cuando la hay, y si no —un
     log con '--suppress-timestamps'— de cuándo lo leyó el panel, que como
     mucho se desvía los cinco minutos de una vuelta del vigilante.
+
+    Los días son locales, como las columnas de la gráfica y como 'ts'. `visto`
+    está en UTC, así que se pasa a 'zona' (None: la de la máquina) antes de
+    sacarle el día; cortarlo tal cual metía en el día anterior, o en el
+    siguiente, lo que se leía en las horas de diferencia con UTC.
     """
+    # Un día de margen: el día UTC puede ir uno por detrás del local
+    margen = datetime.strptime(desde, "%Y-%m-%d") - timedelta(days=1)
+    margen = margen.strftime("%Y-%m-%d")
     with conexion(ruta) as con:
-        filas = con.execute(
-            "SELECT CASE WHEN ts != '' THEN substr(ts, 1, 10) ELSE substr(visto, 1, 10) END AS dia,"
-            "       COUNT(*) AS n FROM eventos_vpn WHERE " + _tipos_sql(tipos) +
+        con_fecha = con.execute(
+            "SELECT substr(ts, 1, 10) AS dia, COUNT(*) AS n FROM eventos_vpn"
+            " WHERE ts != '' AND " + _tipos_sql(tipos) +
             " GROUP BY dia HAVING dia >= ?",
             (desde,),
         ).fetchall()
-    return {f["dia"]: f["n"] for f in filas}
+        # Por minuto y no por hora: hay husos de media hora y de tres cuartos, y
+        # todos son múltiplos de quince minutos, así que ningún minuto cae a
+        # caballo de dos días locales.
+        sin_fecha = con.execute(
+            "SELECT substr(visto, 1, 16) AS minuto, COUNT(*) AS n FROM eventos_vpn"
+            " WHERE ts = '' AND " + _tipos_sql(tipos) + " AND visto >= ?"
+            " GROUP BY minuto",
+            (margen,),
+        ).fetchall()
+
+    dias = {f["dia"]: f["n"] for f in con_fecha}
+    for f in sin_fecha:
+        utc = datetime.strptime(f["minuto"], "%Y-%m-%dT%H:%M")
+        dia = utc.replace(tzinfo=timezone.utc).astimezone(zona).strftime("%Y-%m-%d")
+        if dia >= desde:
+            dias[dia] = dias.get(dia, 0) + f["n"]
+    return dias
