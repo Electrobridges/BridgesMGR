@@ -1216,3 +1216,17 @@ def test_el_montaje_dice_donde_y_por_que_se_para():
     assert "trap 'al_fallar $? $LINENO \"$BASH_COMMAND\"' ERR" in texto
     # Con log-append los errores de OpenVPN van a su log, no al journal
     assert 'tail -n 15 "$LOG_FILE"' in texto
+
+
+def test_lo_que_arranca_servicios_no_hereda_el_cerrojo():
+    """
+    Un demonio que heredara el descriptor del cerrojo se quedaría con él para
+    siempre, y cada instalación posterior diría que ya hay otra en marcha.
+    Pasó probándolo: el OpenVPN que arrancó fechas-log.sh se lo llevó.
+    """
+    texto = _leer(INSTALADOR)
+    for orden in ("systemctl restart ovpn-web", "fechas-log.sh\" --reiniciar",
+                  "bash deploy/instalar-openvpn.sh"):
+        for linea in texto.splitlines():
+            if orden in linea and not linea.lstrip().startswith(("#", "echo")):
+                assert "9>&-" in linea, linea.strip()

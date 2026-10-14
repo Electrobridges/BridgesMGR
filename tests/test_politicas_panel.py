@@ -343,3 +343,28 @@ def test_filtro_de_sesiones_desplazadas(como_admin, cfg):
     assert r.status_code == 200
     assert "sesión desplazada" in r.text and "luis" in r.text
     assert "ana" not in r.text.split("<tbody>")[1]
+
+
+def test_el_auth_failed_de_un_rechazo_propio_no_cuenta_como_otro_fallo():
+    """
+    Líneas reales de OpenVPN 2.6.19 tras un rechazo del script de dos pasos.
+    Antes salían tres sucesos —el rechazo y dos «rechazo de certificado»— y
+    los dos últimos sumaban para el bloqueo automático de IPs.
+    """
+    lineas = [
+        "ovpn-web totp: RECHAZO cn=ana motivo=codigo_incorrecto",
+        "127.0.0.1:60439 SENT CONTROL [UNDEF]: 'AUTH_FAILED' (status=1)",
+        "127.0.0.1:60439 SENT CONTROL [ana]: 'AUTH_FAILED' (status=1)",
+    ]
+    e, = eventos_vpn.parse_eventos(lineas)
+    assert e["tipo"] == eventos_vpn.RECHAZO_2FA
+    # Y de paso sabe de dónde venía, que el script no lo sabe
+    assert (e["ip"], e["puerto"]) == ("127.0.0.1", "60439")
+
+
+def test_un_auth_failed_suelto_cuenta_una_vez():
+    lineas = [
+        "203.0.113.5:4444 SENT CONTROL [UNDEF]: 'AUTH_FAILED' (status=1)",
+        "203.0.113.5:4444 SENT CONTROL [ana]: 'AUTH_FAILED' (status=1)",
+    ]
+    assert len(eventos_vpn.parse_eventos(lineas)) == 1

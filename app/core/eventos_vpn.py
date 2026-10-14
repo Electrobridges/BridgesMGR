@@ -327,6 +327,14 @@ def parse_eventos(lineas):
     """
     sesiones = {}
     eventos = []
+    # El último rechazo de uno de NUESTROS scripts (política, segundo factor)
+    # que aún no sabe de qué IP venía: el script no la conoce y OpenVPN no le
+    # pone prefijo a lo que imprime. Se la da la línea AUTH_FAILED que OpenVPN
+    # escribe justo después para esa misma conexión.
+    rechazo_sin_origen = None
+    # Conexiones cuyo AUTH_FAILED ya se contó. OpenVPN lo escribe dos veces
+    # por conexión, una con '[UNDEF]' y otra con el CN.
+    auth_vistas = set()
 
     for linea in lineas:
         m = _LINEA.match(linea)
@@ -354,6 +362,21 @@ def parse_eventos(lineas):
             continue
         tipo, detalle = clasificado
 
+        if "AUTH_FAILED" in msg:
+            # Consecuencia, no causa: si un script nuestro acaba de rechazar
+            # esta conexión, el AUTH_FAILED no es un suceso aparte —contarlo
+            # como «rechazo de certificado» engañaba, y lo peor, sumaba para el
+            # bloqueo automático de IPs a quien solo se equivocó de código o
+            # reintentaba fuera de su horario—. Sirve para darle la IP al rechazo.
+            if clave in auth_vistas:
+                continue
+            auth_vistas.add(clave)
+            if rechazo_sin_origen is not None:
+                rechazo_sin_origen["ip"] = ip or ""
+                rechazo_sin_origen["puerto"] = puerto or ""
+                rechazo_sin_origen = None
+                continue
+
         # El CN puede venir del prefijo, del propio mensaje, o de lo que se
         # aprendió antes en esa misma sesión.
         cn = m.group("cn")
@@ -374,7 +397,7 @@ def parse_eventos(lineas):
         if not cn and clave:
             cn = sesiones.get(clave)
 
-        eventos.append({
+        evento = {
             "ts": m.group("ts") or "",
             "tipo": tipo,
             "cn": cn or "",
@@ -382,7 +405,10 @@ def parse_eventos(lineas):
             "puerto": puerto or "",
             "detalle": detalle,
             "fallo": tipo in FALLOS,
-        })
+        }
+        eventos.append(evento)
+        if tipo in (RECHAZO_POLITICA, RECHAZO_2FA) and not ip:
+            rechazo_sin_origen = evento
 
         if tipo == DESCONEXION and clave:
             sesiones.pop(clave, None)

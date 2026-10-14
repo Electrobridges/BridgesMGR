@@ -592,7 +592,7 @@ fi
 #
 # Sin --reiniciar porque la unidad se arranca unas líneas más abajo, y no tiene
 # sentido reiniciar dos veces.
-bash "$(dirname "$0")/fechas-log.sh" "$UNIDAD"
+bash "$(dirname "$0")/fechas-log.sh" "$UNIDAD" --lo-reinicia-quien-llama
 
 # ------------------------------------------------------- script de políticas
 info "Instalando el script de políticas en $HOOK_CLIENT_CONNECT"

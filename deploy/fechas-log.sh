@@ -34,9 +34,14 @@ info()  { printf '\033[36m==>\033[0m %s\n' "$*"; }
 
 UNIDAD=""
 REINICIAR=0
+# Quien llama va a reiniciar OpenVPN enseguida (instalar-openvpn.sh): no se
+# le dice a nadie que lo haga a mano, que es lo que se leía justo antes de un
+# «OpenVPN en marcha» y confundía.
+LO_REINICIA_QUIEN_LLAMA=0
 for arg in "$@"; do
   case "$arg" in
     --reiniciar) REINICIAR=1 ;;
+    --lo-reinicia-quien-llama) LO_REINICIA_QUIEN_LLAMA=1 ;;
     -*) rojo "Opción desconocida: $arg"; exit 2 ;;
     *)  UNIDAD="$arg" ;;
   esac
@@ -91,6 +96,10 @@ ExecStart=${EXEC_ACTUAL// --suppress-timestamps/}
 FIN
 systemctl daemon-reload
 verde "Añadido escrito en $DROPIN"
+
+if [[ "$LO_REINICIA_QUIEN_LLAMA" == "1" ]]; then
+  exit 0
+fi
 
 if [[ "$REINICIAR" != "1" ]]; then
   amar "Queda inerte hasta que OpenVPN reinicie. Cuando puedas:"

@@ -147,8 +147,19 @@ done
 [[ -f app/main.py ]] || { rojo "Lanza el script desde la raíz del repo"; exit 1; }
 
 # Dos instalaciones a la vez se pisarían el venv y la copia de la aplicación.
+# Ojo: todo lo que arranque servicios se lanza con '9>&-'. Un demonio que
+# heredara este descriptor se quedaría con el cerrojo para siempre, y cada
+# instalación posterior diría que ya hay otra en marcha. Pasó probándolo.
 exec 9>"$CERROJO"
-flock -n 9 || { rojo "Ya hay otra instalación en marcha (cerrojo $CERROJO)."; exit 1; }
+if ! flock -n 9; then
+  rojo "Ya hay otra instalación en marcha (cerrojo $CERROJO). La tiene:"
+  for proc in /proc/[0-9]*; do
+    ls -l "$proc/fd" 2>/dev/null | grep -qF "$CERROJO" \
+      && echo "    PID ${proc#/proc/}: $(tr '\0' ' ' < "$proc/cmdline" | cut -c1-120)"
+  done
+  echo "  Si no es una instalación, ciérralo o espera a que termine."
+  exit 1
+fi
 
 touch "$REGISTRO" && chmod 0600 "$REGISTRO"
 exec > >(tee -a "$REGISTRO") 2>&1
@@ -213,7 +224,7 @@ else
 
   if [[ "$MONTAR" == "1" ]]; then
     [[ -f deploy/instalar-openvpn.sh ]] || { rojo "Falta deploy/instalar-openvpn.sh"; exit 1; }
-    bash deploy/instalar-openvpn.sh "${ARGS_VPN[@]+"${ARGS_VPN[@]}"}"
+    bash deploy/instalar-openvpn.sh "${ARGS_VPN[@]+"${ARGS_VPN[@]}"}" 9>&-
   else
     amar "De acuerdo. Tendrás que ajustar /etc/ovpn-web/config.yaml a mano."
   fi
@@ -536,12 +547,12 @@ PANEL_REINICIADO=0
 case "$(systemctl is-active ovpn-web 2>/dev/null || true)" in
   active|activating|reloading)
     info "El panel ya corría: reiniciándolo con el código nuevo"
-    systemctl restart ovpn-web
+    systemctl restart ovpn-web 9>&-
     PANEL_REINICIADO=1
     ;;
   failed)
     amar "El panel estaba en estado 'failed': se arranca con el código nuevo"
-    systemctl restart ovpn-web
+    systemctl restart ovpn-web 9>&-
     PANEL_REINICIADO=1
     ;;
 esac
@@ -576,7 +587,7 @@ if [[ "$PANEL_REINICIADO" == "1" ]]; then
       rm -rf "$DESTINO/app.fallida"
       mv "$DESTINO/app" "$DESTINO/app.fallida"
       mv "$DESTINO/app.anterior" "$DESTINO/app"
-      systemctl restart ovpn-web || true
+      systemctl restart ovpn-web 9>&- || true
       if panel_en_pie; then
         amar "El panel vuelve a correr con la versión anterior. La nueva está en $DESTINO/app.fallida."
         VUELTA_ATRAS=1
@@ -622,7 +633,7 @@ fi
 #
 # -f y no -x: el bit de ejecución no sobrevive a un clon hecho desde Windows.
 if [[ -f "$(dirname "$0")/fechas-log.sh" ]]; then
-  if ! bash "$(dirname "$0")/fechas-log.sh" --reiniciar; then
+  if ! bash "$(dirname "$0")/fechas-log.sh" --reiniciar 9>&-; then
     amar "El log de OpenVPN se queda sin fecha: la vista de sesiones no podrá"
     echo "  dar duraciones. Revísalo con:"
     echo "      sudo bash deploy/comprobar-servidor.sh"
