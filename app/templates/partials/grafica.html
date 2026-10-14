@@ -1,0 +1,47 @@
+{# Una gráfica de columnas de app/core/graficas.columnas(), en 'g'.
+
+   SVG en línea y sin JavaScript para dibujarse: el color va por clase
+   (serie-1, serie-2) y lo pone estilo.css. Cada columna tiene una zona de
+   pasada transparente más grande que la marca, con el texto del tooltip en
+   data-tip —lo enseña static/graficas.js— y en un <title>, que es lo que
+   queda si el JS no carga. Debajo, los mismos números en una tabla, para quien
+   no puede o no quiere leerlos del dibujo. #}
+<figure class="grafica">
+  {% if titulo %}<figcaption class="grafica-titulo">{{ titulo }}</figcaption>{% endif %}
+  {% if g.leyenda %}
+  <ul class="grafica-leyenda">
+    {% for s in g.leyenda %}<li><span class="muestra {{ s.clase }}"></span>{{ s.nombre }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <svg class="grafica-svg" viewBox="0 0 {{ g.ancho }} {{ g.alto }}" role="img"
+       aria-label="{{ titulo or 'Gráfica' }}" preserveAspectRatio="xMidYMid meet">
+    {% for m in g.marcas %}
+    <line class="rejilla{{ ' base' if loop.first }}" x1="{{ g.x0 }}" x2="{{ g.x1 }}" y1="{{ m.y }}" y2="{{ m.y }}"></line>
+    <text class="eje" x="{{ g.x0 - 6 }}" y="{{ m.y + 4 }}" text-anchor="end">{{ m.texto }}</text>
+    {% endfor %}
+    {% for c in g.columnas %}
+    <g class="columna" data-tip="{{ c.tip }}">
+      <title>{{ c.tip }}</title>
+      <rect class="zona" x="{{ c.zona.x }}" y="{{ c.zona.y }}" width="{{ c.zona.ancho }}" height="{{ c.zona.alto }}"></rect>
+      {% for s in c.segmentos %}<path class="{{ s.clase }}" d="{{ s.d }}"></path>{% endfor %}
+    </g>
+    {% endfor %}
+    {% for x in g.eje_x %}
+    <text class="eje" x="{{ x.x }}" y="{{ g.alto - 6 }}" text-anchor="middle">{{ x.texto }}</text>
+    {% endfor %}
+  </svg>
+  {% if g.vacia %}<p class="tenue pequeno grafica-vacia">Sin datos todavía en este periodo.</p>{% endif %}
+  <details class="grafica-tabla">
+    <summary class="tenue pequeno">Ver los datos</summary>
+    <div class="tabla-scroll">
+    <table class="tabla">
+      <thead><tr><th>Día</th>{% for h in g.tabla.cabecera %}<th class="num">{{ h }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for nombre, valores in g.tabla.filas | reverse %}
+        <tr><td>{{ nombre }}</td>{% for v in valores %}<td class="num">{{ v }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+</figure>

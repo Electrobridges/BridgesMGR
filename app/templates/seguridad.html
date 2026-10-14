@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% set activo = 'seguridad' %}
+{% block titulo %}Seguridad — BridgesMGR{% endblock %}
+
+{% block contenido %}
+<h1>Seguridad del servidor VPN</h1>
+<p class="tenue">
+  Revisión del <code>{{ ruta or 'server.conf' }}</code> contra las recomendaciones de
+  endurecimiento de OpenVPN. <strong>Solo lee</strong>: el panel no puede escribir el
+  <code>server.conf</code> —quien pudiera, ejecutaría código como root—, así que
+  cada arreglo trae la línea que hay que poner a mano. Después, reinicia OpenVPN.
+</p>
+
+<nav class="filtros" aria-label="Secciones de seguridad">
+  <a href="#auditoria">Auditoría del server.conf</a>
+  <a href="#bloqueos">Bloqueo de IPs</a>
+</nav>
+
+<h2 id="auditoria">Auditoría del server.conf</h2>
+{% if error %}
+<div class="aviso aviso-error">{{ error }}</div>
+{% elif informe %}
+
+<div class="tarjetas">
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Nota</span>
+    <span class="tarjeta-valor {{ 'ok' if informe.nota >= 85 else ('mal' if informe.nota < 60 else '') }}">{{ informe.nota }}<span class="tenue pequeno"> / 100</span></span>
+  </div>
+  {% for nivel, (texto, clase) in niveles.items() %}
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">{{ texto }}</span>
+    <span class="tarjeta-valor">{{ informe.cuentas[nivel] }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% if informe.version %}<p class="tenue pequeno">{{ informe.version }}</p>{% endif %}
+
+<ul class="hallazgos">
+  {% for h in informe.hallazgos %}
+  {% set texto, clase = niveles[h.nivel] %}
+  <li class="hallazgo hallazgo-{{ clase }}">
+    <span class="etiqueta etiqueta-{{ clase }}">{{ texto }}</span>
+    <div>
+      <p class="destacado">{{ h.titulo }}</p>
+      <p class="tenue">{{ h.porque }}</p>
+      {% if h.arreglo and h.nivel != 'bien' %}
+      <p class="arreglo">Arreglo: <code>{{ h.arreglo }}</code></p>
+      {% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<h2 id="bloqueos">Bloqueo automático de IPs</h2>
+<section class="panel-accion">
+  <p>
+    Como fail2ban, con los sucesos que el panel ya guarda: una IP que acumula
+    intentos fallidos —paquetes sin la clave tls-crypt, handshakes que no
+    terminan, certificados de otra CA— queda bloqueada en el cortafuegos durante
+    un tiempo. El bloqueo lo levanta el propio núcleo al caducar, aunque el panel
+    esté parado.
+  </p>
+  <p class="tenue">
+    No cuentan los certificados revocados ni los rechazos por política: son
+    clientes legítimos que reintentan solos, y si comparten la IP pública de una
+    oficina, bloquearla dejaría fuera a toda la oficina. Se revisa cada cinco
+    minutos, al leer el log.
+  </p>
+  <form class="formulario"
+        hx-disabled-elt="find button"
+        hx-post="/seguridad/bloqueos/ajustes"
+        hx-target="#avisos"
+        hx-swap="innerHTML">
+    <label class="casilla">
+      <input type="checkbox" name="activo" value="1" {% if bloqueo.activo %}checked{% endif %}>
+      Bloquear automáticamente
+    </label>
+    <div class="formulario en-fila">
+      <label class="en-linea">A partir de
+        <input type="number" name="umbral" min="3" value="{{ bloqueo.umbral }}" class="corto"></label>
+      <label class="en-linea">intentos fallidos en
+        <input type="number" name="ventana_min" min="5" value="{{ bloqueo.ventana_min }}" class="corto"></label>
+      <label class="en-linea">minutos, bloquear durante
+        <input type="number" name="duracion_min" min="1" value="{{ bloqueo.duracion_min }}" class="corto"></label>
+      <span class="tenue pequeno">minutos</span>
+    </div>
+    <label for="lista-blanca">Nunca bloquear automáticamente (una red por línea)</label>
+    <textarea id="lista-blanca" name="lista_blanca" rows="4">{{ bloqueo.lista_blanca | join('\n') }}</textarea>
+    <div><button type="submit" class="boton boton-principal">Guardar</button></div>
+  </form>
+</section>
+
+<section class="panel-accion">
+  <h3>Bloquear a mano</h3>
+  <form class="formulario en-fila"
+        hx-disabled-elt="find button"
+        hx-post="/seguridad/bloqueos"
+        hx-target="#avisos"
+        hx-swap="innerHTML">
+    <label for="ip-bloquear">IP</label>
+    <input type="text" id="ip-bloquear" name="ip" required inputmode="decimal"
+           placeholder="203.0.113.5" autocomplete="off">
+    <label for="min-bloquear">Minutos</label>
+    <input type="number" id="min-bloquear" name="minutos" min="1" value="60" class="corto">
+    <button type="submit" class="boton boton-peligro">Bloquear</button>
+  </form>
+</section>
+
+<div id="tabla-bloqueos"
+     hx-get="/seguridad/bloqueos/tabla"
+     hx-trigger="load, bloqueos-actualizados from:body"
+     hx-swap="innerHTML">
+  <p class="tenue">Cargando…</p>
+</div>
+{% endblock %}

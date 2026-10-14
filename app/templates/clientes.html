@@ -23,6 +23,24 @@
     que reconectar solos: nadie estaría ahí para escribirla.
   </p>
 </section>
+
+<section class="panel-accion">
+  <h2>Duración máxima de sesión</h2>
+  <p class="tenue">
+    Para todos los clientes que no tengan una propia en sus políticas. Al
+    cumplirla se les desconecta y tienen que volver a entrar. Vacío o 0 = sin límite.
+  </p>
+  <form class="formulario en-fila"
+        hx-disabled-elt="find button"
+        hx-post="/clientes/politicas/global"
+        hx-target="#avisos"
+        hx-swap="innerHTML">
+    <label for="max-global">Minutos</label>
+    <input type="number" id="max-global" name="max_sesion_min" min="0" step="1"
+           value="{{ max_sesion_global or '' }}" placeholder="sin límite">
+    <button type="submit" class="boton">Guardar</button>
+  </form>
+</section>
 {% else %}
 <p class="aviso aviso-info">
   Tu rol es <strong>supervisor</strong>: puedes consultar el estado, pero no crear, revocar ni desconectar.

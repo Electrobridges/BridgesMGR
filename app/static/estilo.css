@@ -92,11 +92,15 @@ a { color: var(--cian); }
 
 /* ------------------------------------------------------------------ cabecera */
 .barra {
+  position: relative;
   display: flex; align-items: center; gap: 1.75rem; flex-wrap: wrap;
   padding: .85rem 1.5rem;
   background: var(--fondo-2);
   border-bottom: 1px solid var(--linea);
 }
+/* Envuelve navegación y sesión para poder plegarlas juntas. En ancho no se
+   nota: ocupa el hueco que antes ocupaban ellas dos. */
+.menu { display: flex; align-items: center; gap: 1.75rem; flex-wrap: wrap; flex: 1; }
 /* La marca lleva al inicio; sin subrayado porque ya es un bloque reconocible. */
 .marca {
   display: flex; align-items: center; gap: .55rem;
@@ -147,6 +151,65 @@ a { color: var(--cian); }
 .rol-admin { color: var(--amarillo); }
 .rol-supervisor { color: var(--tenue); }
 
+/* La hamburguesa de electrobridges.com: tres trazos que se cruzan en una X al
+   abrir. Oculta hasta que menu.js marca la barra como .plegable. */
+.menu-boton {
+  display: none; position: relative; flex-shrink: 0;
+  width: 44px; height: 44px; padding: 0;
+  align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--linea-fuerte);
+  border-radius: var(--radio-boton); cursor: pointer;
+}
+.menu-boton:hover { background: var(--fondo-3); }
+.menu-boton:focus-visible { box-shadow: var(--foco); border-radius: var(--radio-boton); }
+.menu-boton span, .menu-boton::before, .menu-boton::after {
+  content: ''; display: block; width: 18px; height: 2px;
+  border-radius: 999px; background: var(--texto);
+  transition: transform .2s ease, opacity .2s ease;
+}
+.menu-boton::before { position: absolute; transform: translateY(-6px); }
+.menu-boton::after { position: absolute; transform: translateY(6px); }
+.abierto .menu-boton span { opacity: 0; }
+.abierto .menu-boton::before { transform: rotate(45deg); }
+.abierto .menu-boton::after { transform: rotate(-45deg); }
+
+/* Por debajo de 1200px —el ancho del contenedor— los siete enlaces, el nombre
+   y el rol ya no caben en una fila: la barra se partía en tres o cuatro y
+   empujaba la página hacia abajo. Se pliegan en un panel que cae desde la
+   derecha, bajo el botón. */
+@media (max-width: 1200px) {
+  .barra.plegable {
+    flex-direction: row; align-items: center; flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+  .barra.plegable .menu-boton { display: inline-flex; }
+
+  /* Un escalón tonal más y línea fuerte, sin sombra: en este sistema lo que
+     flota encima sube de navy, no proyecta. visibility además de opacity para
+     que, cerrado, el tabulador no se meta en enlaces que no se ven. */
+  .barra.plegable .menu {
+    position: absolute; top: calc(100% + .5rem); right: .75rem; z-index: 10;
+    width: min(320px, calc(100% - 1.5rem));
+    flex: none; flex-direction: column; align-items: stretch; gap: 1rem;
+    padding: 1.1rem 1.25rem;
+    background: var(--fondo-3);
+    border: 1px solid var(--linea-fuerte); border-radius: var(--radio);
+    visibility: hidden; opacity: 0; transform: translateY(-.5rem);
+    transition: opacity .2s ease, transform .2s ease, visibility .2s;
+  }
+  .barra.plegable.abierto .menu { visibility: visible; opacity: 1; transform: none; }
+
+  /* Cada enlace a su tamaño y no a lo ancho del panel: el subrayado cian mide
+     lo que mide el texto, igual que en la barra. */
+  .barra.plegable .nav { flex: none; flex-direction: column; gap: .5rem; }
+  .barra.plegable .nav a { align-self: flex-start; font-size: 1rem; }
+
+  /* La cuenta va aparte, bajo una línea: es otra cosa que las secciones. */
+  .barra.plegable .sesion {
+    flex-wrap: wrap; padding-top: 1rem; border-top: 1px solid var(--linea);
+  }
+}
+
 /* ----------------------------------------------------------------- contenido */
 .contenido { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
 /* Mismo ancho y margen que el contenido, para que quede alineado con él y no
@@ -160,13 +223,15 @@ a { color: var(--cian); }
 .mal { color: var(--rojo); }
 
 /* ------------------------------------------------------------------ tarjetas */
+/* Compactas: una tarjeta enseña una cifra, y con más aire del que necesita la
+   fila de arriba se comía media pantalla para decir «1». */
 .tarjetas {
-  display: grid; gap: 1rem; margin: 1rem 0;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  display: grid; gap: .75rem; margin: .75rem 0;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 .tarjeta {
-  display: flex; flex-direction: column; gap: .5rem;
-  padding: 1.125rem;
+  display: flex; flex-direction: column; gap: .3rem;
+  padding: .75rem 1rem;
   background: var(--fondo-2);
   border: 1px solid var(--linea);
   border-radius: var(--radio);
@@ -176,7 +241,7 @@ a { color: var(--cian); }
   letter-spacing: .12em; color: var(--tenue);
 }
 .tarjeta-valor {
-  font-size: 1.75rem; font-weight: 800; letter-spacing: -.03em;
+  font-size: 1.5rem; font-weight: 800; letter-spacing: -.03em;
   line-height: 1.1; color: var(--texto);
   font-variant-numeric: tabular-nums;
 }
@@ -184,6 +249,12 @@ a { color: var(--cian); }
 .tarjeta-valor.pequeno { font-size: .9375rem; font-weight: 600; letter-spacing: 0; }
 .tarjeta-valor.ok { color: var(--verde); }
 .tarjeta-valor.mal { color: var(--rojo); }
+/* Una línea: el detalle completo va en el title. Sin el recorte,
+   un mensaje largo de systemctl estiraba toda la fila de tarjetas. */
+.tarjeta-detalle {
+  font-size: .75rem; line-height: 1.35; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
 
 /* -------------------------------------------------------------------- tablas */
 /* El contenedor scrollea, no la página: una tabla ancha no debe provocar
@@ -236,6 +307,8 @@ a { color: var(--cian); }
 }
 .etiqueta-ok { color: var(--verde); background: rgba(91, 241, 168, .12); }
 .etiqueta-mal { color: var(--rojo); background: rgba(248, 113, 113, .12); }
+.etiqueta-aviso { color: var(--amarillo); background: rgba(251, 191, 36, .12); }
+.etiqueta-info { color: var(--cian-claro); background: rgba(16, 196, 216, .12); }
 
 /* --------------------------------------------------- barra sobre una tabla */
 /* El texto a la izquierda y las acciones a la derecha, en una fila que se
@@ -306,15 +379,27 @@ a { color: var(--cian); }
   display: none;
 }
 
+/* ------------------------------------------------- políticas por cliente */
+.politica fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.politica .panel-accion { display: flex; flex-direction: column; gap: .5rem; }
+.politica .panel-accion p { margin: 0; }
+.politica input[type="text"], .politica input[type="number"],
+.politica input[type="datetime-local"] { max-width: 22rem; }
+.franja { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center;
+          padding: .5rem 0; border-top: 1px solid var(--linea); }
+.franja-titulo { font-size: .8rem; font-weight: 600; color: var(--texto-3); min-width: 4.5rem; }
+.franja-dias { display: flex; flex-wrap: wrap; gap: .25rem .75rem; }
+.acceso { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+
 /* El campo se hunde respecto a la tarjeta que lo contiene. */
-input, select {
+input, select, textarea {
   padding: .55rem .75rem;
   background: var(--fondo); color: var(--texto);
   border: 1px solid var(--linea-fuerte); border-radius: var(--radio-sm);
   font: 400 .9375rem/1.4 var(--tipo);
 }
 input::placeholder { color: var(--tenue); }
-input:focus-visible, select:focus-visible {
+input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: none; border-color: var(--cian); box-shadow: var(--foco);
 }
 label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
@@ -638,15 +723,15 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
 .secreto.pequeno-texto { font-size: .82rem; letter-spacing: 0; }
 
 @media (max-width: 700px) {
-  /* En vertical la barra se apila con orden explícito: si se deja envolver,
-     la navegación acaba por encima de la marca. */
+  /* Sin menu.js la barra no se pliega y se apila en columna: si se deja
+     envolver, la navegación acaba por encima de la marca. Con él, lo de
+     .plegable manda sobre esto. */
   .barra {
     flex-direction: column; align-items: flex-start;
     gap: .85rem; padding: .85rem 1rem;
   }
-  .marca { order: 1; }
-  .nav { order: 2; flex: none; width: 100%; gap: 1rem; }
-  .sesion { order: 3; }
+  .menu { flex-direction: column; align-items: flex-start; gap: .85rem; width: 100%; }
+  .nav { flex: none; width: 100%; gap: 1rem; }
   .contenido { padding: 1rem; }
   .formulario.en-fila { flex-direction: column; align-items: stretch; }
   .login-caja { margin: 5vh auto; padding: 1.5rem; }
@@ -664,6 +749,10 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
 @media (prefers-reduced-motion: reduce) {
   .nav a::after, .boton { transition: none; }
 
+  /* El menú aparece y la hamburguesa se vuelve X sin animar el paso. */
+  .barra.plegable .menu, .menu-boton span,
+  .menu-boton::before, .menu-boton::after { transition: none; }
+
   /* El icono deja de girar, pero el botón sigue deshabilitándose mientras
      carga: se quita el movimiento, no la señal. */
   .boton.htmx-request .icono { animation: none; }
@@ -671,3 +760,74 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
   /* La hora de «Actualizado» sigue cambiando; solo se quita el destello. */
   .linea-actualizado { animation: none; }
 }
+
+/* ------------------------------------------------- auditoría del servidor */
+.hallazgos { list-style: none; margin: 1rem 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.hallazgo {
+  display: grid; grid-template-columns: 7.5rem 1fr; gap: .75rem; align-items: start;
+  padding: .85rem 1rem; background: var(--fondo-2);
+  border: 1px solid var(--linea); border-radius: var(--radio-sm);
+}
+.hallazgo p { margin: 0 0 .25rem; }
+.hallazgo .etiqueta { justify-self: start; }
+.hallazgo-mal { border-color: rgba(248, 113, 113, .35); }
+.arreglo { font-size: .875rem; color: var(--texto-2); }
+.arreglo code { color: var(--cian-claro); white-space: pre-wrap; }
+@media (max-width: 600px) { .hallazgo { grid-template-columns: 1fr; } }
+input.corto { width: 6rem; }
+
+/* ----------------------------------------------------------------- gráficas */
+/* Colores de serie: los dos primeros de la paleta categórica de referencia en
+   su versión oscura, validados contra este fondo (#0b1b34) con el validador de
+   la guía de visualización: contraste >= 3:1 y separación para daltonismo
+   (ΔE 26.8) muy por encima del mínimo. El texto nunca lleva el color de la
+   serie: va en las tintas del panel. */
+:root {
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --rejilla: rgba(255, 255, 255, .07);
+  --eje-base: rgba(255, 255, 255, .22);
+}
+.graficas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+            gap: 1rem; margin: 1rem 0 1.5rem; }
+.grafica { margin: 0; padding: 1rem 1.1rem .75rem; background: var(--fondo-2);
+           border: 1px solid var(--linea); border-radius: var(--radio); min-width: 0; }
+.grafica-titulo { font-weight: 600; color: var(--texto); margin-bottom: .35rem; }
+.grafica-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.grafica-svg .serie-1, .ranking-barra .serie-1, .muestra.serie-1 { fill: var(--serie-1); background: var(--serie-1); }
+.grafica-svg .serie-2, .muestra.serie-2 { fill: var(--serie-2); background: var(--serie-2); }
+.grafica-svg .rejilla { stroke: var(--rejilla); stroke-width: 1; shape-rendering: crispEdges; }
+.grafica-svg .rejilla.base { stroke: var(--eje-base); }
+.grafica-svg .eje { fill: var(--tenue); font-size: 11px; font-variant-numeric: tabular-nums; }
+.grafica-svg .zona { fill: transparent; }
+.grafica-svg .columna:hover .zona { fill: rgba(255, 255, 255, .04); }
+.grafica-leyenda { display: flex; flex-wrap: wrap; gap: .25rem 1rem; list-style: none;
+                   margin: 0 0 .4rem; padding: 0; font-size: .8rem; color: var(--texto-2); }
+.grafica-leyenda li { display: inline-flex; align-items: center; gap: .4rem; }
+.muestra { display: inline-block; width: .7rem; height: .7rem; border-radius: 3px; }
+.grafica-vacia { margin: .25rem 0 0; }
+.grafica-tabla { margin-top: .4rem; }
+.grafica-tabla summary { cursor: pointer; }
+.grafica-tip {
+  position: absolute; z-index: 50; pointer-events: none; white-space: pre-line;
+  padding: .45rem .6rem; border-radius: var(--radio-sm); font-size: .8rem; line-height: 1.45;
+  background: var(--fondo-3); color: var(--texto); border: 1px solid var(--linea-fuerte);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .35); opacity: 0; transition: opacity .08s;
+}
+.grafica-tip.visible { opacity: 1; }
+
+.ranking { list-style: none; margin: .25rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+.ranking-fila { display: grid; grid-template-columns: minmax(5rem, 9rem) 1fr auto; gap: .75rem; align-items: center; }
+.ranking-nombre { font-weight: 600; color: var(--texto); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranking-barra { width: 100%; height: .75rem; display: block; }
+.ranking-valor { color: var(--texto-2); font-size: .85rem; }
+
+/* Medidor de cuota: el relleno lleva la gravedad, la pista es un tono del mismo color. */
+.medidor { width: 100%; max-width: 28rem; height: .6rem; display: block; margin: .35rem 0; }
+.medidor .pista { fill: rgba(57, 135, 229, .18); }
+.medidor .relleno { fill: var(--serie-1); }
+.medidor .relleno.aviso { fill: var(--amarillo); }
+.medidor .relleno.mal { fill: var(--rojo); }
+/* Dentro del formulario de políticas la gráfica no ocupa todo el ancho: a
+   1200 px el SVG escala y el texto del eje se vuelve enorme. */
+.politica .grafica { max-width: 44rem; }

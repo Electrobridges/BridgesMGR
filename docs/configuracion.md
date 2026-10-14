@@ -47,6 +47,7 @@ Datos con los que se arma el `.ovpn` que se descarga desde el panel.
 | `proto` | `udp` | `udp` o `tcp`, igual que en `server.conf` |
 | `cipher` | `AES-256-CBC` | Debe coincidir con el servidor |
 | `tls_crypt` | `/etc/openvpn/tls-crypt.key` | Ruta a la clave `tls-crypt` para embeberla en el perfil. Déjalo vacío si no usas tls-crypt |
+| `tls_crypt_v2` | *(vacío)* | Clave de **servidor** de tls-crypt-v2. Con ella, cada `.ovpn` lleva una clave de cliente propia y `tls_crypt` deja de usarse. No la pongas a mano: la deja `deploy/migrar-tls-crypt-v2.sh`, que también cambia el `server.conf` |
 | `dns` | *(lista vacía)* | Servidores DNS a empujar al cliente, p. ej. `["1.1.1.1", "9.9.9.9"]` |
 
 ## `seguridad`
@@ -61,6 +62,52 @@ Datos con los que se arma el `.ovpn` que se descarga desde el panel.
 | `max_intentos_login` | `5` | Intentos fallidos antes de bloquear |
 | `bloqueo_login_min` | `15` | Minutos de bloqueo. Se cuenta por usuario **+ IP**, para que un tercero no pueda dejar fuera al admin |
 | `cookie_segura` | `true` | Marca `Secure` en la cookie de sesión. Solo desactívalo si sirves el panel por HTTP plano, que no se recomienda |
+| `metricas_token` | *(vacío)* | Token para que Prometheus lea `/metrics` con `Authorization: Bearer <token>`. Vacío = el endpoint no existe. Genera uno con `openssl rand -hex 32` |
+
+Ejemplo de `scrape_config` para Prometheus (el certificado del panel es
+autofirmado):
+
+```yaml
+- job_name: bridgesmgr
+  scheme: https
+  tls_config: { insecure_skip_verify: true }
+  authorization: { credentials: "<metricas_token>" }
+  static_configs: [{ targets: ["192.168.1.192:55443"] }]
+```
+
+## Lo que se configura desde el panel
+
+No todo vive en este archivo. Lo que es decisión de operación y no de
+despliegue se guarda en la base y se cambia desde la web:
+
+| Dónde | Qué |
+|---|---|
+| Clientes VPN → Políticas | Acceso temporal, horario, duración máxima de sesión, cuota mensual, IP fija y destinos permitidos, verificación en dos pasos |
+| Clientes VPN | Duración máxima de sesión para todos |
+| Seguridad | Bloqueo automático de IPs: umbral, ventana, duración y lista blanca |
+
+Las políticas necesitan dos líneas en el `server.conf` (los servidores que
+monta `deploy/instalar-openvpn.sh` ya las traen):
+
+```
+script-security 2
+client-connect /usr/local/lib/ovpn-web/client-connect
+```
+
+Y la verificación en dos pasos, estas, con OpenVPN corriendo con el grupo que
+crea el instalador:
+
+```
+group ovpnweb-vpn
+auth-user-pass-verify /usr/local/lib/ovpn-web/verificar-totp via-file
+auth-user-pass-optional
+auth-gen-token 0
+```
+
+Para usar IP fijas, el pool dinámico no puede ocupar toda la red:
+`server 10.8.0.0 255.255.255.0 nopool` más `ifconfig-pool 10.8.0.2 10.8.0.191`
+deja de `.192` a `.254` para IP fijas. La página **Seguridad** revisa todo esto
+y dice qué línea falta.
 
 ## Configuración para desarrollo
 

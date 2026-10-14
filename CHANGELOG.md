@@ -5,6 +5,83 @@ Todos los cambios relevantes de este proyecto se anotan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 el versionado es [SemVer](https://semver.org/lang/es/).
 
+## [0.5.0] — 2026-10-14
+
+### Añadido
+
+- **Políticas de acceso por cliente**, en Clientes VPN → Políticas: acceso
+  temporal con fecha de caducidad (también al crear el cliente), horario en
+  franjas por día de la semana, duración máxima de sesión (propia o para
+  todos), cuota de tráfico mensual, IP fija y destinos permitidos. Se aplican
+  en tres sitios, porque cada uno cubre lo que los otros no pueden:
+  - **al conectar**, un script `client-connect` que corre como `nobody` y lee
+    `/etc/openvpn/ovpn-web/politicas.json`, rechaza a quien esté fuera de
+    horario, caducado o bloqueado y le fija la IP;
+  - **durante la sesión**, el vigilante pasa cada minuto y expulsa por el
+    management a quien se ha quedado fuera, y revoca el certificado de los
+    accesos temporales vencidos;
+  - **en el tráfico**, nftables limita a qué destinos llega un cliente con IP
+    fija, también hacia el propio servidor.
+
+  La base del panel es la fuente de verdad y el archivo del servidor su copia:
+  cada cambio se aplica primero en el servidor y solo se guarda si el helper,
+  que lo revalida todo, lo acepta.
+- **Una sola sesión por certificado, vigilada.** El historial registra las
+  sesiones desplazadas por otra conexión del mismo perfil, y avisa cuando el
+  desplazamiento va y viene entre dos IP: la firma de un `.ovpn` compartido.
+- **Auditoría de endurecimiento** en la página nueva **Seguridad**: puntúa el
+  `server.conf` (canal de control, cifrados, TLS mínimo, CRL, duplicate-cn,
+  client-to-client, compresión, privilegios, management expuesto, versión de
+  OpenVPN contra CVE conocidos…) y cada hallazgo trae la línea que lo arregla.
+- **Bloqueo automático de IPs** con un set de nftables que caduca solo: las
+  que acumulan intentos fallidos desde fuera (paquetes sin la clave tls-crypt,
+  handshakes rotos, certificados de otra CA). No cuentan los revocados ni los
+  rechazos por política, y la lista blanca no se bloquea nunca sola.
+- **tls-crypt-v2**: con `deploy/migrar-tls-crypt-v2.sh`, cada `.ovpn` lleva su
+  propia clave de canal de control, generada al descargarlo.
+- **Verificación en dos pasos en la VPN**: un código TOTP al conectar, solo
+  para los clientes que la tienen activada. El secreto se enseña una vez como
+  QR y solo lo guarda el servidor, legible únicamente por OpenVPN.
+- **Avisos de caducidad** de los certificados de cliente, de la CA y del
+  servidor, por escalones como los de la CRL.
+- **Tráfico por cliente y día**, y **métricas para Prometheus** en `/metrics`
+  (apagado salvo que se configure `seguridad.metricas_token`).
+- **Gráficas en el panel**: tráfico y conexiones por día de los últimos 30
+  días, rechazos por día y el ranking de tráfico del mes por cliente, más la
+  gráfica de tráfico de cada cliente en sus políticas. SVG generado en el
+  servidor, sin librerías ni scripts externos: la CSP sigue en `'self'`.
+- **Wiki de uso** en `docs/wiki/`: el día a día, tarea a tarea, con capturas
+  — clientes, políticas, dos pasos en la VPN, seguridad, vigilancia y
+  mantenimiento.
+
+### Cambiado
+
+- **La barra superior se pliega en ventanas estrechas.** Por debajo de 1200px
+  los siete enlaces, el nombre y el rol ya no cabían en una fila y la barra se
+  partía en tres o cuatro: 234px de cabecera en una tablet y 195px en un
+  teléfono antes de ver nada de la página. Ahora queda en una fila de 72px con
+  la marca y una hamburguesa —la de `electrobridges.com`— que abre un panel con
+  las secciones y, bajo una línea, la cuenta. Se cierra con Escape o tocando
+  fuera. En escritorio ancho la barra no cambia.
+
+  Lo pliega `static/menu.js`, archivo aparte por la CSP. Si no cargara, la
+  barra se apila entera como antes en vez de esconder la navegación tras un
+  botón que no responde; hay una prueba que lo vigila.
+- README rehecho: logo, capturas nuevas de una instalación de pruebas con
+  clientes conectados de verdad, diagrama de la frontera de privilegios y
+  enlace a la wiki.
+- Los servidores que monta `deploy/instalar-openvpn.sh` reservan el cuarto
+  alto de la red para IP fijas (`server … nopool` + `ifconfig-pool`), corren
+  con el grupo propio `ovpnweb-vpn` en vez de `nogroup`, añaden
+  `tls-cert-profile preferred` y traen enganchados los dos scripts nuevos.
+- El instalador del panel instala `nftables`, los scripts de
+  `/usr/local/lib/ovpn-web/`, el grupo `ovpnweb-vpn` y la unidad
+  `ovpn-web-acceso`, que recarga las reglas de acceso al arrancar la máquina.
+- `comprobar-servidor.sh` avisa si falta el script de políticas o si está
+  activo `duplicate-cn`.
+- Ninguna cuenta del panel puede llamarse con un nombre entre paréntesis:
+  `(sistema)` firma en la auditoría lo que el panel hace por su cuenta.
+
 ## [0.4.0] — 2026-09-22
 
 ### Añadido
@@ -605,7 +682,8 @@ servidor OpenVPN desde el navegador, con el núcleo portado de
   endurecida y certificado TLS autofirmado.
 - 84 pruebas.
 
-[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.4.0...HEAD
+[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.4.0
 [0.3.1]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.3.0

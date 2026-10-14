@@ -6,12 +6,17 @@ Todas las mutaciones exigen rol admin y cabecera CSRF, y quedan registradas en
 la auditoría con su resultado.
 """
 
+from datetime import datetime
+from typing import List
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import Response
 
-from .. import db
+from .. import caducidades, db, estadisticas, trafico
+from .. import politicas as aplicar_politicas
 from ..auth import solo_admin, usuario_actual, verificar_csrf
-from ..core import easyrsa
+from ..core import easyrsa, serverconf
+from ..core import politicas as pol
 from ..core.conexiones import obtener_conexiones
 from ..core.mgmt import ErrorManagement, desconectar_cliente
 from ..core.validacion import CNInvalido, validar_cn
@@ -41,13 +46,33 @@ def _estado_clientes(request):
     # revocados: esto es solo estado del panel.
     archivados = db.cn_archivados(c.seguridad.db_path)
 
+    politicas = db.listar_politicas(c.seguridad.db_path)
+    caducan = caducidades.por_cliente(c.seguridad.db_path)
+    uso = trafico.uso_mes(c.seguridad.db_path)
+    ahora = datetime.now()
+
+    def fila(cn, estado, conectado):
+        p = politicas.get(cn)
+        return {
+            "cn": cn, "estado": estado, "conectado": conectado,
+            "politica": pol.resumen(p),
+            # Lo que impide entrar AHORA, aunque el certificado sea válido. Sin
+            # esto la tabla diría 'válido' de alguien que no puede conectar.
+            "rechazo": pol.TEXTO_MOTIVO.get(pol.motivo_rechazo(p, ahora)) if p else None,
+            # Días que le quedan al CERTIFICADO, solo si son pocos. Es otra
+            # cosa que la caducidad de la política: esta no se cambia en el
+            # panel, hay que reemitir.
+            "cert_caduca": caducan.get(cn) if estado == "valido" else None,
+            "uso_mes": trafico.bytes_decimales(uso[cn]) if uso.get(cn) else None,
+        }
+
     filas = []
     for cn in certificados["validos"]:
         if cn not in archivados:
-            filas.append({"cn": cn, "estado": "valido", "conectado": cn in conectados})
+            filas.append(fila(cn, "valido", cn in conectados))
     for cn in certificados["revocados"]:
         if cn not in archivados:
-            filas.append({"cn": cn, "estado": "revocado", "conectado": False})
+            filas.append(fila(cn, "revocado", False))
 
     filas.sort(key=lambda f: (f["estado"] != "valido", f["cn"].lower()))
     return filas, errores
@@ -58,8 +83,10 @@ def pagina_clientes(request: Request, sesion=Depends(usuario_actual)):
     # Sin 'es_admin': render() ya inyecta 'manda' desde db.ROLES_MANDO. Aquí se
     # comparaba con la cadena 'admin' y al superusuario le desaparecían el
     # formulario de crear y los botones de la tabla.
+    ruta = cfg(request).seguridad.db_path
     return render(request, "clientes.html", {
-        "reparto": db.reparto_abierto(cfg(request).seguridad.db_path),
+        "reparto": db.reparto_abierto(ruta),
+        "max_sesion_global": db.max_sesion_global(ruta),
     })
 
 
@@ -121,6 +148,9 @@ def crear_cliente(
     con_clave: str = Form(None),
     clave: str = Form(""),
     clave2: str = Form(""),
+    # Vacío = acceso permanente. Con fecha, es un acceso temporal: el script de
+    # conexión lo rechaza a partir de ahí y el vigilante revoca el certificado.
+    caduca: str = Form(""),
     sesion=Depends(solo_admin),
     _csrf=Depends(verificar_csrf),
 ):
@@ -136,6 +166,26 @@ def crear_cliente(
 
     detalle = "clave privada cifrada" if secreto else "clave privada sin contraseña"
 
+    if caduca.strip():
+        try:
+            expira = pol.validar_expira(caduca)
+        except pol.PoliticaInvalida as e:
+            return error_htmx(request, str(e))
+        if datetime.strptime(expira, pol.FORMATO_EXPIRA) <= datetime.now():
+            return error_htmx(request, "La caducidad tiene que ser una fecha futura")
+
+        # La política ANTES que el certificado: si esto fallara después de
+        # emitirlo, quedaría un acceso permanente que se pidió temporal. Una
+        # política sin certificado no da acceso a nadie.
+        anterior = db.obtener_politica(cfg(request).seguridad.db_path, cn) or pol.vacia()
+        nueva = dict(anterior, expira=expira)
+        try:
+            aplicar_politicas.aplicar(cfg(request), {cn: nueva}, usuario=sesion["usuario"])
+        except (pol.PoliticaInvalida, easyrsa.ErrorHelper) as e:
+            return error_htmx(request, "No se pudo fijar la caducidad, así que no se ha "
+                                       "creado el cliente: %s" % e)
+        detalle += "; acceso temporal hasta %s" % expira.replace("T", " ")
+
     try:
         easyrsa.crear_cliente(cfg(request), cn, secreto)
     except easyrsa.ClaveInvalida as e:
@@ -144,6 +194,7 @@ def crear_cliente(
         auditar(request, sesion, "crear_cliente", cn, "error", str(e))
         return error_htmx(request, "No se pudo crear '%s': %s" % (cn, e))
 
+    caducidades.invalidar(cfg(request).seguridad.db_path)
     # Se anota QUE lleva contraseña, nunca cuál
     auditar(request, sesion, "crear_cliente", cn, detalle=detalle)
 
@@ -179,6 +230,7 @@ def revocar_cliente(
         auditar(request, sesion, "revocar", cn, "error", str(e))
         return error_htmx(request, "No se pudo revocar '%s': %s" % (cn, e))
 
+    caducidades.invalidar(cfg(request).seguridad.db_path)
     auditar(request, sesion, "revocar", cn)
     return aviso(
         request,
@@ -216,6 +268,17 @@ def restaurar_cliente(
     except ValueError as e:
         return error_htmx(request, str(e))
 
+    # Un acceso temporal vencido no se resucita restaurando: el vigilante lo
+    # volvería a revocar en un minuto y el script de conexión lo rechazaría
+    # mientras tanto. Que se decida a la vista, cambiando la caducidad.
+    politica = db.obtener_politica(cfg(request).seguridad.db_path, cn)
+    if politica and pol.caducada(politica, datetime.now()):
+        return error_htmx(
+            request,
+            "El acceso temporal de '%s' caducó el %s. Amplía o quita la caducidad "
+            "en sus políticas antes de restaurarlo." % (cn, politica["expira"].replace("T", " ")),
+        )
+
     try:
         easyrsa.restaurar(cfg(request), cn, secreto)
     except easyrsa.ClaveInvalida as e:
@@ -224,6 +287,7 @@ def restaurar_cliente(
         auditar(request, sesion, "restaurar", cn, "error", str(e))
         return error_htmx(request, "No se pudo restaurar '%s': %s" % (cn, e))
 
+    caducidades.invalidar(cfg(request).seguridad.db_path)
     auditar(request, sesion, "restaurar", cn,
             detalle="clave privada cifrada" if secreto else "clave privada sin contraseña")
     return aviso(
@@ -400,3 +464,291 @@ def descargar_ovpn(request: Request, cn: str, sesion=Depends(solo_admin)):
             "Cache-Control": "no-store",
         },
     )
+
+
+# ------------------------------------------------------------- políticas
+
+# Cuántas franjas horarias ofrece el formulario. El modelo admite más
+# (pol.MAX_FRANJAS); tres cubren los casos reales —laborables, sábado, guardia—
+# sin convertir la página en una hoja de cálculo.
+FRANJAS_FORMULARIO = 3
+
+
+def _servidor(c):
+    """
+    (directivas, error) leyendo el server.conf por el helper.
+
+    Un fallo aquí no impide editar: el helper vuelve a validar al aplicar.
+    Solo se pierde la ayuda de qué IP están libres.
+    """
+    try:
+        return easyrsa.server_conf(c).get("directivas", []), None
+    except easyrsa.ErrorHelper as e:
+        return None, "No se pudo leer el server.conf: %s" % e
+
+
+def _cuota_mb(texto):
+    """'5' o '2,5' GB del formulario -> MB enteros. Vacío o 0 = sin cuota."""
+    texto = (texto or "").strip().replace(",", ".")
+    if not texto:
+        return 0
+    try:
+        gb = float(texto)
+    except ValueError:
+        raise pol.PoliticaInvalida("La cuota tiene que ser un número de GB")
+    if gb < 0:
+        raise pol.PoliticaInvalida("La cuota no puede ser negativa")
+    return int(round(gb * 1000))
+
+
+def _politica_del_formulario(anterior, ip_fija, destinos, franjas, expira, max_sesion_min,
+                             cuota_gb=""):
+    """Lo que llega del formulario, en política normalizada."""
+    horario = []
+    for i, (dias, desde, hasta) in enumerate(franjas, 1):
+        dias = [d for d in dias if d != ""]
+        if not dias and not desde and not hasta:
+            continue
+        try:
+            dias = [int(d) for d in dias]
+        except ValueError:
+            raise pol.PoliticaInvalida("Día no válido en la franja %d" % i)
+        if not dias:
+            raise pol.PoliticaInvalida("La franja %d tiene horas pero ningún día" % i)
+        if not desde or not hasta:
+            raise pol.PoliticaInvalida("La franja %d necesita hora de inicio y de fin" % i)
+        # Un <input type="time"> no admite 24:00. Terminar a las 00:00 una
+        # franja que empieza más tarde solo puede querer decir medianoche.
+        if hasta == "00:00" and desde != "00:00":
+            hasta = "24:00"
+        horario.append({"dias": dias, "desde": desde, "hasta": hasta})
+
+    max_sesion_min = (max_sesion_min or "").strip()
+    try:
+        maximo = int(max_sesion_min) if max_sesion_min else 0
+    except ValueError:
+        raise pol.PoliticaInvalida("La duración máxima tiene que ser un número de minutos")
+
+    return pol.normalizar({
+        "ip_fija": ip_fija,
+        "destinos": [l.strip() for l in (destinos or "").splitlines() if l.strip()],
+        "horario": horario,
+        "expira": expira,
+        "max_sesion_min": maximo,
+        "cuota_mb_mes": _cuota_mb(cuota_gb),
+        # Lo pone el propio panel (las cuotas), no el formulario: se conserva.
+        "bloqueo": (anterior or {}).get("bloqueo", ""),
+    })
+
+
+@router.get("/{cn}/politica")
+def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
+    try:
+        cn = validar_cn(cn)
+    except CNInvalido as e:
+        return error_htmx(request, str(e))
+
+    c = cfg(request)
+    politica = db.obtener_politica(c.seguridad.db_path, cn) or pol.vacia()
+    directivas, error = _servidor(c)
+    red = serverconf.red(directivas) if directivas is not None else None
+    gancho = serverconf.gancho(directivas) if directivas is not None else None
+
+    franjas = list(politica["horario"])
+    franjas += [{"dias": [], "desde": "", "hasta": ""}] * (FRANJAS_FORMULARIO - len(franjas))
+
+    return render(request, "cliente_politica.html", {
+        "cn": cn,
+        "politica": politica,
+        "franjas": franjas[:max(FRANJAS_FORMULARIO, len(politica["horario"]))],
+        "dias": pol.DIAS,
+        "red": red,
+        "gancho": gancho,
+        "error_servidor": error,
+        "max_sesion_global": db.max_sesion_global(c.seguridad.db_path),
+        "describir_minutos": pol.describir_minutos,
+        "rechazo": pol.TEXTO_MOTIVO.get(pol.motivo_rechazo(politica, datetime.now())),
+        "dos_pasos": _estado_dos_pasos(c, cn, directivas),
+        "uso_mes": trafico.uso_mes(c.seguridad.db_path).get(cn, 0),
+        "grafica_trafico": estadisticas.trafico_diario(c.seguridad.db_path, cn),
+        "bytes_decimales": trafico.bytes_decimales,
+        "bytes_mb": pol.BYTES_MB,
+    })
+
+
+# --------------------------------------------- verificación en dos pasos (VPN)
+
+EMISOR_VPN = "BridgesMGR VPN"
+
+
+def _estado_dos_pasos(c, cn, directivas, **extra):
+    """Contexto de partials/dos_pasos_vpn.html"""
+    estado = {"cn": cn, "activada": None, "faltan": None, "error": None,
+              "recien": False, "qr": None, "fallo_qr": None, "uri": None,
+              "secreto_legible": None, "mensaje": None}
+    if directivas is not None:
+        estado["faltan"] = serverconf.dos_pasos(directivas)
+    try:
+        estado["activada"] = cn in easyrsa.totp_vpn(c, "listar")
+    except easyrsa.ErrorHelper as e:
+        estado["error"] = "No se pudo consultar: %s" % e
+    estado.update(extra)
+    return estado
+
+
+@router.post("/{cn}/dos-pasos/activar")
+def activar_dos_pasos(
+    request: Request,
+    cn: str,
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """
+    Genera un secreto, se lo da al helper y lo enseña UNA vez como QR.
+
+    El panel no lo guarda: lo tiene en memoria lo que dura esta respuesta. Si
+    se pierde antes de escanearlo, se vuelve a activar y sale uno nuevo; el
+    anterior deja de valer en ese momento.
+    """
+    from .. import qr
+    from ..core import totp
+
+    try:
+        cn = validar_cn(cn)
+    except CNInvalido as e:
+        return error_htmx(request, str(e))
+
+    c = cfg(request)
+    secreto = totp.generar_secreto()
+    try:
+        easyrsa.totp_vpn(c, "alta", cn, secreto)
+    except easyrsa.ErrorHelper as e:
+        auditar(request, sesion, "dos_pasos_vpn", cn, "error", str(e))
+        return render(request, "partials/dos_pasos_vpn.html",
+                      {"d": _estado_dos_pasos(c, cn, None, error=str(e))})
+
+    auditar(request, sesion, "dos_pasos_vpn", cn, detalle="activada (secreto nuevo)")
+
+    uri = totp.uri_otpauth(secreto, cn, EMISOR_VPN)
+    imagen, fallo = None, None
+    try:
+        imagen = qr.data_uri(uri)
+    except qr.QRNoDisponible as e:
+        fallo = str(e)
+
+    return render(request, "partials/dos_pasos_vpn.html", {"d": _estado_dos_pasos(
+        c, cn, None, recien=True, qr=imagen, fallo_qr=fallo, uri=uri,
+        secreto_legible=totp.formatear_secreto(secreto),
+    )})
+
+
+@router.post("/{cn}/dos-pasos/quitar")
+def quitar_dos_pasos(
+    request: Request,
+    cn: str,
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    try:
+        cn = validar_cn(cn)
+    except CNInvalido as e:
+        return error_htmx(request, str(e))
+
+    c = cfg(request)
+    try:
+        easyrsa.totp_vpn(c, "baja", cn)
+    except easyrsa.ErrorHelper as e:
+        auditar(request, sesion, "dos_pasos_vpn", cn, "error", str(e))
+        return render(request, "partials/dos_pasos_vpn.html",
+                      {"d": _estado_dos_pasos(c, cn, None, error=str(e))})
+
+    auditar(request, sesion, "dos_pasos_vpn", cn, detalle="quitada")
+    return render(request, "partials/dos_pasos_vpn.html", {"d": _estado_dos_pasos(
+        c, cn, None, mensaje="Quitada. Su perfil actual sigue pidiendo usuario y "
+                             "contraseña: descárgale uno nuevo, o que deje la "
+                             "contraseña en blanco.")})
+
+
+@router.post("/{cn}/politica")
+def guardar_politica(
+    request: Request,
+    cn: str,
+    ip_fija: str = Form(""),
+    destinos: str = Form(""),
+    f1_dias: List[str] = Form([]),
+    f1_desde: str = Form(""),
+    f1_hasta: str = Form(""),
+    f2_dias: List[str] = Form([]),
+    f2_desde: str = Form(""),
+    f2_hasta: str = Form(""),
+    f3_dias: List[str] = Form([]),
+    f3_desde: str = Form(""),
+    f3_hasta: str = Form(""),
+    expira: str = Form(""),
+    max_sesion_min: str = Form(""),
+    cuota_gb: str = Form(""),
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    try:
+        cn = validar_cn(cn)
+    except CNInvalido as e:
+        return error_htmx(request, str(e))
+
+    c = cfg(request)
+    anterior = db.obtener_politica(c.seguridad.db_path, cn)
+
+    try:
+        nueva = _politica_del_formulario(
+            anterior, ip_fija, destinos,
+            [(f1_dias, f1_desde, f1_hasta), (f2_dias, f2_desde, f2_hasta),
+             (f3_dias, f3_desde, f3_hasta)],
+            expira, max_sesion_min, cuota_gb,
+        )
+        aplicar_politicas.aplicar(c, {cn: nueva}, usuario=sesion["usuario"])
+    except pol.PoliticaInvalida as e:
+        return error_htmx(request, str(e))
+    except easyrsa.ErrorHelper as e:
+        auditar(request, sesion, "politica_cliente", cn, "error", str(e))
+        return error_htmx(request, "El servidor no aceptó la política: %s" % e)
+
+    resumen = pol.resumen(nueva)
+    auditar(request, sesion, "politica_cliente", cn,
+            detalle="; ".join(resumen) if resumen else "sin restricciones")
+
+    mensaje = "Políticas de '%s' guardadas y aplicadas." % cn
+    motivo = pol.motivo_rechazo(nueva, datetime.now())
+    if motivo:
+        mensaje += (" Ahora mismo no puede entrar (%s): si está conectado, se le "
+                    "desconectará en menos de un minuto." % pol.TEXTO_MOTIVO[motivo])
+    return aviso(request, mensaje, refrescar=EVENTO_REFRESCO)
+
+
+@router.post("/politicas/global")
+def guardar_politica_global(
+    request: Request,
+    max_sesion_min: str = Form(""),
+    sesion=Depends(solo_admin),
+    _csrf=Depends(verificar_csrf),
+):
+    """Duración máxima de sesión para quien no tenga una propia."""
+    valor = (max_sesion_min or "").strip()
+    try:
+        maximo = int(valor) if valor else 0
+    except ValueError:
+        return error_htmx(request, "La duración máxima tiene que ser un número de minutos")
+    if not 0 <= maximo <= pol.MAX_SESION_MIN:
+        return error_htmx(request, "Duración máxima fuera de rango")
+
+    try:
+        aplicar_politicas.aplicar(cfg(request), max_global=maximo, usuario=sesion["usuario"])
+    except pol.PoliticaInvalida as e:
+        return error_htmx(request, str(e))
+    except easyrsa.ErrorHelper as e:
+        auditar(request, sesion, "politica_global", None, "error", str(e))
+        return error_htmx(request, "El servidor no aceptó el cambio: %s" % e)
+
+    texto = ("sin límite" if not maximo else pol.describir_minutos(maximo))
+    auditar(request, sesion, "politica_global", None, detalle="sesión máx. %s" % texto)
+    return aviso(request, "Duración máxima de sesión para todos: %s." % texto,
+                 refrescar=EVENTO_REFRESCO)

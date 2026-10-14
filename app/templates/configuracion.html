@@ -33,7 +33,12 @@
   <tbody>
     <tr><th>Remote</th><td><code>{{ cliente.remote_host }}:{{ cliente.remote_puerto }}</code> ({{ cliente.proto }})</td></tr>
     <tr><th>Cipher</th><td><code>{{ cliente.cipher }}</code></td></tr>
+    {% if cliente.tls_crypt_v2 %}
+    <tr><th>tls-crypt-v2</th><td><code>{{ cliente.tls_crypt_v2 }}</code>
+        <span class="etiqueta etiqueta-ok">clave propia en cada perfil</span></td></tr>
+    {% else %}
     <tr><th>tls-crypt</th><td><code>{{ cliente.tls_crypt }}</code></td></tr>
+    {% endif %}
   </tbody>
 </table>
 </div>
@@ -51,6 +56,14 @@
 </table>
 </div>
 
+{% if cliente.tls_crypt_v2 %}
+<h2>Clave <code>tls-crypt-v2</code></h2>
+<p class="tenue">
+  Cada <code>.ovpn</code> lleva su propia clave, generada al descargarlo. No hay
+  una clave compartida que rotar: si se filtra un perfil, basta con revocar ese
+  cliente.
+</p>
+{% else %}
 <h2>Clave <code>tls-crypt</code></h2>
 
 {# Aquí y no en Clientes VPN: esto deja fuera a TODOS de golpe, y no puede estar
@@ -81,6 +94,12 @@
     <button type="submit" class="boton boton-peligro">Rotar la clave tls-crypt</button>
   </form>
 </section>
+<p class="tenue">
+  Para que cada perfil lleve su propia clave, migra a <code>tls-crypt-v2</code>
+  desde el servidor con <code>sudo bash deploy/migrar-tls-crypt-v2.sh</code>
+  (exige OpenVPN 2.6.14 o posterior, también en los clientes).
+</p>
+{% endif %}
 
 <h2>Respaldos de la base</h2>
 

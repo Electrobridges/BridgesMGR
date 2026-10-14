@@ -24,6 +24,14 @@
          title="Letras, números, punto, guion y guion bajo">
   <button type="submit" class="boton boton-principal">Crear y emitir certificado</button>
 
+  {# Acceso temporal: un proveedor una semana, un becario hasta fin de mes.
+     Vacío = permanente, que es lo de siempre. Se puede cambiar después en sus
+     políticas. #}
+  <label class="en-linea" for="caduca">Caduca
+    <input type="datetime-local" id="caduca" name="caduca"
+           aria-describedby="caduca-ayuda"></label>
+  <span id="caduca-ayuda" class="tenue pequeno">vacío = acceso permanente</span>
+
   {# Los dos campos salen del flujo al desmarcar la casilla; lo hace el CSS
      con :has(), sin JavaScript. Sin 'required' a propósito: un campo oculto
      y obligatorio impide enviar el formulario y el navegador no dice por

@@ -1,0 +1,17 @@
+[Unit]
+Description=Reglas de acceso por cliente de BridgesMGR
+Documentation=https://github.com/Electrobridges/BridgesMGR
+After=network-online.target nftables.service
+Wants=network-online.target
+# Sin reglas escritas no hay nada que cargar: el helper crea el archivo la
+# primera vez que alguien guarda una política desde el panel.
+ConditionPathExists=/etc/openvpn/ovpn-web/acceso.nft
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/openvpn/ovpn-web/acceso.nft
+ExecStop=-/usr/sbin/nft delete table inet ovpnweb_acceso
+
+[Install]
+WantedBy=multi-user.target

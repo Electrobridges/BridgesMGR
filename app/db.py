@@ -186,6 +186,42 @@ CREATE TABLE IF NOT EXISTS eventos_vpn (
     detalle TEXT
 );
 
+-- Políticas de acceso por cliente (app/core/politicas.py). La forma canónica
+-- va como JSON en una columna: se valida entera al entrar, se aplica entera al
+-- helper y nunca se consulta por un campo suelto, así que partirla en columnas
+-- solo añadiría migraciones.
+CREATE TABLE IF NOT EXISTS politicas (
+    cn          TEXT PRIMARY KEY,
+    datos       TEXT NOT NULL,
+    actualizada TEXT NOT NULL,
+    por         TEXT
+);
+
+-- Bloqueos de IP en el cortafuegos, automáticos o a mano. El que manda es el
+-- set de nftables, que caduca solo; esto es el historial y lo que permite
+-- decir por qué y quién bloqueó cada una.
+CREATE TABLE IF NOT EXISTS ip_bloqueos (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip        TEXT NOT NULL,
+    desde     TEXT NOT NULL,
+    hasta     TEXT NOT NULL,
+    motivo    TEXT,
+    por       TEXT,
+    levantado TEXT
+);
+
+-- Tráfico por cliente y día (hora local del servidor), sumado a partir de los
+-- contadores de cada sesión que el vigilante lee cada minuto. 'recibido' es lo
+-- que el servidor recibe del cliente (su subida) y 'enviado' lo que le manda.
+CREATE TABLE IF NOT EXISTS trafico_diario (
+    cn       TEXT    NOT NULL,
+    dia      TEXT    NOT NULL,
+    recibido INTEGER NOT NULL DEFAULT 0,
+    enviado  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (cn, dia)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ip_bloqueos_hasta ON ip_bloqueos(hasta);
 CREATE INDEX IF NOT EXISTS idx_auditoria_ts ON auditoria(ts DESC);
 -- Por 'visto' purga la limpieza; por 'tipo' filtran las pestañas de la VPN.
 CREATE INDEX IF NOT EXISTS idx_eventos_vpn_visto ON eventos_vpn(visto);
@@ -199,7 +235,8 @@ CREATE INDEX IF NOT EXISTS idx_repartos_cerrado ON repartos(cerrado);
 # plantilla decide el mensaje a partir de esto, y la auditoría se puede filtrar.
 MOTIVO_TLS_CRYPT = "rotacion_tls_crypt"
 MOTIVO_CA = "reconstruccion_ca"
-MOTIVOS = (MOTIVO_TLS_CRYPT, MOTIVO_CA)
+MOTIVO_TLS_CRYPT_V2 = "migracion_tls_crypt_v2"
+MOTIVOS = (MOTIVO_TLS_CRYPT, MOTIVO_CA, MOTIVO_TLS_CRYPT_V2)
 
 # Columnas añadidas después de la primera versión. CREATE TABLE IF NOT EXISTS
 # no toca una tabla que ya existe, así que las bases ya instaladas hay que
@@ -405,6 +442,10 @@ def crear_usuario(ruta, usuario, password, rol=ROL_SUPERVISOR):
     usuario = usuario.strip()
     if not usuario:
         raise ValueError("El nombre de usuario no puede estar vacío")
+    if usuario.startswith("("):
+        # '(sistema)' firma en la auditoría lo que hace el panel por su cuenta.
+        # Una cuenta llamada así podría hacerse pasar por él en el registro.
+        raise ValueError("Los nombres entre paréntesis están reservados para el propio panel")
     if len(password) < 12:
         raise ValueError("La contraseña debe tener al menos 12 caracteres")
 
@@ -875,7 +916,10 @@ FILTROS_AUDITORIA = {
     "todo": "",
     "fallos": "resultado NOT IN (%s)" % _NO_FALLO_SQL,
     "certificados": ("accion IN ('crear_cliente', 'revocar', 'restaurar',"
-                     " 'descargar_ovpn', 'desconectar', 'archivar', 'desarchivar')"),
+                     " 'descargar_ovpn', 'desconectar', 'archivar', 'desarchivar',"
+                     " 'politica_cliente', 'politica_global', 'expulsar_politica',"
+                     " 'fin_sesion', 'caducar_cliente', 'perfil_compartido',"
+                     " 'dos_pasos_vpn', 'cuota_agotada', 'cuota_restablecida')"),
     "sesiones": "accion IN ('login', 'logout')",
 }
 
@@ -994,6 +1038,7 @@ FILTROS_EVENTOS_VPN = {
     "todo": "",
     "conexiones": _tipos_sql(eventos_vpn.ENTRADAS_Y_SALIDAS),
     "fallos": _tipos_sql(eventos_vpn.FALLOS),
+    "duplicadas": _tipos_sql({eventos_vpn.SESION_DUPLICADA}),
 }
 
 
@@ -1278,3 +1323,198 @@ def cerrar_reparto(ruta, reparto_id, usuario):
             (_iso(_ahora()), usuario, int(reparto_id)),
         )
         return cur.rowcount > 0
+
+
+# ----------------------------------------------------- políticas por cliente
+
+# Duración máxima de sesión para quien no tenga una propia, en minutos. 0 es
+# sin límite. Ajuste y no config.yaml: es una decisión de operación que se
+# cambia desde el panel.
+AJUSTE_MAX_SESION = "max_sesion_min"
+
+
+def listar_politicas(ruta):
+    """{cn: politica} de todos los clientes con alguna restricción"""
+    import json
+
+    with conexion(ruta) as con:
+        filas = con.execute("SELECT cn, datos FROM politicas ORDER BY cn").fetchall()
+    return {f["cn"]: json.loads(f["datos"]) for f in filas}
+
+
+def obtener_politica(ruta, cn):
+    return listar_politicas(ruta).get(cn)
+
+
+def guardar_politica(ruta, cn, politica, usuario):
+    """Guarda la política ya normalizada. Vacía = se borra la fila."""
+    import json
+
+    from .core import politicas as pol
+
+    with conexion(ruta) as con:
+        if politica == pol.vacia():
+            con.execute("DELETE FROM politicas WHERE cn = ?", (cn,))
+        else:
+            con.execute(
+                "INSERT INTO politicas (cn, datos, actualizada, por) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT(cn) DO UPDATE SET datos = excluded.datos,"
+                " actualizada = excluded.actualizada, por = excluded.por",
+                (cn, json.dumps(politica, sort_keys=True), _iso(_ahora()), usuario),
+            )
+
+
+def max_sesion_global(ruta):
+    try:
+        return max(0, int(obtener_ajuste(ruta, AJUSTE_MAX_SESION, "0") or 0))
+    except ValueError:
+        return 0
+
+
+def duplicadas_recientes(ruta, desde):
+    """
+    {cn: [ip, ...]} de las sesiones desplazadas vistas desde 'desde' (ISO UTC).
+
+    Las IP van en el orden en que entraron, repetidas incluidas: lo que se busca
+    es el vaivén entre dos sitios, y eso solo se ve con la secuencia entera.
+    """
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT cn, ip FROM eventos_vpn WHERE tipo = ? AND visto >= ? AND cn != ''"
+            " ORDER BY id",
+            (eventos_vpn.SESION_DUPLICADA, desde),
+        ).fetchall()
+
+    resultado = {}
+    for f in filas:
+        resultado.setdefault(f["cn"], []).append(f["ip"])
+    return resultado
+
+
+# ----------------------------------------------------------- bloqueos de IP
+
+def rechazos_por_ip(ruta, tipos, desde):
+    """{ip: n} de los sucesos de esos tipos ingeridos desde 'desde' (ISO UTC)."""
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT ip, COUNT(*) AS n FROM eventos_vpn"
+            " WHERE " + _tipos_sql(tipos) + " AND visto >= ? AND ip != ''"
+            " GROUP BY ip",
+            (desde,),
+        ).fetchall()
+    return {f["ip"]: f["n"] for f in filas}
+
+
+def registrar_bloqueo(ruta, ip, minutos, motivo, por):
+    ahora = _ahora()
+    with conexion(ruta) as con:
+        con.execute(
+            "INSERT INTO ip_bloqueos (ip, desde, hasta, motivo, por) VALUES (?, ?, ?, ?, ?)",
+            (ip, _iso(ahora), _iso(ahora + timedelta(minutes=minutos)), motivo, por),
+        )
+
+
+def levantar_bloqueo(ruta, ip):
+    with conexion(ruta) as con:
+        con.execute(
+            "UPDATE ip_bloqueos SET levantado = ? WHERE ip = ? AND levantado IS NULL"
+            " AND hasta > ?",
+            (_iso(_ahora()), ip, _iso(_ahora())),
+        )
+
+
+def bloqueos_activos(ruta):
+    """Los bloqueos en vigor según el registro, el más reciente de cada IP."""
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT ip, MAX(desde) AS desde, MAX(hasta) AS hasta, motivo, por"
+            "  FROM ip_bloqueos WHERE levantado IS NULL AND hasta > ?"
+            " GROUP BY ip ORDER BY desde DESC",
+            (_iso(_ahora()),),
+        ).fetchall()
+    return [dict(f) for f in filas]
+
+
+def historial_bloqueos(ruta, limite=50):
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT * FROM ip_bloqueos ORDER BY id DESC LIMIT ?", (limite,)
+        ).fetchall()
+    return [dict(f) for f in filas]
+
+
+# ------------------------------------------------------ tráfico por cliente
+
+def sumar_trafico(ruta, dia, deltas):
+    """Suma {cn: (recibido, enviado)} al día dado ('YYYY-MM-DD')."""
+    if not deltas:
+        return
+    with conexion(ruta) as con:
+        con.executemany(
+            "INSERT INTO trafico_diario (cn, dia, recibido, enviado) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(cn, dia) DO UPDATE SET recibido = recibido + excluded.recibido,"
+            " enviado = enviado + excluded.enviado",
+            [(cn, dia, r, e) for cn, (r, e) in deltas.items()],
+        )
+
+
+def trafico_mes(ruta, mes):
+    """{cn: (recibido, enviado)} del mes 'YYYY-MM'."""
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT cn, SUM(recibido) AS r, SUM(enviado) AS e FROM trafico_diario"
+            " WHERE dia LIKE ? GROUP BY cn",
+            (mes + "-%",),
+        ).fetchall()
+    return {f["cn"]: (f["r"], f["e"]) for f in filas}
+
+
+def trafico_cliente(ruta, cn, limite=31):
+    """Los últimos días con tráfico de un cliente, del más reciente al más antiguo."""
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT dia, recibido, enviado FROM trafico_diario WHERE cn = ?"
+            " ORDER BY dia DESC LIMIT ?",
+            (cn, limite),
+        ).fetchall()
+    return [dict(f) for f in filas]
+
+
+def purgar_trafico(ruta, dias):
+    """Borra el tráfico de días anteriores a hace 'dias'. Devuelve cuántas filas."""
+    corte = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
+    with conexion(ruta) as con:
+        return con.execute("DELETE FROM trafico_diario WHERE dia < ?", (corte,)).rowcount
+
+
+# ---------------------------------------------------------- series por día
+
+def trafico_por_dia(ruta, desde, cn=None):
+    """{dia: (recibido, enviado)} desde el día 'desde' (YYYY-MM-DD), de todos o de un cliente."""
+    consulta = ("SELECT dia, SUM(recibido) AS r, SUM(enviado) AS e FROM trafico_diario"
+                " WHERE dia >= ?")
+    params = [desde]
+    if cn is not None:
+        consulta += " AND cn = ?"
+        params.append(cn)
+    with conexion(ruta) as con:
+        filas = con.execute(consulta + " GROUP BY dia", params).fetchall()
+    return {f["dia"]: (f["r"], f["e"]) for f in filas}
+
+
+def eventos_por_dia(ruta, tipos, desde):
+    """
+    {dia: n} de los sucesos de esos tipos desde 'desde' (YYYY-MM-DD).
+
+    El día sale de la fecha que escribió OpenVPN cuando la hay, y si no —un
+    log con '--suppress-timestamps'— de cuándo lo leyó el panel, que como
+    mucho se desvía los cinco minutos de una vuelta del vigilante.
+    """
+    with conexion(ruta) as con:
+        filas = con.execute(
+            "SELECT CASE WHEN ts != '' THEN substr(ts, 1, 10) ELSE substr(visto, 1, 10) END AS dia,"
+            "       COUNT(*) AS n FROM eventos_vpn WHERE " + _tipos_sql(tipos) +
+            " GROUP BY dia HAVING dia >= ?",
+            (desde,),
+        ).fetchall()
+    return {f["dia"]: f["n"] for f in filas}

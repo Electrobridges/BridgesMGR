@@ -70,9 +70,51 @@ RECHAZO_TLS = "rechazo_tls"
 RECHAZO_CLAVE = "rechazo_clave"
 ARRANQUE = "arranque"
 CRL = "crl"
+# El script client-connect del panel dijo que no: fuera de horario, caducado…
+RECHAZO_POLITICA = "rechazo_politica"
+# Entró un perfil que ya estaba conectado y OpenVPN cerró la sesión anterior.
+# No es un fallo: un portátil que cambia de red lo provoca una vez. Lo que
+# delata un perfil compartido es que se repita alternando entre IP.
+SESION_DUPLICADA = "sesion_duplicada"
+
+# El script de verificación en dos pasos dijo que no: sin código, incorrecto…
+RECHAZO_2FA = "rechazo_2fa"
 
 # Qué cuenta como fallo al filtrar en pantalla
-FALLOS = {RECHAZO_REVOCADO, RECHAZO_CERTIFICADO, RECHAZO_TLS, RECHAZO_CLAVE}
+FALLOS = {RECHAZO_REVOCADO, RECHAZO_CERTIFICADO, RECHAZO_TLS, RECHAZO_CLAVE,
+          RECHAZO_POLITICA, RECHAZO_2FA}
+
+# Lo que escribe deploy/ovpn-web-client-connect al rechazar. OpenVPN no le
+# pone fecha ni prefijo: la línea llega tal cual la imprime el script.
+_RECHAZO_POLITICA = re.compile(r'^ovpn-web client-connect: RECHAZO cn=(\S+) motivo=(\S+)')
+_RECHAZO_2FA = re.compile(r'^ovpn-web totp: RECHAZO cn=(\S+) motivo=(\S+)')
+_DUPLICADA = re.compile(r"MULTI: new connection by client '([^']+)' will cause previous active sessions")
+
+# Cómo escribe OpenVPN un paquete que no pasa la clave tls-crypt/tls-auth. La
+# IP no va en el prefijo de la línea sino al final: '… failed from
+# [AF_INET]203.0.113.5:4444'.
+_SIN_CLAVE = (
+    "tls-crypt unwrapping failed",
+    "incoming packet authentication failed",
+    "cannot locate HMAC in incoming packet",
+)
+_ORIGEN_EN_MENSAJE = re.compile(r'from \[AF_INET6?\](\d{1,3}(?:\.\d{1,3}){3}):(\d+)')
+
+MOTIVOS_2FA = {
+    "sin_codigo": "no envió el código de verificación",
+    "codigo_incorrecto": "código de verificación incorrecto",
+    "codigo_repetido": "código de verificación ya usado",
+    "secretos_ilegibles": "OpenVPN no puede leer los secretos (¿falta 'group ovpnweb-vpn'?)",
+    "cn_no_valido": "nombre de certificado no válido",
+}
+
+MOTIVOS_POLITICA = {
+    "bloqueado": "bloqueado por el panel",
+    "caducado": "acceso caducado",
+    "fuera_de_horario": "fuera de su horario",
+    "politica_ilegible": "no se pudo leer el archivo de políticas",
+    "cn_no_valido": "nombre de certificado no válido",
+}
 
 # Las dos caras del mismo hecho: quién entró y quién salió. El filtro de
 # 'Conexiones' las trata juntas porque seguir a un cliente exige ver el par;
@@ -92,6 +134,17 @@ def _clasificar(msg):
     if "Peer Connection Initiated" in msg:
         return CONEXION, None
 
+    m = _RECHAZO_POLITICA.match(msg)
+    if m:
+        return RECHAZO_POLITICA, MOTIVOS_POLITICA.get(m.group(2), m.group(2))
+
+    m = _RECHAZO_2FA.match(msg)
+    if m:
+        return RECHAZO_2FA, MOTIVOS_2FA.get(m.group(2), m.group(2))
+
+    if _DUPLICADA.search(msg):
+        return SESION_DUPLICADA, "se cerró la sesión anterior de este perfil"
+
     if "VERIFY ERROR" in msg:
         if "certificate revoked" in msg:
             return RECHAZO_REVOCADO, "certificado revocado"
@@ -101,6 +154,12 @@ def _clasificar(msg):
 
     if "AUTH_FAILED" in msg:
         return RECHAZO_CERTIFICADO, "autenticación rechazada"
+
+    if any(t in msg for t in _SIN_CLAVE):
+        # Antes del handshake: el paquete ni siquiera trae la clave tls-crypt o
+        # tls-auth. Es lo que deja un escáner o un ataque desde internet, y lo
+        # que más pesa al decidir si se bloquea una IP.
+        return RECHAZO_CLAVE, "paquete sin la clave tls-crypt/tls-auth"
 
     if "TLS Error" in msg or "TLS_ERROR" in msg:
         # El síntoma clásico de una clave tls-crypt que no coincide: el cliente
@@ -268,6 +327,14 @@ def parse_eventos(lineas):
     """
     sesiones = {}
     eventos = []
+    # El último rechazo de uno de NUESTROS scripts (política, segundo factor)
+    # que aún no sabe de qué IP venía: el script no la conoce y OpenVPN no le
+    # pone prefijo a lo que imprime. Se la da la línea AUTH_FAILED que OpenVPN
+    # escribe justo después para esa misma conexión.
+    rechazo_sin_origen = None
+    # Conexiones cuyo AUTH_FAILED ya se contó. OpenVPN lo escribe dos veces
+    # por conexión, una con '[UNDEF]' y otra con el CN.
+    auth_vistas = set()
 
     for linea in lineas:
         m = _LINEA.match(linea)
@@ -277,6 +344,10 @@ def parse_eventos(lineas):
         msg = m.group("msg")
         ip = m.group("ip")
         puerto = m.group("puerto")
+        if not ip:
+            origen = _ORIGEN_EN_MENSAJE.search(msg)
+            if origen:
+                ip, puerto = origen.groups()
         clave = "%s:%s" % (ip, puerto) if ip else None
 
         # 'VERIFY OK: depth=0, CN=daniel' identifica la sesión aunque después
@@ -291,6 +362,21 @@ def parse_eventos(lineas):
             continue
         tipo, detalle = clasificado
 
+        if "AUTH_FAILED" in msg:
+            # Consecuencia, no causa: si un script nuestro acaba de rechazar
+            # esta conexión, el AUTH_FAILED no es un suceso aparte —contarlo
+            # como «rechazo de certificado» engañaba, y lo peor, sumaba para el
+            # bloqueo automático de IPs a quien solo se equivocó de código o
+            # reintentaba fuera de su horario—. Sirve para darle la IP al rechazo.
+            if clave in auth_vistas:
+                continue
+            auth_vistas.add(clave)
+            if rechazo_sin_origen is not None:
+                rechazo_sin_origen["ip"] = ip or ""
+                rechazo_sin_origen["puerto"] = puerto or ""
+                rechazo_sin_origen = None
+                continue
+
         # El CN puede venir del prefijo, del propio mensaje, o de lo que se
         # aprendió antes en esa misma sesión.
         cn = m.group("cn")
@@ -298,6 +384,12 @@ def parse_eventos(lineas):
             entre_corchetes = re.search(r'\[([^\]\s]+)\]\s+Peer Connection', msg)
             if entre_corchetes:
                 cn = entre_corchetes.group(1)
+        if not cn and tipo == RECHAZO_POLITICA:
+            cn = _RECHAZO_POLITICA.match(msg).group(1)
+        if not cn and tipo == RECHAZO_2FA:
+            cn = _RECHAZO_2FA.match(msg).group(1)
+        if not cn and tipo == SESION_DUPLICADA:
+            cn = _DUPLICADA.search(msg).group(1)
         if not cn and tipo in FALLOS:
             en_mensaje = _CN_EN_MENSAJE.search(msg)
             if en_mensaje:
@@ -305,7 +397,7 @@ def parse_eventos(lineas):
         if not cn and clave:
             cn = sesiones.get(clave)
 
-        eventos.append({
+        evento = {
             "ts": m.group("ts") or "",
             "tipo": tipo,
             "cn": cn or "",
@@ -313,7 +405,10 @@ def parse_eventos(lineas):
             "puerto": puerto or "",
             "detalle": detalle,
             "fallo": tipo in FALLOS,
-        })
+        }
+        eventos.append(evento)
+        if tipo in (RECHAZO_POLITICA, RECHAZO_2FA) and not ip:
+            rechazo_sin_origen = evento
 
         if tipo == DESCONEXION and clave:
             sesiones.pop(clave, None)

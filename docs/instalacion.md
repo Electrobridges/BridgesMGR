@@ -258,11 +258,47 @@ El detalle está en [seguridad.md](seguridad.md#verificación-en-dos-pasos-totp)
 cd BridgesMGR
 git pull
 sudo bash deploy/install.sh
-sudo systemctl restart ovpn-web
 ```
 
-Se conservan la base de datos (`/var/lib/ovpn-web/`), la configuración y el
-certificado TLS.
+No hace falta reiniciar nada a mano: si el panel estaba en marcha, el
+instalador lo reinicia y comprueba que vuelve. Se conservan la base de datos
+(`/var/lib/ovpn-web/`), la configuración y el certificado TLS. Repetirlo es
+siempre seguro.
+
+Cómo protege una actualización:
+
+- **La versión nueva se prepara al lado** (`/opt/ovpn-web/app.nuevo`), se
+  comprueba que importa con las dependencias recién instaladas y que el
+  `config.yaml` actual le vale, y **solo entonces** sustituye a la que corre. Si
+  algo de eso falla, el panel en marcha no se ha tocado.
+- **Si el panel no arranca con el código nuevo, vuelve solo a la versión
+  anterior**, enseña las últimas líneas de su log y deja la que falló en
+  `/opt/ovpn-web/app.fallida` para poder mirarla. La anterior a la última
+  actualización queda en `/opt/ovpn-web/app.anterior`.
+- **Sin red no se para por lo que no hace falta**: si apt no responde pero los
+  paquetes ya están, o el CDN de HTMX está caído y el que hay coincide con el
+  hash, se sigue y se avisa.
+- **Dos instalaciones a la vez no se pisan**: la segunda se niega a empezar.
+
+### Si algo falla
+
+El instalador se para diciendo en qué paso, en qué línea, con qué orden y qué
+mirar, y al final repite juntos los avisos que no lo pararon. Todo lo que sale
+por pantalla queda además en **`/var/log/ovpn-web-instalacion.log`**, con la
+fecha y el commit de cada pasada, para cuando la sesión SSH ya se ha cerrado:
+
+```bash
+sudo less +G /var/log/ovpn-web-instalacion.log
+journalctl -u ovpn-web -n 50 --no-pager      # si lo que falla es el arranque
+```
+
+Para volver a mano a la versión anterior:
+
+```bash
+sudo mv /opt/ovpn-web/app /opt/ovpn-web/app.descartada
+sudo mv /opt/ovpn-web/app.anterior /opt/ovpn-web/app
+sudo systemctl restart ovpn-web
+```
 
 ## Respaldos de la base
 

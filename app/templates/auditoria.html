@@ -35,7 +35,7 @@
   {% endfor %}
 
   <nav class="filtros" aria-label="Filtro de sucesos">
-    {% for clave, texto in [('todo', 'Todo'), ('conexiones', 'Conexiones'), ('fallos', 'Rechazos'), ('sesiones', 'Sesiones')] %}
+    {% for clave, texto in [('todo', 'Todo'), ('conexiones', 'Conexiones'), ('fallos', 'Rechazos'), ('duplicadas', 'Sesiones desplazadas'), ('sesiones', 'Sesiones')] %}
     <a class="{{ 'activa' if filtro == clave }}"
        {% if filtro == clave %}aria-current="true"{% endif %}
        href="/admin/auditoria?fuente=vpn&amp;filtro={{ clave }}">{{ texto }}</a>
@@ -140,6 +140,12 @@
             <span class="etiqueta">servidor arrancado</span>
           {% elif e.tipo == 'crl' %}
             <span class="etiqueta">CRL recargada</span>
+          {% elif e.tipo == 'rechazo_2fa' %}
+            <span class="etiqueta etiqueta-mal">rechazado: 2.º factor</span>
+          {% elif e.tipo == 'rechazo_politica' %}
+            <span class="etiqueta etiqueta-mal">rechazado: política</span>
+          {% elif e.tipo == 'sesion_duplicada' %}
+            <span class="etiqueta etiqueta-aviso">sesión desplazada</span>
           {% endif %}
         </td>
         {# Vacío y no inventado: un rechazo temprano muere antes de que el

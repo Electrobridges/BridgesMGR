@@ -497,7 +497,7 @@ def test_sin_hash_el_instalador_aborta():
 
     assert "HTMX_CONFIAR" in fuente, "debe hacer falta una opción explícita"
     # La rama que fija el hash sin verificar va detrás de esa opción
-    m = re.search(r"^elif \[\[ \"\$HTMX_CONFIAR\" == \"1\" \]\]; then$", fuente, re.M)
+    m = re.search(r"^\s*elif \[\[ \"\$HTMX_CONFIAR\" == \"1\" \]\]; then$", fuente, re.M)
     assert m, "guardar el hash debe depender de --htmx-confiar"
 
 
@@ -866,9 +866,25 @@ def test_reconstruir_la_ca_sigue_fuera_del_helper():
     # El invariante no es "no escribe" —escribe en index.txt al restaurar un
     # cliente, y debe— sino "solo escribe dentro de la PKI", cuyas rutas salen
     # todas de rutas_pki().
+    #
+    # La otra excepción es _escribir_atomico(), que escribe las políticas por
+    # cliente. Se admite porque comprueba en tiempo de ejecución que el destino
+    # está en DIR_POLITICAS, una constante bajo /etc/openvpn/ovpn-web, y nunca
+    # en otro sitio.
     arbol = ast.parse(_leer(HELPER), str(HELPER))
+    atomico = next(n for n in ast.walk(arbol)
+                   if isinstance(n, ast.FunctionDef) and n.name == "_escribir_atomico")
+    assert "DIR_POLITICAS" in ast.unparse(atomico.body[1]), (
+        "_escribir_atomico() tiene que rechazar cualquier destino fuera de DIR_POLITICAS "
+        "antes de abrir nada"
+    )
+    assert re.search(r'^DIR_POLITICAS = "/etc/openvpn/ovpn-web"$', _leer(HELPER), re.M)
+    dentro_de_atomico = {id(n) for n in ast.walk(atomico)}
+
     for nodo in ast.walk(arbol):
         if not (isinstance(nodo, ast.Call) and getattr(nodo.func, "id", "") == "open"):
+            continue
+        if id(nodo) in dentro_de_atomico:
             continue
         modo = nodo.args[1].value if len(nodo.args) > 1 and isinstance(
             nodo.args[1], ast.Constant) else "r"
@@ -969,7 +985,248 @@ def test_el_instalador_reinicia_el_panel_si_ya_corria():
     # Y un reinicio que deja el servicio caído tiene que decirlo y fallar,
     # no terminar en verde
     despues = fuente[reinicio.end():]
-    assert "is-active --quiet ovpn-web" in despues and "exit 1" in despues, (
+    assert "is-active --quiet ovpn-web" in despues, (
         "Tras reiniciar no se comprueba que el panel haya vuelto a arrancar"
     )
+    assert 'morir "La actualización no se ha completado."' in despues, (
+        "Un reinicio que deja el panel caído tiene que acabar en error, no en verde"
+    )
 
+
+
+# ------------------------------------------------- políticas por cliente
+
+GANCHO = DEPLOY / "ovpn-web-client-connect"
+UNIDAD_ACCESO = DEPLOY / "ovpn-web-acceso.service"
+RUTA_GANCHO = "/usr/local/lib/ovpn-web/client-connect"
+
+
+def test_el_script_de_conexion_corre_aislado():
+    """
+    '-I' ignora PYTHONPATH, PYTHONSTARTUP y el directorio de trabajo: nada del
+    entorno en el que OpenVPN lo lance puede cambiar qué código corre.
+    """
+    assert _leer(GANCHO).splitlines()[0] == "#!/usr/bin/python3 -I"
+
+
+def test_el_script_de_conexion_solo_usa_stdlib():
+    arbol = ast.parse(_leer(GANCHO))
+    modulos = set()
+    for nodo in ast.walk(arbol):
+        if isinstance(nodo, ast.Import):
+            modulos |= {a.name.split(".")[0] for a in nodo.names}
+        elif isinstance(nodo, ast.ImportFrom):
+            modulos.add(nodo.module.split(".")[0])
+    assert modulos <= {"json", "os", "re", "sys", "datetime"}
+
+
+def test_los_dos_instaladores_ponen_el_script_en_su_sitio():
+    """
+    Los dos, y no solo el del panel: instalar-openvpn.sh arranca OpenVPN con la
+    directiva client-connect puesta, y si el archivo aún no existiera rechazaría
+    a todo el mundo hasta terminar de instalar el panel.
+    """
+    for instalador in (INSTALADOR, INSTALA_VPN):
+        texto = _leer(instalador)
+        assert RUTA_GANCHO in texto
+        assert "ovpn-web-client-connect" in texto
+        assert "-o root -g root -m 0755" in texto
+
+
+def test_el_panel_no_puede_reescribir_el_script_de_conexion():
+    """
+    El panel decide las políticas, pero no el código que OpenVPN corre con
+    ellas. La unidad solo deja escribir /var/lib/ovpn-web y /etc/openvpn.
+    """
+    rw = re.search(r"^ReadWritePaths=(.*)$", _leer(SERVICIO), re.M).group(1)
+    assert "/usr/local/lib" not in rw
+    assert not RUTA_GANCHO.startswith(("/etc/openvpn", "/var/lib/ovpn-web"))
+
+
+def test_el_servidor_nuevo_deja_hueco_para_ips_fijas_y_engancha_el_script():
+    texto = _leer(INSTALA_VPN)
+    assert "nopool" in texto and "ifconfig-pool ${POOL_INI} ${POOL_FIN}" in texto
+    assert "script-security 2" in texto
+    assert "client-connect ${HOOK_CLIENT_CONNECT}" in texto
+    assert "duplicate-cn" not in texto
+
+
+def test_las_reglas_de_acceso_sobreviven_a_un_reinicio():
+    unidad = _leer(UNIDAD_ACCESO)
+    assert "ExecStart=/usr/sbin/nft -f /etc/openvpn/ovpn-web/acceso.nft" in unidad
+    assert "ConditionPathExists=/etc/openvpn/ovpn-web/acceso.nft" in unidad
+    texto = _leer(INSTALADOR)
+    assert "ovpn-web-acceso.service" in texto
+    assert "systemctl enable ovpn-web-acceso" in texto
+
+
+# ------------------------------------------------------------- tls-crypt-v2
+
+MIGRAR_V2 = DEPLOY / "migrar-tls-crypt-v2.sh"
+
+
+def test_migrar_a_v2_no_esta_al_alcance_del_panel():
+    """Cambia el server.conf: como reconstruir-ca.sh, lo lanza una persona."""
+    assert "migrar-tls-crypt-v2" not in _leer(SUDOERS)
+    assert "migrar-tls-crypt-v2" not in "".join(_cadenas_del_helper())
+
+
+def test_migrar_a_v2_exige_la_version_arreglada():
+    """CVE-2025-2704: de 2.6.1 a 2.6.13 un servidor con tls-crypt-v2 se tumba."""
+    assert "VERSION_MINIMA=2.6.14" in _leer(MIGRAR_V2)
+
+
+def test_migrar_a_v2_respalda_confirma_y_deshace():
+    texto = _leer(MIGRAR_V2)
+    assert '[[ $respuesta == "MIGRAR" ]]' in texto
+    assert texto.index('cp -a "$SERVER_CONF" "$COPIA/"') < texto.index("Cambiando el server.conf")
+    reinicio = texto.index('info "Reiniciando $SERVICIO"')
+    assert "restaurar" in texto[reinicio:reinicio + 400]
+
+
+def test_migrar_a_v2_avisa_al_panel_como_ovpnweb():
+    texto = _leer(MIGRAR_V2)
+    assert 'sudo -u "$USUARIO_PANEL" venv/bin/python -m app.cli marcar-reparto' in texto
+    assert "migracion_tls_crypt_v2" in texto
+
+
+def test_con_v2_no_se_rota_la_clave_compartida():
+    assert "tls-crypt-v2 está activo" in _leer(HELPER)
+
+
+# ------------------------------------------- verificación en dos pasos (VPN)
+
+VERIFICAR = DEPLOY / "ovpn-web-verificar-totp"
+
+
+def test_el_script_de_dos_pasos_corre_aislado_y_con_stdlib():
+    texto = _leer(VERIFICAR)
+    assert texto.splitlines()[0] == "#!/usr/bin/python3 -I"
+    modulos = set()
+    for nodo in ast.walk(ast.parse(texto)):
+        if isinstance(nodo, ast.Import):
+            modulos |= {a.name.split(".")[0] for a in nodo.names}
+        elif isinstance(nodo, ast.ImportFrom):
+            modulos.add(nodo.module.split(".")[0])
+    assert modulos <= {"base64", "hashlib", "hmac", "json", "os", "re", "struct", "sys", "time"}
+
+
+def test_los_instaladores_preparan_la_verificacion_en_dos_pasos():
+    for instalador in (INSTALADOR, INSTALA_VPN):
+        texto = _leer(instalador)
+        assert "ovpn-web-verificar-totp" in texto
+        assert "groupadd --system \"$GRUPO_VPN\"" in texto
+        assert 'install -d -o root -g "$GRUPO_VPN" -m 0770 "$ESTADO_TOTP"' in texto
+
+
+def test_el_servidor_nuevo_corre_con_el_grupo_propio():
+    """
+    Con 'nogroup', los secretos de la verificación en dos pasos los podría
+    leer cualquier otro servicio que corra con ese grupo.
+    """
+    texto = _leer(INSTALA_VPN)
+    assert "group ${GRUPO_VPN}" in texto and "group nogroup" not in texto
+    assert "auth-user-pass-optional" in texto
+    assert "auth-gen-token 0" in texto
+
+
+def test_los_secretos_no_los_lee_cualquiera():
+    assert '0o640, grupo=gid' in _leer(HELPER)
+
+
+# --------------------------------------------- actualizar sin miedo
+
+def test_el_instalador_dice_donde_y_por_que_se_para():
+    """
+    Con 'set -e' a secas, un fallo cortaba en seco sin decir en qué paso ni
+    qué mirar, y lo de la pantalla se perdía con la sesión SSH.
+    """
+    texto = _leer(INSTALADOR)
+    assert "set -Eeuo pipefail" in texto
+    assert "trap 'al_fallar $? $LINENO \"$BASH_COMMAND\"' ERR" in texto
+    assert 'exec > >(tee -a "$REGISTRO") 2>&1' in texto
+    assert "REGISTRO=/var/log/ovpn-web-instalacion.log" in texto
+
+
+def test_dos_instalaciones_no_pueden_pisarse():
+    assert 'flock -n 9' in _leer(INSTALADOR)
+
+
+def test_la_version_nueva_se_prepara_al_lado_y_se_prueba_antes_de_cambiar():
+    """
+    'cp -r app' encima de la que corre dejaba las dos mezcladas si fallaba a
+    mitad, y los archivos que la nueva ya no trae se quedaban para siempre.
+    """
+    texto = _leer(INSTALADOR)
+    assert 'cp -r app "$DESTINO/"' not in texto
+    preparar = texto.index('cp -r app "$DESTINO/app.nuevo"')
+    humo = texto.index("La versión nueva importa bien")
+    config = texto.index("no se puede cargar con la versión nueva")
+    cambio = texto.index('mv "$DESTINO/app.nuevo" "$DESTINO/app"')
+    assert preparar < humo < cambio
+    assert config < cambio
+
+
+def test_si_el_panel_no_arranca_se_vuelve_a_la_version_anterior():
+    texto = _leer(INSTALADOR)
+    reinicio = texto.index("El panel no arranca con el código nuevo")
+    tramo = texto[reinicio:reinicio + 1500]
+    assert 'mv "$DESTINO/app.anterior" "$DESTINO/app"' in tramo
+    assert "journalctl -u ovpn-web -n 30" in tramo
+
+
+def test_sin_red_no_se_para_lo_que_no_hace_falta():
+    """apt solo si falta algo; HTMX ya instalado y verificado vale si el CDN cae."""
+    texto = _leer(INSTALADOR)
+    assert 'dpkg -s "$paquete"' in texto
+    assert "se conserva el instalado, que coincide con el hash esperado" in texto
+    assert "No se pudo actualizar pip; se sigue" in texto
+
+
+# ---------------------------------------- montar el servidor sin quedarse a medias
+
+def test_el_montaje_solo_carga_su_propio_sysctl():
+    """
+    'sysctl --system' recarga TODOS los archivos de sysctl del sistema, y uno
+    ajeno que no cargue paraba el montaje a medias. Pasó probándolo en un
+    contenedor con 'net.core.default_qdisc'.
+    """
+    texto = _leer(INSTALA_VPN)
+    assert "sysctl -q --system" not in texto
+    assert 'sysctl -q -p "$SYSCTL_FILE"' in texto
+
+
+def test_relanzar_el_montaje_lo_termina_en_vez_de_salir_en_verde():
+    """
+    Tras un fallo a mitad, relanzarlo veía el server.conf ya escrito, decía
+    «no se toca» y salía con 0, dejando el servidor sin NAT y sin arrancar.
+    Un server.conf que escribió este script se conserva y el montaje sigue;
+    uno ajeno sigue sin tocarse.
+    """
+    texto = _leer(INSTALA_VPN)
+    assert 'MARCA_PROPIA="# Generado por deploy/instalar-openvpn.sh"' in texto
+    assert "# Generado por deploy/instalar-openvpn.sh" in texto.split("cat <<FIN\n", 2)[-1] \
+        or "${MARCA_PROPIA}" in texto or texto.count("# Generado por deploy/instalar-openvpn.sh") >= 2
+    assert 'if [[ "$CONF_PROPIA" == "1" ]]; then' in texto
+
+
+def test_el_montaje_dice_donde_y_por_que_se_para():
+    texto = _leer(INSTALA_VPN)
+    assert "set -Eeuo pipefail" in texto
+    assert "trap 'al_fallar $? $LINENO \"$BASH_COMMAND\"' ERR" in texto
+    # Con log-append los errores de OpenVPN van a su log, no al journal
+    assert 'tail -n 15 "$LOG_FILE"' in texto
+
+
+def test_lo_que_arranca_servicios_no_hereda_el_cerrojo():
+    """
+    Un demonio que heredara el descriptor del cerrojo se quedaría con él para
+    siempre, y cada instalación posterior diría que ya hay otra en marcha.
+    Pasó probándolo: el OpenVPN que arrancó fechas-log.sh se lo llevó.
+    """
+    texto = _leer(INSTALADOR)
+    for orden in ("systemctl restart ovpn-web", "fechas-log.sh\" --reiniciar",
+                  "bash deploy/instalar-openvpn.sh"):
+        for linea in texto.splitlines():
+            if orden in linea and not linea.lstrip().startswith(("#", "echo")):
+                assert "9>&-" in linea, linea.strip()

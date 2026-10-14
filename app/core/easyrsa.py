@@ -162,3 +162,66 @@ def rotar_tls_crypt(cfg):
     sabríamos si quedó bien.
     """
     return _ejecutar(cfg, ["rotar-tls-crypt"], timeout=90)
+
+
+def server_conf(cfg):
+    """
+    Las directivas del server.conf, sin material de clave.
+
+    Devuelve {'ruta': str, 'directivas': [[nombre, args...], ...]}. De un
+    bloque en línea (<tls-crypt>…) solo llega su nombre entre ángulos.
+    """
+    return _ejecutar(cfg, ["server-conf"], timeout=30)
+
+
+def aplicar_politicas(cfg, documento):
+    """
+    Le pasa al helper el documento ENTERO de políticas y lo aplica.
+
+    Por stdin: es un JSON de tamaño variable y no tiene sitio en argv. El
+    helper lo revalida todo por su cuenta antes de escribir nada.
+    """
+    return _ejecutar(cfg, ["aplicar-politicas"],
+                     entrada=json.dumps(documento), timeout=60)
+
+
+def bloqueos(cfg, bloquear=(), desbloquear=()):
+    """
+    Bloquea ([(ip, minutos)]) y desbloquea ([ip]) en el cortafuegos.
+
+    Devuelve la lista de lo que queda bloqueado: [{'ip', 'expira_s'}].
+    """
+    doc = {
+        "bloquear": [{"ip": ip, "minutos": int(minutos)} for ip, minutos in bloquear],
+        "desbloquear": list(desbloquear),
+    }
+    return _ejecutar(cfg, ["bloqueos"], entrada=json.dumps(doc), timeout=60)["bloqueadas"]
+
+
+def listar_bloqueos(cfg):
+    return _ejecutar(cfg, ["listar-bloqueos"], timeout=30)
+
+
+def totp_vpn(cfg, accion, cn=None, secreto=None):
+    """
+    Verificación en dos pasos de un cliente VPN: 'alta', 'baja' o 'listar'.
+
+    Devuelve la lista de CN que la tienen activada. El secreto va por stdin y
+    el helper no lo devuelve nunca.
+    """
+    doc = {"accion": accion}
+    if cn is not None:
+        doc["cn"] = validar_cn(cn)
+    if secreto is not None:
+        doc["secreto"] = secreto
+    return _ejecutar(cfg, ["totp-vpn"], entrada=json.dumps(doc), timeout=30)["clientes"]
+
+
+def caducidades(cfg):
+    """
+    {'clientes': {cn: iso}, 'ca': iso|None, 'servidor': iso|None, 'servidor_cn'}.
+
+    Fechas ISO en UTC. Solo de los certificados válidos: uno revocado ya no
+    da acceso, caduque cuando caduque.
+    """
+    return _ejecutar(cfg, ["caducidades"], timeout=60)

@@ -49,6 +49,10 @@ class ClienteOvpnCfg:
     remote_puerto: int = 1194
     proto: str = "udp"
     tls_crypt: str = "/etc/openvpn/tls-crypt.key"
+    # Clave de SERVIDOR de tls-crypt-v2. Vacío = se usa tls_crypt, la clave
+    # compartida. La rellena deploy/migrar-tls-crypt-v2.sh; con ella, cada
+    # .ovpn lleva una clave de cliente propia generada al descargarlo.
+    tls_crypt_v2: str = ""
     cipher: str = "AES-256-CBC"
     dns: List[str] = field(default_factory=list)
 
@@ -98,6 +102,10 @@ class SeguridadCfg:
     max_intentos_login: int = 5
     bloqueo_login_min: int = 15
     cookie_segura: bool = True
+    # Token del endpoint /metrics de Prometheus. Vacío = endpoint apagado (404).
+    # En el YAML y no en la base: el panel lo lee y no lo puede cambiar, así
+    # que quien entre en la web no puede abrirse una puerta nueva por aquí.
+    metricas_token: str = ""
 
 
 @dataclass

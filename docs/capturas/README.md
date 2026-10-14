@@ -26,15 +26,28 @@ pueden delatar el resto.
 
 ## Qué hay y qué falta
 
-| Archivo | Página | Estado |
+Todas salen de una instalación de pruebas con datos inventados: clientes `ana`
+y `luis` conectados de verdad a un OpenVPN 2.6, IPs reales de bucle local y de
+los rangos de documentación (`198.51.100.0/24`, `203.0.113.0/24`), y el
+histórico de 30 días de las gráficas generado.
+
+| Archivo | Página | Dónde se usa |
 |---|---|---|
-| `clientes.png` | `/clientes` | **En el README.** Falta que se vea un revocado; los dos que hay quedan por debajo del corte |
-| `login.png` | `/login` | **En el README.** Completa |
-| `panel.png` | `/` | Hecha, sin usar: salió con el tráfico a cero y sin nadie conectado. Repetir con datos plausibles |
-| `conexiones.png` | `/conexiones` | Hecha, sin usar: salió vacía. Repetir con dos o tres clientes conectados, con tráfico |
-| `perfil.png` | `/perfil` | Hecha, sin usar. Si se repite con el 2FA a medio activar, **el QR codifica un secreto TOTP real**: reactívalo después, o tómala con una cuenta de usar y tirar |
-| `logs.png` | `/logs` | Falta. El visor con los cuatro niveles de color a la vista |
-| `usuarios.png` | `/admin/usuarios` | Falta. Los tres roles, con el superusuario blindado |
+| `panel.png` | `/` | README (cabecera) y wiki *Vigilar* |
+| `clientes.png` | `/clientes` | README y wiki *Clientes VPN* |
+| `politicas.png` | `/clientes/ana/politica`, recortada a 980 px | README y wiki *Políticas* |
+| `seguridad.png` | `/seguridad`, recortada a 900 px | README y wiki *Seguridad* |
+| `conexiones.png` | `/conexiones` | README y wiki *Vigilar* |
+| `login.png` | `/login` | Wiki *Primeros pasos* |
+| `usuarios.png` | `/admin/usuarios` | Wiki *Primeros pasos* |
+| `perfil.png` | `/perfil` | Sin usar. Si se repite con el 2FA a medio activar, **el QR codifica un secreto TOTP real**: reactívalo después, o tómala con una cuenta de usar y tirar |
+
+Faltan `/logs` con los cuatro niveles de color a la vista (en la instalación de
+pruebas el log solo trae el ruido del management) y la pestaña VPN de
+*Auditoría* sin el aviso de `--suppress-timestamps`.
+
+Con el navegador en otro idioma, los campos de fecha y hora salen como
+`12/31/2026, 06:00 PM`. Tómalas con el navegador en español.
 
 ## Cómo tomarlas, paso a paso
 
@@ -75,6 +88,6 @@ para el README.
 
 ## Al añadirlas
 
-Enlázalas en el README principal, en la sección *Qué hace*. Con `alt` que
+Enlázalas en el README principal (sección *Capturas*) o en la página de la [wiki](../wiki/README.md) que corresponda. Con `alt` que
 describa lo que se ve, no «captura de pantalla»: es lo que lee quien navega sin
 imágenes o con lector de pantalla.

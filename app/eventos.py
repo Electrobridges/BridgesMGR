@@ -178,7 +178,76 @@ def ingerir(cfg):
         if not lineas:
             break
 
+    if total:
+        vigilar_perfiles_compartidos(cfg)
+
     return total
+
+
+# Un perfil compartido se delata solo: sin 'duplicate-cn', cada vez que uno de
+# los dos conecta, OpenVPN echa al otro, que reconecta y echa al primero. Un
+# portátil que cambia de wifi a 4G desplaza su propia sesión UNA vez; lo que no
+# hace es ir y volver entre dos IP varias veces en pocos minutos.
+VENTANA_COMPARTIDO_MIN = 15
+DESPLAZAMIENTOS_COMPARTIDO = 3
+# No se repite el aviso del mismo perfil antes de esto: mientras sigan
+# peleándose saldría uno cada cinco minutos.
+SILENCIO_COMPARTIDO_H = 6
+AJUSTE_COMPARTIDO = "perfil_compartido_aviso"
+
+
+def es_vaiven(ips):
+    """
+    ¿La secuencia de IP que desplazaron sesiones parece dos sitios peleándose?
+
+    Al menos DESPLAZAMIENTOS_COMPARTIDO desplazamientos, desde dos IP o más, y
+    con la IP cambiando de uno al siguiente más de una vez: ir de A a B es
+    cambiar de red, ir de A a B y volver a A ya no.
+    """
+    if len(ips) < DESPLAZAMIENTOS_COMPARTIDO or len(set(ips)) < 2:
+        return False
+    cambios = sum(1 for a, b in zip(ips, ips[1:]) if a != b)
+    return cambios >= 2
+
+
+def vigilar_perfiles_compartidos(cfg, ahora=None):
+    """Avisa de los perfiles que parecen estar en dos sitios a la vez."""
+    from datetime import timedelta
+
+    from . import notificar
+
+    ruta_db = cfg.seguridad.db_path
+    ahora = ahora or datetime.now(timezone.utc)
+    desde = (ahora - timedelta(minutes=VENTANA_COMPARTIDO_MIN)).isoformat()
+
+    avisados = {}
+    for linea in (db.obtener_ajuste(ruta_db, AJUSTE_COMPARTIDO, "") or "").splitlines():
+        cn, _, cuando = linea.partition("\t")
+        avisados[cn] = cuando
+
+    cambiado = False
+    for cn, ips in db.duplicadas_recientes(ruta_db, desde).items():
+        if not es_vaiven(ips):
+            continue
+        anterior = avisados.get(cn)
+        if anterior:
+            try:
+                if ahora - datetime.fromisoformat(anterior) < timedelta(hours=SILENCIO_COMPARTIDO_H):
+                    continue
+            except ValueError:
+                pass
+
+        notificar.auditar_sistema(
+            cfg, "perfil_compartido", cn,
+            detalle="%d sesiones desplazadas en %d min desde %s"
+                    % (len(ips), VENTANA_COMPARTIDO_MIN, ", ".join(sorted(set(ips)))),
+        )
+        avisados[cn] = ahora.isoformat()
+        cambiado = True
+
+    if cambiado:
+        db.guardar_ajuste(ruta_db, AJUSTE_COMPARTIDO,
+                          "\n".join("%s\t%s" % par for par in sorted(avisados.items())))
 
 
 def _una_pasada(cfg, ultima):

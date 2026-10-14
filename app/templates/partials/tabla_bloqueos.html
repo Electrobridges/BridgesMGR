@@ -1,0 +1,59 @@
+{% if error %}
+<div class="aviso aviso-aviso">{{ error }}</div>
+{% endif %}
+
+<h3>Bloqueadas ahora</h3>
+{% if activos %}
+<div class="tabla-scroll">
+<table class="tabla">
+  <thead><tr><th>IP</th><th>Desde</th><th>Hasta</th><th>Motivo</th><th>Por</th><th></th></tr></thead>
+  <tbody>
+    {% for b in activos %}
+    <tr>
+      <td class="destacado">{{ b.ip }}
+        {% if en_cortafuegos is not none and b.ip not in en_cortafuegos %}
+        <span class="etiqueta etiqueta-aviso" title="El registro dice que sigue bloqueada, pero no está en el cortafuegos: probablemente se reinició la máquina">no está en el cortafuegos</span>
+        {% endif %}
+      </td>
+      <td class="tenue">{{ b.desde[:16].replace('T', ' ') }} UTC</td>
+      <td class="tenue">{{ b.hasta[:16].replace('T', ' ') }} UTC</td>
+      <td>{{ b.motivo or '' }}</td>
+      <td class="tenue">{{ b.por or '' }}</td>
+      <td>
+        <button class="boton pequeno"
+                hx-disabled-elt="this"
+                hx-post="/seguridad/bloqueos/{{ b.ip }}/levantar"
+                hx-target="#avisos"
+                hx-swap="innerHTML"
+                hx-confirm="¿Desbloquear {{ b.ip }}?">Desbloquear</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="tenue">Ninguna IP bloqueada.</p>
+{% endif %}
+
+{% if historial %}
+<details class="archivados">
+  <summary>Últimos bloqueos ({{ historial | length }})</summary>
+  <div class="tabla-scroll">
+  <table class="tabla">
+    <thead><tr><th>IP</th><th>Desde</th><th>Motivo</th><th>Por</th><th>Levantado</th></tr></thead>
+    <tbody>
+      {% for b in historial %}
+      <tr>
+        <td>{{ b.ip }}</td>
+        <td class="tenue">{{ b.desde[:16].replace('T', ' ') }} UTC</td>
+        <td>{{ b.motivo or '' }}</td>
+        <td class="tenue">{{ b.por or '' }}</td>
+        <td class="tenue">{{ b.levantado[:16].replace('T', ' ') if b.levantado else '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+{% endif %}

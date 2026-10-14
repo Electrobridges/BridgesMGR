@@ -24,6 +24,13 @@ porque así hay **un único escritor**: hacerlo al pintar la página duplicaría
 tramo con dos visitas a la vez. No avisa de nada: lo que salga mal se enseña en
 la propia pestaña, que es donde se va a mirar.
 
+Y una quinta, que va a otro ritmo: **hacer cumplir las políticas por cliente**
+a quien ya está dentro. El script client-connect decide quién entra, pero no
+puede sacar a nadie: el que se queda fuera de su franja, el que supera la
+duración máxima o aquel cuyo acceso temporal vence con la sesión abierta. Eso
+lo hace esto, cada minuto, por el management. Y revoca el certificado de un
+acceso temporal vencido, para que no dependa solo del script.
+
 Lo arranca app/servidor.py y no crear_app(): así las pruebas, que construyen la
 aplicación cientos de veces, no levantan un hilo cada vez.
 """
@@ -31,12 +38,17 @@ aplicación cientos de veces, no levantan un hilo cada vez.
 import threading
 from datetime import datetime, timezone
 
-from . import db, eventos, notificar, respaldar
-from .core import easyrsa, respaldos, salud
+from . import bloqueos, caducidades, db, eventos, notificar, politicas, respaldar, trafico
+from .core import conexiones, easyrsa, mgmt, respaldos, salud
+from .core import politicas as pol
 
 # Cada cuánto se mira. Cinco minutos: lo que vigila cambia en días o de golpe,
 # así que apurar más solo añade ruido y llamadas al helper.
 INTERVALO = 300
+
+# Las políticas van más deprisa: una franja que cierra a las 19:00 no puede
+# cerrar a las 19:05. Un minuto es la resolución con la que se escriben.
+INTERVALO_POLITICAS = 60
 
 # Estado entre vueltas, en `ajustes` para que sobreviva a un reinicio: si no,
 # reiniciar el panel volvería a avisar de lo mismo.
@@ -214,10 +226,104 @@ def _ingerir_eventos(cfg):
     """
     eventos.ingerir(cfg)
 
+    # Justo después de ingerir, que es cuando hay sucesos nuevos que contar.
+    bloqueos.revisar(cfg)
+
+
+# Accesos temporales cuyo certificado ya consta revocado, como (cn, expira).
+# Solo evita preguntarle al helper cada minuto por algo ya hecho; si cambia la
+# caducidad cambia la clave, y tras un reinicio se vuelve a comprobar todo.
+_caducados_confirmados = set()
+
+
+def _caducar(cfg, todas, ahora):
+    """Revoca el certificado de los accesos temporales ya vencidos."""
+    vencidas = {cn: p for cn, p in todas.items()
+                if pol.caducada(p, ahora) and (cn, p["expira"]) not in _caducados_confirmados}
+    if not vencidas:
+        return
+
+    try:
+        validos = set(easyrsa.listar_certificados(cfg)["validos"])
+    except easyrsa.ErrorHelper:
+        return
+
+    for cn, p in sorted(vencidas.items()):
+        if cn in validos:
+            try:
+                easyrsa.revocar(cfg, cn)
+            except easyrsa.ErrorHelper as e:
+                notificar.auditar_sistema(cfg, "caducar_cliente", cn, "error", str(e))
+                # Se da por visto igualmente: reintentarlo cada minuto llenaría
+                # la auditoría y el buzón con el mismo fallo. El script de
+                # conexión sigue rechazándolo mientras tanto.
+                _caducados_confirmados.add((cn, p["expira"]))
+                continue
+            caducidades.invalidar(cfg.seguridad.db_path)
+            notificar.auditar_sistema(
+                cfg, "caducar_cliente", cn,
+                detalle="acceso temporal vencido el %s" % p["expira"].replace("T", " "),
+            )
+        _caducados_confirmados.add((cn, p["expira"]))
+
+
+def _aplicar_politicas(cfg, ahora=None):
+    """
+    Expulsa a quien se ha quedado fuera de su política estando dentro.
+
+    'ahora' es hora LOCAL y sin zona, como los horarios.
+
+    Expulsar por duración se anota con otra acción, 'fin_sesion', que no
+    notifica: es lo normal y esperado, y un aviso cada ocho horas por cada
+    cliente enseñaría a ignorar los que importan. Expulsar por horario,
+    caducidad o bloqueo sí avisa.
+    """
+    ruta = cfg.seguridad.db_path
+    todas = db.listar_politicas(ruta)
+    maximo = db.max_sesion_global(ruta)
+    if not todas and not maximo:
+        return
+
+    ahora = ahora or datetime.now()
+    _caducar(cfg, todas, ahora)
+
+    try:
+        activas = conexiones.anotar_duraciones(
+            mgmt.obtener_conexiones(cfg.openvpn.mgmt_host, cfg.openvpn.mgmt_port))
+    except mgmt.ErrorManagement:
+        # Sin management no se puede expulsar a nadie, ni sirve de nada saber
+        # a quién habría que expulsar.
+        return
+
+    expulsados = set()
+    for c in activas:
+        cn = c.get("user")
+        if not cn or cn in expulsados:
+            continue
+
+        motivo = pol.motivo_expulsion(todas.get(cn), maximo, c.get("connected_seconds"), ahora)
+        if not motivo:
+            continue
+
+        accion = "fin_sesion" if motivo == pol.MOTIVO_DURACION else "expulsar_politica"
+        try:
+            mgmt.desconectar_cliente(cfg.openvpn.mgmt_host, cfg.openvpn.mgmt_port, cn)
+        except (mgmt.ErrorManagement, ValueError) as e:
+            notificar.auditar_sistema(cfg, accion, cn, "error", str(e))
+            continue
+
+        expulsados.add(cn)
+        notificar.auditar_sistema(cfg, accion, cn, detalle=pol.TEXTO_MOTIVO[motivo])
+
+
+def _revisar_caducidades(cfg):
+    """La CA, el certificado del servidor y los de cliente. Ver caducidades.py."""
+    caducidades.revisar(cfg)
+
 
 def _vuelta(cfg):
     for revision in (_revisar_crl, _revisar_servicio, _revisar_respaldo,
-                     _ingerir_eventos):
+                     _revisar_caducidades, _ingerir_eventos):
         try:
             revision(cfg)
         except Exception:  # noqa: BLE001
@@ -227,9 +333,31 @@ def _vuelta(cfg):
             pass
 
 
+def _medir_trafico(cfg):
+    """Suma el tráfico de cada sesión y bloquea o libera por cuota."""
+    activas, _fuente, _errores = conexiones.obtener_conexiones(cfg)
+    trafico.muestrear(cfg, activas)
+    trafico.revisar_cuotas(cfg)
+
+
+def _vuelta_politicas(cfg):
+    # El tráfico antes que las políticas: si alguien acaba de agotar su cuota,
+    # su bloqueo ya está puesto cuando se mira a quién hay que sacar.
+    for tarea in (_medir_trafico, _aplicar_politicas):
+        try:
+            tarea(cfg)
+        except Exception:  # noqa: BLE001
+            # Mismo criterio que _vuelta(): nada de aquí puede matar el hilo.
+            pass
+
+
 def _bucle(cfg):
-    while not _parar.wait(INTERVALO):
-        _vuelta(cfg)
+    pasadas = 0
+    while not _parar.wait(INTERVALO_POLITICAS):
+        _vuelta_politicas(cfg)
+        pasadas += 1
+        if pasadas % (INTERVALO // INTERVALO_POLITICAS) == 0:
+            _vuelta(cfg)
 
 
 def arrancar(cfg):
@@ -252,7 +380,18 @@ def arrancar(cfg):
         return _hilo
 
     db.init_db(cfg.seguridad.db_path)
+
+    # El archivo que lee OpenVPN es una copia de lo que dice la base, y puede
+    # haberse quedado atrás: un respaldo de la base restaurado, un servidor
+    # reconstruido. Se vuelve a escribir entero; si no hay políticas, no se
+    # toca nada.
+    try:
+        politicas.reaplicar(cfg)
+    except Exception:  # noqa: BLE001
+        pass
+
     _vuelta(cfg)
+    _vuelta_politicas(cfg)
 
     _parar.clear()
     _hilo = threading.Thread(target=_bucle, args=(cfg,), name="vigilante",
