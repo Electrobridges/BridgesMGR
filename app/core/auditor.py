@@ -92,9 +92,15 @@ def _canal_de_control(d):
         return [_h(BIEN, "tls", "tls-crypt-v2: canal de control cifrado con clave por cliente",
                    "Un perfil filtrado no compromete a los demás.")]
     if sc.tiene(d, "tls-crypt") or "<tls-crypt>" in [x[0] for x in d]:
-        return [_h(BIEN, "tls", "tls-crypt: canal de control cifrado y autenticado",
-                   "El servidor ni contesta a quien no tenga la clave, lo que lo hace "
-                   "invisible a un escaneo y corta de raíz los ataques al handshake TLS.")]
+        return [
+            _h(BIEN, "tls", "tls-crypt: canal de control cifrado y autenticado",
+               "El servidor ni contesta a quien no tenga la clave, lo que lo hace "
+               "invisible a un escaneo y corta de raíz los ataques al handshake TLS."),
+            _h(SUGERENCIA, "tls-v2", "La clave tls-crypt es la misma en todos los perfiles",
+               "Quien se haga con un .ovpn tiene la clave de todos. Con tls-crypt-v2 "
+               "cada perfil lleva la suya; exige OpenVPN 2.6 en servidor y clientes.",
+               "sudo bash deploy/migrar-tls-crypt-v2.sh"),
+        ]
     if sc.tiene(d, "tls-auth") or "<tls-auth>" in [x[0] for x in d]:
         return [_h(AVISO, "tls", "tls-auth autentica el canal de control pero no lo cifra",
                    "tls-crypt hace lo mismo y además oculta el certificado del cliente "

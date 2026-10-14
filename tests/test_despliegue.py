@@ -1055,3 +1055,37 @@ def test_las_reglas_de_acceso_sobreviven_a_un_reinicio():
     texto = _leer(INSTALADOR)
     assert "ovpn-web-acceso.service" in texto
     assert "systemctl enable ovpn-web-acceso" in texto
+
+
+# ------------------------------------------------------------- tls-crypt-v2
+
+MIGRAR_V2 = DEPLOY / "migrar-tls-crypt-v2.sh"
+
+
+def test_migrar_a_v2_no_esta_al_alcance_del_panel():
+    """Cambia el server.conf: como reconstruir-ca.sh, lo lanza una persona."""
+    assert "migrar-tls-crypt-v2" not in _leer(SUDOERS)
+    assert "migrar-tls-crypt-v2" not in "".join(_cadenas_del_helper())
+
+
+def test_migrar_a_v2_exige_la_version_arreglada():
+    """CVE-2025-2704: de 2.6.1 a 2.6.13 un servidor con tls-crypt-v2 se tumba."""
+    assert "VERSION_MINIMA=2.6.14" in _leer(MIGRAR_V2)
+
+
+def test_migrar_a_v2_respalda_confirma_y_deshace():
+    texto = _leer(MIGRAR_V2)
+    assert '[[ $respuesta == "MIGRAR" ]]' in texto
+    assert texto.index('cp -a "$SERVER_CONF" "$COPIA/"') < texto.index("Cambiando el server.conf")
+    reinicio = texto.index('info "Reiniciando $SERVICIO"')
+    assert "restaurar" in texto[reinicio:reinicio + 400]
+
+
+def test_migrar_a_v2_avisa_al_panel_como_ovpnweb():
+    texto = _leer(MIGRAR_V2)
+    assert 'sudo -u "$USUARIO_PANEL" venv/bin/python -m app.cli marcar-reparto' in texto
+    assert "migracion_tls_crypt_v2" in texto
+
+
+def test_con_v2_no_se_rota_la_clave_compartida():
+    assert "tls-crypt-v2 está activo" in _leer(HELPER)

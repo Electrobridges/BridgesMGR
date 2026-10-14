@@ -510,11 +510,46 @@ def cmd_ovpn(cfg, cn):
         "<key>", leer_pem(key), "</key>",
     ]
 
+    v2 = cliente.get("tls_crypt_v2")
     tls_crypt = cliente.get("tls_crypt")
-    if tls_crypt and os.path.isfile(tls_crypt):
+    if v2:
+        if not os.path.isfile(v2):
+            error("cliente_ovpn.tls_crypt_v2 apunta a %s, que no existe" % v2)
+        partes += ["<tls-crypt-v2>", clave_tls_crypt_v2_cliente(v2), "</tls-crypt-v2>"]
+    elif tls_crypt and os.path.isfile(tls_crypt):
         partes += ["<tls-crypt>", leer_pem(tls_crypt), "</tls-crypt>"]
 
     return {"ok": True, "cn": cn, "contenido": "\n".join(partes) + "\n"}
+
+
+def clave_tls_crypt_v2_cliente(clave_servidor):
+    """
+    Genera una clave tls-crypt-v2 de cliente nueva, envuelta con la del servidor.
+
+    Una distinta en cada perfil, y por eso no se guarda en ningún sitio: el
+    servidor no necesita conocerlas —las desenvuelve con la suya— y lo que no
+    se guarda no se puede filtrar. Que un .ovpn caiga en malas manos deja de
+    exponer la clave de todos los demás, que es lo que pasa con tls-crypt.
+
+    openvpn solo sabe escribirla en un archivo, así que va a un directorio
+    temporal de root (0700) que se borra al terminar.
+    """
+    import tempfile
+
+    directorio = tempfile.mkdtemp(prefix="ovpnweb-v2-")
+    try:
+        destino = os.path.join(directorio, "cliente.key")
+        proc = subprocess.run(
+            ["openvpn", "--tls-crypt-v2", clave_servidor,
+             "--genkey", "tls-crypt-v2-client", destino],
+            capture_output=True, text=True, timeout=TIMEOUT,
+        )
+        if proc.returncode != 0 or not os.path.isfile(destino):
+            error("No se pudo generar la clave tls-crypt-v2 del cliente: %s"
+                  % (proc.stderr or proc.stdout).strip())
+        return leer_pem(destino)
+    finally:
+        shutil.rmtree(directorio, ignore_errors=True)
 
 
 def cmd_estado_servicio(cfg):
@@ -560,6 +595,11 @@ def cmd_rotar_tls_crypt(cfg):
     Nunca devuelve material de clave: solo una huella recortada, que es lo que
     permite comprobar que cambió sin exponerla.
     """
+    if (cfg.get("cliente_ovpn") or {}).get("tls_crypt_v2"):
+        # Con tls-crypt-v2 el server.conf ya no usa la clave compartida: rotarla
+        # no cambiaría nada salvo dejar al panel creyendo que sí.
+        error("tls-crypt-v2 está activo: la clave compartida ya no se usa y no "
+              "hay nada que rotar. Cada perfil lleva su propia clave.")
     ruta = (cfg.get("cliente_ovpn") or {}).get("tls_crypt") or ""
     if not ruta:
         error("No hay cliente_ovpn.tls_crypt en la configuración: nada que rotar")

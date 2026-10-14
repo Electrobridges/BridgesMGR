@@ -379,3 +379,50 @@ def test_aplicar_politicas_rechaza_documentos_ajenos(helper, cfg_helper, monkeyp
         monkeypatch.setattr(sys, "stdin", io.StringIO(bruto))
         with pytest.raises(SystemExit):
             helper.cmd_aplicar_politicas(cfg_helper)
+
+
+# ------------------------------------------------------------ tls-crypt-v2
+
+def test_el_perfil_lleva_una_clave_v2_propia(helper, tmp_path, monkeypatch):
+    """
+    Con tls_crypt_v2 configurado, cada .ovpn lleva una clave de cliente recién
+    generada y no la compartida. Se usa un 'openvpn' falso que escribe una
+    clave distinta en cada llamada.
+    """
+    import os
+    import stat
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    falso = bin_dir / "openvpn"
+    falso.write_text(
+        "#!/bin/sh\n"
+        "# --tls-crypt-v2 SERVIDOR --genkey tls-crypt-v2-client DESTINO\n"
+        "printf -- '-----BEGIN OpenVPN tls-crypt-v2 client key-----\\n%s\\n"
+        "-----END OpenVPN tls-crypt-v2 client key-----\\n' \"$$\" > \"$5\"\n"
+    )
+    falso.chmod(falso.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", "%s:%s" % (bin_dir, os.environ["PATH"]))
+
+    pki = tmp_path / "easy-rsa" / "pki"
+    (pki / "issued").mkdir(parents=True)
+    (pki / "private").mkdir()
+    pem = "-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----\n"
+    (pki / "ca.crt").write_text(pem)
+    (pki / "issued" / "ana.crt").write_text(pem)
+    (pki / "private" / "ana.key").write_text(pem.replace("CERTIFICATE", "PRIVATE KEY"))
+    servidor = tmp_path / "v2-servidor.key"
+    servidor.write_text("clave de servidor")
+    compartida = tmp_path / "tls-crypt.key"
+    compartida.write_text("-----BEGIN OpenVPN Static key V1-----\nCOMPARTIDA\n-----END x-----\n")
+
+    cfg = {"openvpn": {"easyrsa_path": str(tmp_path / "easy-rsa")},
+           "cliente_ovpn": {"remote_host": "vpn.ejemplo.com", "tls_crypt": str(compartida),
+                            "tls_crypt_v2": str(servidor)}}
+
+    uno = helper.cmd_ovpn(cfg, "ana")["contenido"]
+    dos = helper.cmd_ovpn(cfg, "ana")["contenido"]
+
+    assert "<tls-crypt-v2>" in uno and "BEGIN OpenVPN tls-crypt-v2 client key" in uno
+    assert "COMPARTIDA" not in uno and "<tls-crypt>" not in uno
+    assert uno != dos, "cada descarga tiene que llevar una clave nueva"

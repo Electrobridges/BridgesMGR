@@ -20,6 +20,9 @@
         Se rotó la clave <code>tls-crypt</code> del servidor.
       {% elif reparto.motivo == 'reconstruccion_ca' %}
         Se reconstruyó la autoridad certificadora.
+      {% elif reparto.motivo == 'migracion_tls_crypt_v2' %}
+        El servidor pasó a <code>tls-crypt-v2</code>: cada perfil lleva ahora su
+        propia clave, y hacen falta clientes OpenVPN 2.6 o posteriores.
       {% else %}
         Se hizo una operación que invalida los perfiles.
       {% endif %}

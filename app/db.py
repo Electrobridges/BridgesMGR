@@ -224,7 +224,8 @@ CREATE INDEX IF NOT EXISTS idx_repartos_cerrado ON repartos(cerrado);
 # plantilla decide el mensaje a partir de esto, y la auditoría se puede filtrar.
 MOTIVO_TLS_CRYPT = "rotacion_tls_crypt"
 MOTIVO_CA = "reconstruccion_ca"
-MOTIVOS = (MOTIVO_TLS_CRYPT, MOTIVO_CA)
+MOTIVO_TLS_CRYPT_V2 = "migracion_tls_crypt_v2"
+MOTIVOS = (MOTIVO_TLS_CRYPT, MOTIVO_CA, MOTIVO_TLS_CRYPT_V2)
 
 # Columnas añadidas después de la primera versión. CREATE TABLE IF NOT EXISTS
 # no toca una tabla que ya existe, así que las bases ya instaladas hay que

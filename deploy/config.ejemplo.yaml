@@ -56,6 +56,10 @@ cliente_ovpn:
   # Si tu server.conf usa tls-crypt, apunta aquí a la clave para embeberla
   # en los .ovpn. Déjalo vacío si no usas tls-crypt.
   tls_crypt: "/etc/openvpn/tls-crypt.key"
+  # Clave de servidor de tls-crypt-v2. Vacío = tls-crypt con la clave de arriba.
+  # No la pongas a mano: la deja deploy/migrar-tls-crypt-v2.sh, que también
+  # cambia el server.conf. Con ella cada .ovpn lleva su propia clave.
+  tls_crypt_v2: ""
 
 # Avisos de sucesos importantes. Es lo ÚNICO que hace que el panel salga a
 # internet: sin esto solo habla con 127.0.0.1, el disco y sudo. Si lo dejas
