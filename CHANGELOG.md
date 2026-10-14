@@ -46,9 +46,19 @@ el versionado es [SemVer](https://semver.org/lang/es/).
   servidor, por escalones como los de la CRL.
 - **Tráfico por cliente y día**, y **métricas para Prometheus** en `/metrics`
   (apagado salvo que se configure `seguridad.metricas_token`).
+- **Gráficas en el panel**: tráfico y conexiones por día de los últimos 30
+  días, rechazos por día y el ranking de tráfico del mes por cliente, más la
+  gráfica de tráfico de cada cliente en sus políticas. SVG generado en el
+  servidor, sin librerías ni scripts externos: la CSP sigue en `'self'`.
+- **Wiki de uso** en `docs/wiki/`: el día a día, tarea a tarea, con capturas
+  — clientes, políticas, dos pasos en la VPN, seguridad, vigilancia y
+  mantenimiento.
 
 ### Cambiado
 
+- README rehecho: logo, capturas nuevas de una instalación de pruebas con
+  clientes conectados de verdad, diagrama de la frontera de privilegios y
+  enlace a la wiki.
 - Los servidores que monta `deploy/instalar-openvpn.sh` reservan el cuarto
   alto de la red para IP fijas (`server … nopool` + `ifconfig-pool`), corren
   con el grupo propio `ovpnweb-vpn` en vez de `nogroup`, añaden
