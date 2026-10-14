@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% set activo = 'seguridad' %}
+{% block titulo %}Seguridad — BridgesMGR{% endblock %}
+
+{% block contenido %}
+<h1>Seguridad del servidor VPN</h1>
+<p class="tenue">
+  Revisión del <code>{{ ruta or 'server.conf' }}</code> contra las recomendaciones de
+  endurecimiento de OpenVPN. <strong>Solo lee</strong>: el panel no puede escribir el
+  <code>server.conf</code> —quien pudiera, ejecutaría código como root—, así que
+  cada arreglo trae la línea que hay que poner a mano. Después, reinicia OpenVPN.
+</p>
+
+{% if error %}
+<div class="aviso aviso-error">{{ error }}</div>
+{% elif informe %}
+
+<div class="tarjetas">
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">Nota</span>
+    <span class="tarjeta-valor {{ 'ok' if informe.nota >= 85 else ('mal' if informe.nota < 60 else '') }}">{{ informe.nota }}<span class="tenue pequeno"> / 100</span></span>
+  </div>
+  {% for nivel, (texto, clase) in niveles.items() %}
+  <div class="tarjeta">
+    <span class="tarjeta-etiqueta">{{ texto }}</span>
+    <span class="tarjeta-valor">{{ informe.cuentas[nivel] }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% if informe.version %}<p class="tenue pequeno">{{ informe.version }}</p>{% endif %}
+
+<ul class="hallazgos">
+  {% for h in informe.hallazgos %}
+  {% set texto, clase = niveles[h.nivel] %}
+  <li class="hallazgo hallazgo-{{ clase }}">
+    <span class="etiqueta etiqueta-{{ clase }}">{{ texto }}</span>
+    <div>
+      <p class="destacado">{{ h.titulo }}</p>
+      <p class="tenue">{{ h.porque }}</p>
+      {% if h.arreglo and h.nivel != 'bien' %}
+      <p class="arreglo">Arreglo: <code>{{ h.arreglo }}</code></p>
+      {% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

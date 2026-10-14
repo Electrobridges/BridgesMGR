@@ -685,3 +685,17 @@ label { font-size: .8rem; font-weight: 600; color: var(--texto-3); }
   /* La hora de «Actualizado» sigue cambiando; solo se quita el destello. */
   .linea-actualizado { animation: none; }
 }
+
+/* ------------------------------------------------- auditoría del servidor */
+.hallazgos { list-style: none; margin: 1rem 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.hallazgo {
+  display: grid; grid-template-columns: 7.5rem 1fr; gap: .75rem; align-items: start;
+  padding: .85rem 1rem; background: var(--fondo-2);
+  border: 1px solid var(--linea); border-radius: var(--radio-sm);
+}
+.hallazgo p { margin: 0 0 .25rem; }
+.hallazgo .etiqueta { justify-self: start; }
+.hallazgo-mal { border-color: rgba(248, 113, 113, .35); }
+.arreglo { font-size: .875rem; color: var(--texto-2); }
+.arreglo code { color: var(--cian-claro); white-space: pre-wrap; }
+@media (max-width: 600px) { .hallazgo { grid-template-columns: 1fr; } }

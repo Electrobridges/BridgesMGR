@@ -395,6 +395,7 @@ data-ciphers AES-256-GCM:AES-128-GCM
 data-ciphers-fallback AES-256-CBC
 auth SHA256
 tls-version-min 1.2
+tls-cert-profile preferred
 remote-cert-tls client
 
 # Solo en el bucle local. Cualquiera con una sesión en esta máquina puede

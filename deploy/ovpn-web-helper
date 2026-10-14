@@ -717,7 +717,18 @@ def cmd_server_conf(cfg):
     ruta, directivas = leer_server_conf(cfg)
     if ruta is None:
         error("No se encontró el server.conf (declara openvpn.server_conf)")
-    return {"ruta": ruta, "directivas": directivas}
+
+    # La primera línea de 'openvpn --version', para cruzarla con fallos
+    # conocidos. Que no se pueda averiguar no es un error: se audita igual.
+    version = ""
+    try:
+        proc = subprocess.run(["openvpn", "--version"], capture_output=True,
+                              text=True, timeout=10)
+        version = (proc.stdout or "").splitlines()[0].strip() if proc.stdout else ""
+    except (OSError, subprocess.SubprocessError, IndexError):
+        pass
+
+    return {"ruta": ruta, "directivas": directivas, "version": version}
 
 
 def red_vpn(cfg):
