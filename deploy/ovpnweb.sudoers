@@ -1,7 +1,7 @@
 # /etc/sudoers.d/ovpnweb  —  modo 0440, propietario root:root
 #
 # El panel corre como 'ovpnweb' sin privilegios. Esta es la ÚNICA cosa que
-# puede ejecutar como root, y es un script cerrado con seis subcomandos que
+# puede ejecutar como root, y es un script cerrado con subcomandos fijos que
 # revalida sus argumentos y no acepta rutas desde fuera.
 #
 # Deliberadamente NO se autoriza easyrsa directamente: 'easyrsa' acepta

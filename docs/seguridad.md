@@ -24,7 +24,7 @@ navegador
 panel (usuario ovpnweb, sin privilegios)
     │  sudo — lo único autorizado
     ▼
-/usr/local/sbin/ovpn-web-helper (root, 6 subcomandos)
+/usr/local/sbin/ovpn-web-helper (root, subcomandos cerrados)
     │
     ▼
 easyrsa · PKI · systemctl
@@ -34,7 +34,7 @@ El servicio corre como `ovpnweb`: sin shell, sin directorio propio, y **sin
 poder escribir en la PKI ni leer claves privadas**. Solo está en el grupo `adm`
 para leer los logs de OpenVPN, que es lo único que no pasa por el helper.
 
-El helper acepta seis subcomandos y nada más:
+El helper acepta estos subcomandos y nada más:
 
 | Subcomando | Qué hace |
 |---|---|
@@ -42,8 +42,45 @@ El helper acepta seis subcomandos y nada más:
 | `crear <CN> [con-clave]` | Emite un certificado de cliente; con la marca, cifra su clave privada con la contraseña que llega por stdin |
 | `revocar <CN>` | Revoca y regenera la CRL |
 | `restaurar <CN> [con-clave]` | Rehace el certificado de un CN revocado |
-| `ovpn <CN>` | Monta el perfil `.ovpn` completo |
+| `ovpn <CN>` | Monta el perfil `.ovpn` completo; con tls-crypt-v2, con una clave de cliente nueva |
 | `estado-servicio` | Consulta el estado de la unidad de OpenVPN |
+| `rotar-tls-crypt` | Genera una clave tls-crypt nueva y reinicia OpenVPN, deshaciendo si no vuelve |
+| `server-conf` | Devuelve las directivas del `server.conf` **sin** el contenido de los bloques en línea, y la versión de OpenVPN |
+| `aplicar-politicas` | Recibe por stdin el documento entero de políticas, lo revalida y escribe `/etc/openvpn/ovpn-web/politicas.json` y las reglas de nftables |
+| `bloqueos` / `listar-bloqueos` | Añade o quita IPs del set de nftables con caducidad, y lo lista |
+| `totp-vpn` | Activa, quita o lista la verificación en dos pasos de un cliente VPN (secreto por stdin; nunca lo devuelve) |
+| `caducidades` | Fechas de caducidad de los certificados válidos, la CA y el del servidor |
+
+Todo lo que no es un CN llega por **stdin** en JSON, nunca por argumento, y el
+helper lo revalida entero aunque el panel ya lo haya hecho.
+
+### Lo que el helper escribe fuera de la PKI
+
+Una sola carpeta, `/etc/openvpn/ovpn-web/`, y por una sola función,
+`_escribir_atomico()`, que rechaza en tiempo de ejecución cualquier destino que
+no esté dentro. Ahí van las políticas (`politicas.json`, 0644, las lee el
+script de conexión como `nobody`), las reglas de acceso (`acceso.nft`) y los
+secretos de la verificación en dos pasos (`totp-vpn.json`, `root:ovpnweb-vpn`
+0640: solo los lee OpenVPN, que corre con ese grupo). **El `server.conf` no se
+escribe nunca**: quien pueda hacerlo mete un `script-security 2` con un `up`
+propio y ejecuta código como root. Hay una prueba que lo impide.
+
+### Los dos scripts que ejecuta OpenVPN
+
+`/usr/local/lib/ovpn-web/client-connect` (políticas al conectar) y
+`/usr/local/lib/ovpn-web/verificar-totp` (segundo factor). Los instala root,
+están fuera del `ReadWritePaths` de la unidad del panel —el panel decide las
+políticas, pero no el código que las aplica—, corren con `python3 -I` y solo
+usan la biblioteca estándar. Repiten la evaluación del panel en vez de
+importarla, como el resto de lo que vive a este lado de la frontera, y hay
+pruebas que comparan las dos copias.
+
+### Lo que sigue siendo manual
+
+`deploy/reconstruir-ca.sh` y `deploy/migrar-tls-crypt-v2.sh` cambian el
+`server.conf`, así que no están en el helper ni en el sudoers: los lanza una
+persona con sudo, piden confirmación escrita, respaldan y deshacen solos si
+OpenVPN no vuelve a levantar.
 
 Responde JSON por stdout; los errores van a stderr con código distinto de cero.
 

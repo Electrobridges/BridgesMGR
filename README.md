@@ -41,7 +41,7 @@ que conviene entender cómo está montado antes de instalarlo.
 | Decisión | Por qué |
 |---|---|
 | El servicio corre como `ovpnweb`, sin privilegios ni shell | Un fallo en la web no es root en el servidor VPN |
-| Todo lo privilegiado pasa por `/usr/local/sbin/ovpn-web-helper` | Un único script cerrado, con seis subcomandos, fácil de auditar |
+| Todo lo privilegiado pasa por `/usr/local/sbin/ovpn-web-helper` | Un único script cerrado, con subcomandos fijos, fácil de auditar |
 | `sudoers` autoriza **solo ese script**, nunca `easyrsa` | `easyrsa` acepta `--pki-dir` y `--vars`: autorizarlo con comodines equivale a dar root |
 | El helper lee sus rutas de `config.yaml` (root:ovpnweb 0640), jamás de sus argumentos | Si aceptara rutas del panel, un panel comprometido escalaría a root |
 | El Common Name se valida a ambos lados de la frontera | El helper no se fía del panel aunque el panel ya valide |
