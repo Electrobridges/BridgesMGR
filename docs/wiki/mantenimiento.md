@@ -1,5 +1,7 @@
 # 🔧 Mantenimiento
 
+[English](../en/wiki/maintenance.md) · **Español**
+
 [← Wiki](README.md)
 
 ## Actualizar

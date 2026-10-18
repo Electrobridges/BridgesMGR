@@ -1,5 +1,7 @@
 # Wiki de uso
 
+[English](../en/wiki/README.md) · **Español**
+
 Guía del día a día con BridgesMGR, ya instalado. Cada página es una tarea, en
 el orden en que suele hacer falta. Para instalarlo, configurarlo o entender por
 dentro cómo está montado, mira la [documentación técnica](../../README.es.md#-documentación).

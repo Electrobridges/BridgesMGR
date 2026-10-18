@@ -1,5 +1,7 @@
 # 📱 Dos pasos en la VPN
 
+[English](../en/wiki/vpn-2fa.md) · **Español**
+
 [← Wiki](README.md)
 
 Además del certificado, el servidor pide al conectar el código de 6 dígitos de

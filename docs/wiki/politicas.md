@@ -1,5 +1,7 @@
 # ⏱️ Políticas de acceso
 
+[English](../en/wiki/policies.md) · **Español**
+
 [← Wiki](README.md)
 
 Cada cliente tiene su página de políticas: **Clientes VPN → Políticas**, en la

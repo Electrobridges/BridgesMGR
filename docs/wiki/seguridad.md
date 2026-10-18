@@ -1,5 +1,7 @@
 # 🛡️ Seguridad del servidor
 
+[English](../en/wiki/security.md) · **Español**
+
 [← Wiki](README.md)
 
 La página **Seguridad** tiene dos pestañas: la revisión del `server.conf` y el
