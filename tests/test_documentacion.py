@@ -177,6 +177,21 @@ def test_cada_ancla_existe_en_el_archivo_de_destino(path):
         path.relative_to(RAIZ), ", ".join(sorted(set(rotas))))
 
 
+# Las dos portadas del repo se eligen entre sí, y no por un banner de arriba:
+# una línea de idioma bajo el <div align="center">, como la que ya tienen. Sin
+# esto, quien llega a la portada en un idioma que no es el suyo se queda sin
+# puerta al otro, y no hay ninguna prueba que se entere.
+@pytest.mark.parametrize("nombre, contraparte", [
+    ("README.md", "README.es.md"),
+    ("README.es.md", "README.md"),
+])
+def test_las_dos_portadas_se_enlazan_entre_si(nombre, contraparte):
+    texto = (RAIZ / nombre).read_text(encoding="utf-8")
+
+    assert "(%s)" % contraparte in texto, \
+        "%s no enlaza a %s" % (nombre, contraparte)
+
+
 # El ancla del emoji con el guion delante es el caso que se cuelga al recortar
 # el resultado, así que se fija aquí a propósito: si alguien «limpia» la
 # función para quitar espacios sobrantes, esta prueba lo dice antes de que lo
