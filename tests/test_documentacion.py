@@ -192,6 +192,35 @@ def test_las_dos_portadas_se_enlazan_entre_si(nombre, contraparte):
         "%s no enlaza a %s" % (nombre, contraparte)
 
 
+# La documentación en inglés no es una copia parcial que se pueda ir comiendo:
+# estos son los archivos que tienen que estar, y esta es la que comprueba que
+# están los trece. Sin ella, un día se borra uno y la única pista es un enlace
+# roto en una página que nadie visita.
+ARCHIVOS_ENINGLES = (
+    "README.es.md",
+    "docs/en/installation.md",
+    "docs/en/configuration.md",
+    "docs/en/security.md",
+    "docs/en/troubleshooting.md",
+    "docs/en/wiki/README.md",
+    "docs/en/wiki/getting-started.md",
+    "docs/en/wiki/clients.md",
+    "docs/en/wiki/policies.md",
+    "docs/en/wiki/vpn-2fa.md",
+    "docs/en/wiki/security.md",
+    "docs/en/wiki/monitoring.md",
+    "docs/en/wiki/maintenance.md",
+)
+
+
+@pytest.mark.parametrize("ruta", ARCHIVOS_ENINGLES)
+def test_la_documentacion_inglesa_esta_completa(ruta):
+    destino = RAIZ / ruta
+
+    assert destino.exists(), "Falta %s" % ruta
+    assert destino.read_text(encoding="utf-8").strip(), "%s está vacío" % ruta
+
+
 # El ancla del emoji con el guion delante es el caso que se cuelga al recortar
 # el resultado, así que se fija aquí a propósito: si alguien «limpia» la
 # función para quitar espacios sobrantes, esta prueba lo dice antes de que lo

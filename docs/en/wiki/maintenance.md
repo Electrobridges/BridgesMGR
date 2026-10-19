@@ -31,7 +31,7 @@ journalctl -u ovpn-web -n 50 --no-pager          # por qué no arranca el panel
 ```
 
 The detail, including the manual rollback, is in
-[Installation → Updating](../../instalacion.md#actualizar) (Spanish).
+[Installation → Updating](../installation.md#updating).
 
 ## Checking the server
 
@@ -57,8 +57,7 @@ schedule a daily or weekly copy, keeping the last N, in
 > they do not include the PKI (`/etc/openvpn/easy-rsa`) or `config.yaml`:
 > back those up separately, they are what genuinely cannot be regenerated.
 
-How to restore one: [Installation → Restoring](../../instalacion.md#restaurar)
-(Spanish).
+How to restore one: [Installation → Restoring](../installation.md#restoring).
 
 To review the audit log in a spreadsheet, **Configuración → Exportar** (Settings
 → Export) downloads a ZIP of CSVs, with no secrets whatsoever.
@@ -77,9 +76,9 @@ The commands are run from `/opt/ovpn-web`, on the server itself.
 
 | Symptom | Where to look |
 |---|---|
-| *Management interface no disponible* | [Troubleshooting](../../solucion-problemas.md#management-interface-no-disponible) (Spanish) |
-| I revoked a client and it still gets in | [Troubleshooting](../../solucion-problemas.md#revoco-un-cliente-y-sigue-conectándose) (Spanish) |
-| The downloaded `.ovpn` does not connect | [Troubleshooting](../../solucion-problemas.md#el-ovpn-descargado-no-conecta) (Spanish) |
+| *Management interface no disponible* | [Troubleshooting](../troubleshooting.md#management-interface-no-disponible) |
+| I revoked a client and it still gets in | [Troubleshooting](../troubleshooting.md#i-revoked-a-client-and-it-still-connects) |
+| The downloaded `.ovpn` does not connect | [Troubleshooting](../troubleshooting.md#the-downloaded-ovpn-does-not-connect) |
 | The policies do not kick anyone out | The client's policies page warns if the script is missing from the `server.conf`; see [Policies](policies.md#how-they-are-applied) |
 | The history does not say how long each session lasted | The OpenVPN unit starts with `--suppress-timestamps`; `deploy/fechas-log.sh` fixes it |
 

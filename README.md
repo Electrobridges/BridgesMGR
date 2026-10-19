@@ -21,8 +21,8 @@ without handing root over to a web page.
 ![Platform](https://img.shields.io/badge/Debian%20%7C%20Ubuntu-lightgrey.svg)
 
 [Installation](#-quick-installation) ·
-[Usage wiki](docs/wiki/README.md) (Spanish) ·
-[Security](docs/seguridad.md) (Spanish) ·
+[Usage wiki](docs/en/wiki/README.md) ·
+[Security](docs/en/security.md) ·
 [Changelog](CHANGELOG.md) (Spanish)
 
 <br>
@@ -157,7 +157,7 @@ flowchart LR
 > network, or to be reached through the VPN itself.
 
 The full detail, including the rules that must not be broken when modifying the
-code, is in [docs/seguridad.md](docs/seguridad.md) (Spanish).
+code, is in [docs/en/security.md](docs/en/security.md).
 
 ## 🚀 Quick installation
 
@@ -218,24 +218,24 @@ sudo bash deploy/comprobar-servidor.sh
 ```
 
 The lines each feature needs — policies, two-step in the VPN, fixed IPs — are in
-[docs/configuracion.md](docs/configuracion.md#lo-que-se-configura-desde-el-panel) (Spanish),
+[docs/en/configuration.md](docs/en/configuration.md#what-is-configured-from-the-panel),
 and the **Seguridad** (Security) page of the panel points them out one by one.
 
 </details>
 
 The `server.conf` requirements, updating and uninstalling are in
-[docs/instalacion.md](docs/instalacion.md) (Spanish).
+[docs/en/installation.md](docs/en/installation.md).
 
 ## 📚 Documentation
 
 | | |
 |---|---|
-| 📖 [**Usage wiki**](docs/wiki/README.md) (Spanish) | **Day to day**: clients, policies, two-step, security, monitoring and maintenance |
-| [Installation](docs/instalacion.md) (Spanish) | Requirements, `server.conf`, installing, updating and uninstalling |
-| [Configuration](docs/configuracion.md) (Spanish) | Every `config.yaml` key, with its default value |
-| [Security](docs/seguridad.md) (Spanish) | The privilege boundary and the rules that hold it up |
+| 📖 [**Usage wiki**](docs/en/wiki/README.md) | **Day to day**: clients, policies, two-step, security, monitoring and maintenance |
+| [Installation](docs/en/installation.md) | Requirements, `server.conf`, installing, updating and uninstalling |
+| [Configuration](docs/en/configuration.md) | Every `config.yaml` key, with its default value |
+| [Security](docs/en/security.md) | The privilege boundary and the rules that hold it up |
 | [Architecture](docs/arquitectura.md) (Spanish) | How it is put together inside, and why |
-| [Troubleshooting](docs/solucion-problemas.md) (Spanish) | The usual failures and how to diagnose them |
+| [Troubleshooting](docs/en/troubleshooting.md) | The usual failures and how to diagnose them |
 | [Contributing](CONTRIBUTING.md) (Spanish) | Development environment, style and tests |
 | [Changelog](CHANGELOG.md) (Spanish) | Version history |
 

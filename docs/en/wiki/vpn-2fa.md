@@ -54,7 +54,7 @@ changes is the key, not the profile.
 Nine times out of ten it is the clock: the code depends on the time, and a
 server or a phone with the wrong time gives codes that do not match. Check
 `timedatectl` on the server. More cases in
-[Troubleshooting](../../solucion-problemas.md#el-código-de-dos-pasos-siempre-sale-mal) (Spanish).
+[Troubleshooting](../troubleshooting.md#the-two-step-code-is-always-wrong).
 
 ---
 
