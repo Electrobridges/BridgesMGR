@@ -5,6 +5,16 @@ Todos los cambios relevantes de este proyecto se anotan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 el versionado es [SemVer](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Añadido
+
+- **Documentación en inglés.** La portada del repositorio (`README.md`) pasa
+  al inglés, con la versión en español en `README.es.md`, y la wiki de uso,
+  la instalación, la configuración, el modelo de seguridad y la solución de
+  problemas tienen su versión inglesa en `docs/en/`. El panel sigue solo en
+  español.
+
 ## [0.5.0] — 2026-10-15
 
 ### Añadido
