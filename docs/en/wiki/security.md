@@ -49,7 +49,7 @@ sudo bash deploy/migrar-tls-crypt-v2.sh
 > [!CAUTION]
 > After migrating, **nobody gets in until they receive a new `.ovpn`**, and
 > OpenVPN clients 2.6 or later are required. Plan for it: tell people, migrate,
-> and hand out the new profiles from **VPN clients**. The script refuses to
+> and hand out the new profiles from **Clientes VPN** (VPN clients). The script refuses to
 > enable it with an OpenVPN older than 2.6.14, because of a known flaw
 > (CVE-2025-2704).
 

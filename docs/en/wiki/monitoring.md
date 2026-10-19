@@ -25,7 +25,7 @@ the same information as a table.
 
 <img src="../../capturas/conexiones.png" alt="Active connections: luis and ana connected, with their real IP, their virtual IP, the download and upload traffic and the time connected" width="900">
 
-It refreshes itself every 10 seconds. From **VPN clients** (Clientes VPN) you
+It refreshes itself every 10 seconds. From **Clientes VPN** (VPN clients) you
 can disconnect anyone who appears here.
 
 ## History

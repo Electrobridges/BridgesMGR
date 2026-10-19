@@ -54,9 +54,9 @@ def _markdown():
     Los .md versionados, y solo ellos.
 
     Se pregunta a git en vez de recorrer el directorio porque «los .md del
-    repositorio» son los versionados, y `.claude/` o `video/` están en el
-    .gitignore precisamente para no acabar en el repo: recorrer el árbol los
-    mezclaría y la prueba fallaría por archivos que no son de nadie.
+    repositorio» son los versionados: recorrer el árbol mezclaría las carpetas
+    de trabajo locales que no se suben, y la prueba fallaría por archivos que
+    no son del proyecto.
     """
     salida = subprocess.run(
         ["git", "ls-files", "*.md"],
