@@ -11,17 +11,17 @@ Do not confuse it with the panel accounts.
 
 ## Creating a client
 
-1. **VPN clients → Create client** (VPN clients → Crear cliente). The name is
+1. **Clientes VPN → Crear cliente** (VPN clients → Create client). The name is
    the certificate's *Common Name*: letters, digits, `-` and `_`. Use something
    that identifies the device or the person (`ana-portatil`, `router-almacen`).
-2. **Expires** (Caduca, optional): the date and time from which it can no longer
+2. **Caduca** (Expires, optional): the date and time from which it can no longer
    get in. When it arrives, whoever is inside is disconnected and the
    certificate revokes itself. Ideal for contractors and one-off access.
-3. **Encrypt the private key with a password** (Cifrar la clave privada con
-   contraseña, ticked by default): the `.ovpn` on its own is not enough, you
+3. **Cifrar la clave privada con contraseña** (Encrypt the private key with
+   a password, ticked by default): the `.ovpn` on its own is not enough, you
    need the password to connect. Untick it only for unattended devices that have
    to reconnect on their own.
-4. **Create and issue certificate** (Crear y emitir certificado).
+4. **Crear y emitir certificado** (Create and issue certificate).
 
 > [!WARNING]
 > The certificate password **cannot be recovered**. If it is lost, the
@@ -30,7 +30,7 @@ Do not confuse it with the panel accounts.
 
 ## Handing over the profile
 
-**Download .ovpn** (Descargar .ovpn) fetches the complete profile, with the
+**Descargar .ovpn** (Download .ovpn) fetches the complete profile, with the
 certificates and keys inside: a single file that is imported into OpenVPN
 Connect, the OpenVPN client for Windows/macOS/Linux, or Tunnelblick.
 

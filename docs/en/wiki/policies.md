@@ -4,7 +4,7 @@
 
 [← Wiki](README.md)
 
-Every client has their own policies page: **VPN clients → Políticas** (VPN
+Every client has their own policies page: **Clientes VPN → Políticas** (VPN
 clients → Policies), in the client's row. Everything is optional; an empty field
 means *no limit*. Fill in what you need and press **Guardar y aplicar** (Save
 and apply).
@@ -30,7 +30,7 @@ Checking on connect is not enough, so the panel acts at three moments:
 
 ## Temporary access
 
-**Expires** (Caduca): from that date and time they cannot connect, whoever is
+**Caduca** (Expires): from that date and time they cannot connect, whoever is
 inside is disconnected, and **their certificate revokes itself**. This is what
 you want for a contractor, an external technician or an intern.
 
@@ -52,8 +52,8 @@ In minutes. When it is met they are disconnected and have to sign in again
 (and type the certificate password, if they have one). Useful so that nobody
 leaves the VPN open for days on end.
 
-Empty uses the shared value from **VPN clients → Maximum session length**
-(Clientes VPN → Duración máxima de sesión).
+Empty uses the shared value from **Clientes VPN → Duración máxima de sesión**
+(VPN clients → Maximum session length).
 
 ## Monthly traffic quota
 

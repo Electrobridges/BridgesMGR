@@ -4,7 +4,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="app/static/imagenes/bridgesmgr-oscuro-transparente.png">
-  <img src="app/static/imagenes/bridgesmgr-claro-transparente.png" alt="BridgesMGR logotype: a shield with a key" width="112">
+  <img src="app/static/imagenes/bridgesmgr-claro-transparente.png" alt="BridgesMGR logo: a shield with a key" width="112">
 </picture>
 
 # BridgesMGR
@@ -65,7 +65,7 @@ Per client: **temporary access** that revokes itself, **schedules** by day,
 <tr>
 <td valign="top">
 
-### 📱 Two-step, on the panel and on the VPN
+### 📱 Two-step verification, for the panel and the VPN
 A TOTP code from the phone to sign in to the panel and, client by client, to
 connect to the VPN as well: a stolen `.ovpn` is no longer enough.
 
@@ -123,7 +123,7 @@ of who did what, when and from where, including failed sign-ins.
 
 This is a panel that can revoke certificates and kick users off a VPN, so it is
 worth understanding how it is put together before installing it. The central
-idea: **the web is never root**. Everything privileged crosses a single, narrow
+idea: **the web app never runs as root**. Everything privileged crosses a single, narrow
 door that does not trust whoever is calling.
 
 ```mermaid

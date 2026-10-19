@@ -316,8 +316,8 @@ sudo systemctl restart ovpn-web
 
 The panel copies its database to `/var/lib/ovpn-web/respaldos/` using SQLite's
 backup API, so the copy is consistent even while people are using the panel. The
-schedule is set in **Settings → Database backups**
-(*Configuración → Respaldos de la base*): daily or weekly, at the hour you
+schedule is set in **Configuración → Respaldos de la base**
+(*Settings → Database backups*): daily or weekly, at the hour you
 choose, keeping the last N. The watchdog checks it every five minutes, and if
 the panel was stopped at that hour it backs up as soon as it comes back.
 
@@ -333,8 +333,8 @@ sudo chown $USER /tmp/ovpn-web-*.db.gz
 scp servidor:/tmp/ovpn-web-20260907-030000.db.gz .
 ```
 
-To look at the audit log outside the server there is **Settings → Export**
-(*Configuración → Exportar*), which downloads a ZIP with the audit log and the
+To look at the audit log outside the server there is **Configuración → Exportar**
+(*Settings → Export*), which downloads a ZIP with the audit log and the
 archived profiles as CSV and **with no secrets whatsoever**.
 
 ### Restoring

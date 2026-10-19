@@ -14,7 +14,7 @@ leave the routers as they are.
 
 ## Enabling it
 
-1. **VPN clients → Políticas** (VPN clients → Policies) for the client →
+1. **Clientes VPN → Políticas** (VPN clients → Policies) for the client →
    **Verificación en dos pasos → Activar** (Two-step verification → Enable).
 2. A QR code and the key in text appear. **They are shown only this time**: have
    the person scan it at that moment, or pass them the key through a secure

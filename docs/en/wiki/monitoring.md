@@ -13,10 +13,10 @@ traffic of the open sessions. Below, **the last 30 days**:
 
 | Chart | What it is for |
 |---|---|
-| **Traffic per day** | Download and upload stacked. An odd upload spike is worth a look |
-| **Who is using the most traffic this month** | The ranking worth seeing before you set [quotas](policies.md#monthly-traffic-quota) |
-| **Connections per day** | The normal rhythm of the week |
-| **Rejected connections per day** | A spike is usually a scan, or a revoked `.ovpn` that keeps retrying |
+| **Tráfico por día** (Traffic per day) | Download and upload stacked. An odd upload spike is worth a look |
+| **Quién más tráfico lleva este mes** (Who is using the most traffic this month) | The ranking worth seeing before you set [quotas](policies.md#monthly-traffic-quota) |
+| **Conexiones por día** (Connections per day) | The normal rhythm of the week |
+| **Conexiones rechazadas por día** (Rejected connections per day) | A spike is usually a scan, or a revoked `.ovpn` that keeps retrying |
 
 Hover over a column to see its values; **Ver los datos** (View the data) expands
 the same information as a table.
