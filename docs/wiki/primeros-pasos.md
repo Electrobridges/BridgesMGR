@@ -1,5 +1,7 @@
 # 🚪 Primeros pasos
 
+[English](../en/wiki/getting-started.md) · **Español**
+
 [← Wiki](README.md)
 
 ## Entrar

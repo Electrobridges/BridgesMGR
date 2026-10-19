@@ -1,5 +1,7 @@
 # 👤 Clientes VPN
 
+[English](../en/wiki/clients.md) · **Español**
+
 [← Wiki](README.md)
 
 Un *cliente VPN* es un certificado: una persona, un portátil o un router que

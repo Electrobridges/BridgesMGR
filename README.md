@@ -1,166 +1,171 @@
 <div align="center">
 
+**English** · [Español](README.es.md)
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="app/static/imagenes/bridgesmgr-oscuro-transparente.png">
-  <img src="app/static/imagenes/bridgesmgr-claro-transparente.png" alt="Isotipo de BridgesMGR: un escudo con una llave" width="112">
+  <img src="app/static/imagenes/bridgesmgr-claro-transparente.png" alt="BridgesMGR logo: a shield with a key" width="112">
 </picture>
 
 # BridgesMGR
 
-**El panel web para administrar tu servidor OpenVPN desde el navegador.**<br>
-Clientes, políticas de acceso, verificación en dos pasos y endurecimiento,<br>
-sin ceder root a una página web.
+**The web panel for managing your OpenVPN server from the browser.**<br>
+Clients, access policies, two-step verification and hardening,<br>
+without handing root over to a web page.
 
-[![Pruebas](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml/badge.svg)](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml)
-![Versión](https://img.shields.io/badge/versión-0.5.0-10c4d8.svg)
-![Licencia](https://img.shields.io/badge/licencia-Apache%202.0-blue.svg)
+[![Tests](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml/badge.svg)](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml)
+![Version](https://img.shields.io/badge/version-0.5.0-10c4d8.svg)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![OpenVPN](https://img.shields.io/badge/OpenVPN-2.5%20%7C%202.6-orange.svg)
-![Plataforma](https://img.shields.io/badge/Debian%20%7C%20Ubuntu-lightgrey.svg)
+![Platform](https://img.shields.io/badge/Debian%20%7C%20Ubuntu-lightgrey.svg)
 
-[Instalación](#-instalación-rápida) ·
-[Wiki de uso](docs/wiki/README.md) ·
-[Seguridad](docs/seguridad.md) ·
-[Cambios](CHANGELOG.md)
+[Installation](#-quick-installation) ·
+[Usage wiki](docs/en/wiki/README.md) ·
+[Security](docs/en/security.md) ·
+[Changelog](CHANGELOG.md) (Spanish)
 
 <br>
 
-<img src="docs/capturas/panel.png" alt="Panel principal de BridgesMGR: dos clientes conectados, servicio activo y tráfico de las sesiones abiertas; debajo, gráficas de tráfico por día, ranking de tráfico del mes por cliente y conexiones aceptadas y rechazadas por día" width="900">
+<img src="docs/capturas/panel.png" alt="BridgesMGR main panel: two connected clients, active service and traffic from the open sessions; below that, daily traffic charts, this month's traffic ranking per client, and accepted and rejected connections per day" width="900">
 
 </div>
 
-Se instala en el propio servidor VPN y se abre por su IP de la red local, por
-ejemplo `https://192.168.1.192:55443`. Es la versión web de
+It installs on the VPN server itself and is opened through its local network IP,
+for example `https://192.168.1.192:55443`. It is the web version of
 [OpenVPN-Manager-CLI](https://github.com/Electrobridges/OpenVPN-Manager-CLI),
-del que hereda el núcleo de parseo y comunicación con OpenVPN.
+from which it inherits the core parsing and communication with OpenVPN.
 
-## ✨ Qué hace
+> [!NOTE]
+> The panel's interface is currently in Spanish only. This documentation
+> is in English; menu and button names are quoted as they appear on
+> screen, with a translation.
+
+## ✨ What it does
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
-### 👤 Clientes VPN
-Crear, revocar, restaurar y descargar el `.ovpn` ya montado, con la clave
-privada cifrada con contraseña por defecto. Desconectar a cualquiera al
-momento. Aviso cuando un certificado está a punto de caducar.
+### 👤 VPN clients
+Create, revoke, restore and download the ready-made `.ovpn`, with the private
+key encrypted using a password by default. Disconnect anyone at any moment.
+An alert when a certificate is about to expire.
 
 </td>
 <td width="50%" valign="top">
 
-### ⏱️ Políticas de acceso
-Por cliente: **acceso temporal** que se revoca solo, **horarios** por día,
-**sesión máxima**, **cuota mensual** de tráfico, **IP fija** y **destinos
-permitidos** en el cortafuegos.
+### ⏱️ Access policies
+Per client: **temporary access** that revokes itself, **schedules** by day,
+**maximum session length**, **monthly traffic quota**, **fixed IP** and
+**allowed destinations** in the firewall.
 
 </td>
 </tr>
 <tr>
 <td valign="top">
 
-### 📱 Dos pasos, en el panel y en la VPN
-Código TOTP del móvil para entrar al panel y, cliente a cliente, también para
-conectar a la VPN: un `.ovpn` robado deja de bastar.
+### 📱 Two-step verification, for the panel and the VPN
+A TOTP code from the phone to sign in to the panel and, client by client, to
+connect to the VPN as well: a stolen `.ovpn` is no longer enough.
 
 </td>
 <td valign="top">
 
-### 🛡️ Endurecimiento
-Auditoría del `server.conf` con nota sobre 100 y la línea que arregla cada
-hallazgo, **bloqueo automático de IPs** con nftables y migración a
-**tls-crypt-v2**.
+### 🛡️ Hardening
+A `server.conf` audit scored out of 100 with the line that fixes each finding,
+**automatic IP blocking** with nftables, and migration to **tls-crypt-v2**.
 
 </td>
 </tr>
 <tr>
 <td valign="top">
 
-### 📊 Vigilancia
-Conexiones en vivo, gráficas de 30 días, historial de la VPN que sobrevive a
-logrotate, avisos por correo o Discord y métricas para **Prometheus**.
+### 📊 Monitoring
+Live connections, 30-day charts, VPN history that survives logrotate, alerts
+by email or Discord, and metrics for **Prometheus**.
 
 </td>
 <td valign="top">
 
-### 👥 Cuentas y auditoría
-Tres roles —`superusuario`, `admin` y `supervisor` de solo consulta— y
-registro de quién hizo qué, cuándo y desde dónde, incluidos los logins
-fallidos.
+### 👥 Accounts and audit log
+Three roles — `superusuario`, `admin` and read-only `supervisor` — and a record
+of who did what, when and from where, including failed sign-ins.
 
 </td>
 </tr>
 </table>
 
-## 📸 Capturas
+## 📸 Screenshots
 
 <table>
 <tr>
-<td width="50%"><img src="docs/capturas/clientes.png" alt="Clientes VPN: formulario de alta con caducidad y contraseña, y la tabla con ana y luis conectados; ana muestra las etiquetas de sus políticas: caducidad, horario, sesión máxima, cuota, IP fija y destinos"></td>
-<td width="50%"><img src="docs/capturas/politicas.png" alt="Políticas de ana: acceso temporal hasta el 31/12/2026, horario de lunes a viernes de 08:00 a 19:00 y sábados de 09:00 a 13:00, y sesión máxima de 480 minutos"></td>
+<td width="50%"><img src="docs/capturas/clientes.png" alt="VPN clients: the registration form with expiry and password, and the table with ana and luis connected; ana shows the tags for her policies: expiry, schedule, maximum session length, quota, fixed IP and destinations"></td>
+<td width="50%"><img src="docs/capturas/politicas.png" alt="ana's policies: temporary access until 31/12/2026, a Monday-to-Friday schedule from 08:00 to 19:00 and Saturdays from 09:00 to 13:00, and a maximum session length of 480 minutes"></td>
 </tr>
 <tr>
-<td align="center"><sub><b>Clientes VPN</b> — cada política activa, de un vistazo</sub></td>
-<td align="center"><sub><b>Políticas</b> — caducidad, horario, sesión máxima…</sub></td>
+<td align="center"><sub><b>VPN clients</b> — every active policy at a glance</sub></td>
+<td align="center"><sub><b>Policies</b> — expiry, schedule, maximum session length…</sub></td>
 </tr>
 <tr>
-<td><img src="docs/capturas/seguridad.png" alt="Seguridad: auditoría del server.conf con nota 96 sobre 100, sin críticos ni avisos, y dos sugerencias con el comando o la línea que las resuelve"></td>
-<td><img src="docs/capturas/conexiones.png" alt="Conexiones activas: luis y ana, con IP real, IP virtual, tráfico de bajada y subida y tiempo conectado"></td>
+<td><img src="docs/capturas/seguridad.png" alt="Security: the server.conf audit scoring 96 out of 100, with no critical findings or warnings, and two suggestions with the command or line that resolves them"></td>
+<td><img src="docs/capturas/conexiones.png" alt="Active connections: luis and ana, with real IP, virtual IP, download and upload traffic, and time connected"></td>
 </tr>
 <tr>
-<td align="center"><sub><b>Seguridad</b> — la auditoría del <code>server.conf</code></sub></td>
-<td align="center"><sub><b>Conexiones</b> — en vivo, cada 10 segundos</sub></td>
+<td align="center"><sub><b>Security</b> — the <code>server.conf</code> audit</sub></td>
+<td align="center"><sub><b>Connections</b> — live, every 10 seconds</sub></td>
 </tr>
 </table>
 
-<sub>Capturas de una instalación de pruebas con datos inventados.</sub>
+<sub>Screenshots from a test installation with invented data.</sub>
 
-## 🔐 Modelo de seguridad
+## 🔐 Security model
 
-Es un panel que puede revocar certificados y expulsar usuarios de una VPN, así
-que conviene entender cómo está montado antes de instalarlo. La idea central:
-**la web nunca es root**. Todo lo privilegiado cruza una sola puerta, estrecha
-y que no se fía de quien llama.
+This is a panel that can revoke certificates and kick users off a VPN, so it is
+worth understanding how it is put together before installing it. The central
+idea: **the web app never runs as root**. Everything privileged crosses a single, narrow
+door that does not trust whoever is calling.
 
 ```mermaid
 flowchart LR
-    N(["🌐 Navegador<br>en la LAN"]) -- HTTPS --> P["Panel web<br><i>usuario ovpnweb</i><br>sin privilegios ni shell"]
-    P -- "sudo, solo este script<br>JSON por stdin" --> H["ovpn-web-helper<br><i>root</i><br>subcomandos fijos,<br>revalida todo"]
+    N(["🌐 Browser<br>on the LAN"]) -- HTTPS --> P["Web panel<br><i>ovpnweb user</i><br>no privileges, no shell"]
+    P -- "sudo, this script only<br>JSON over stdin" --> H["ovpn-web-helper<br><i>root</i><br>fixed subcommands,<br>revalidates everything"]
     H --> K[("PKI · CRL<br>easy-rsa")]
-    H --> F["nftables<br>políticas y bloqueos"]
+    H --> F["nftables<br>policies and blocks"]
     P -- "management<br>127.0.0.1" --> O["OpenVPN"]
-    O -- "al conectar" --> S["client-connect<br>verificar-totp<br><i>nobody</i>"]
+    O -- "on connect" --> S["client-connect<br>verificar-totp<br><i>nobody</i>"]
 ```
 
-| Decisión | Por qué |
+| Decision | Why |
 |---|---|
-| El servicio corre como `ovpnweb`, sin privilegios ni shell | Un fallo en la web no es root en el servidor VPN |
-| Todo lo privilegiado pasa por `/usr/local/sbin/ovpn-web-helper` | Un único script cerrado, con subcomandos fijos, fácil de auditar |
-| `sudoers` autoriza **solo ese script**, nunca `easyrsa` | `easyrsa` acepta `--pki-dir` y `--vars`: autorizarlo con comodines equivale a dar root |
-| El helper lee sus rutas de `config.yaml` (root:ovpnweb 0640), jamás de sus argumentos | Si aceptara rutas del panel, un panel comprometido escalaría a root |
-| El Common Name se valida a ambos lados de la frontera | El helper no se fía del panel aunque el panel ya valide |
-| El panel **lee** el `server.conf` pero no lo escribe | Quien puede escribirlo ejecuta código como root; los arreglos se aplican a mano |
-| Contraseñas con Argon2; en la base solo el SHA-256 del token de sesión | Robar el `.db` no da ni contraseñas ni sesiones |
-| Verificación en dos pasos (TOTP), opcional para quien manda y exigible al rol supervisor | Una contraseña robada no basta para revocar certificados |
-| El `superusuario` es la primera cuenta creada y nadie más puede tocarla, ni siquiera su contraseña | Si un admin pudiera cambiársela, entraría con ella: sería superusuario en dos pasos |
-| Cookie `httpOnly` + `SameSite=Strict` + cabecera `X-CSRF-Token` obligatoria | Dos barreras independientes contra CSRF |
-| CSP estricta `'self'`, sin CDNs ni scripts inline | HTMX y las gráficas se sirven desde el propio servidor |
-| Bloqueo tras N intentos, contado por usuario+IP | Frena la fuerza bruta sin que un tercero pueda dejar fuera al admin |
-| HTTPS con certificado autofirmado | Las credenciales no viajan en claro por la LAN |
+| The service runs as `ovpnweb`, with no privileges and no shell | A flaw in the web layer is not root on the VPN server |
+| Everything privileged goes through `/usr/local/sbin/ovpn-web-helper` | A single closed script with fixed subcommands, easy to audit |
+| `sudoers` authorises **that script only**, never `easyrsa` | `easyrsa` accepts `--pki-dir` and `--vars`: authorising it with wildcards is equivalent to handing over root |
+| The helper reads its paths from `config.yaml` (root:ovpnweb 0640), never from its arguments | If it accepted paths from the panel, a compromised panel would escalate to root |
+| The Common Name is validated on both sides of the privilege boundary | The helper does not trust the panel even when the panel already validates |
+| The panel **reads** the `server.conf` but does not write it | Whoever can write it runs code as root; fixes are applied by hand |
+| Argon2 passwords; only the SHA-256 of the session token in the database | Stealing the `.db` yields neither passwords nor sessions |
+| Two-step verification (TOTP), optional for whoever is in charge and enforceable for the supervisor role | A stolen password is not enough to revoke certificates |
+| The `superusuario` is the first account created and nobody else can touch it, not even its password | If an admin could change it, they would sign in with it: they would be a superusuario in two steps |
+| `httpOnly` cookie + `SameSite=Strict` + mandatory `X-CSRF-Token` header | Two independent barriers against CSRF |
+| Strict `'self'` CSP, no CDNs and no inline scripts | HTMX and the charts are served from the server itself |
+| Lockout after N attempts, counted per user+IP | Slows brute force without letting a third party lock out the admin |
+| HTTPS with a self-signed certificate | Credentials do not travel in cleartext over the LAN |
 
 > [!WARNING]
-> **No expongas este panel a internet.** Está pensado para la red local o para
-> llegar a él a través de la propia VPN.
+> **Do not expose this panel to the internet.** It is meant for the local
+> network, or to be reached through the VPN itself.
 
-El detalle completo, con las reglas que no se deben romper al modificar el
-código, está en [docs/seguridad.md](docs/seguridad.md).
+The full detail, including the rules that must not be broken when modifying the
+code, is in [docs/en/security.md](docs/en/security.md).
 
-## 🚀 Instalación rápida
+## 🚀 Quick installation
 
-Requiere Debian 11+ o Ubuntu 20.04+ y Python 3.9+. **OpenVPN no hace falta
-tenerlo ya**: si no lo encuentra, el instalador se ofrece a montarlo —PKI,
-`server.conf` endurecido, NAT y todo— y luego rellena la configuración del
-panel con lo que haya decidido. Si ya tienes un servidor, no le toca ni una
-línea.
+Requires Debian 11+ or Ubuntu 20.04+ and Python 3.9+. **OpenVPN does not have to
+be installed already**: if it is not found, the installer offers to set it up —
+PKI, hardened `server.conf`, NAT and all — and then fills in the panel's
+configuration with whatever it decided. If you already have a server, it does not
+touch a single line of it.
 
 ```bash
 git clone https://github.com/Electrobridges/BridgesMGR.git
@@ -168,7 +173,7 @@ cd BridgesMGR
 sudo bash deploy/install.sh
 ```
 
-Después, **tres pasos obligatorios**:
+After that, **three mandatory steps**:
 
 ```bash
 # 1. Repasa la configuración (sobre todo cliente_ovpn.remote_host)
@@ -182,11 +187,11 @@ sudo -u ovpnweb venv/bin/python -m app.cli crear-usuario tu_usuario --rol admin
 sudo systemctl start ovpn-web
 ```
 
-Abre `https://TU_IP:55443`. El navegador avisará de que el certificado es
-autofirmado: es lo esperado, acepta la excepción.
+Open `https://YOUR_IP:55443`. The browser will warn that the certificate is
+self-signed: that is expected, accept the exception.
 
 <details>
-<summary><b>Actualizar</b></summary>
+<summary><b>Updating</b></summary>
 
 ```bash
 cd BridgesMGR
@@ -194,46 +199,47 @@ git pull
 sudo bash deploy/install.sh
 ```
 
-Repetirlo es siempre seguro. La versión nueva se prepara al lado y solo
-sustituye a la que corre si importa bien y le vale tu `config.yaml`; si después
-no arranca, el instalador **vuelve solo a la anterior** y dice por qué. Todo
-queda en `/var/log/ovpn-web-instalacion.log`.
+Repeating it is always safe. The new version is prepared alongside the running
+one and only replaces it if it imports correctly and your `config.yaml` suits
+it; if it does not start afterwards, the installer **goes back to the previous
+one by itself** and says why. Everything is logged in
+`/var/log/ovpn-web-instalacion.log`.
 
 </details>
 
 <details>
-<summary><b>Si ya tenías un servidor OpenVPN</b></summary>
+<summary><b>If you already had an OpenVPN server</b></summary>
 
-El panel no toca tu `server.conf`. Para saber qué le falta para encajar, sin
-modificar ni reiniciar nada:
+The panel does not touch your `server.conf`. To find out what it is missing in
+order to fit, without changing or restarting anything:
 
 ```bash
 sudo bash deploy/comprobar-servidor.sh
 ```
 
-Las líneas que necesita cada función —políticas, dos pasos en la VPN, IP
-fijas— están en [docs/configuracion.md](docs/configuracion.md#lo-que-se-configura-desde-el-panel),
-y la página **Seguridad** del panel las señala una a una.
+The lines each feature needs — policies, two-step in the VPN, fixed IPs — are in
+[docs/en/configuration.md](docs/en/configuration.md#what-is-configured-from-the-panel),
+and the **Seguridad** (Security) page of the panel points them out one by one.
 
 </details>
 
-Los requisitos del `server.conf`, la actualización y la desinstalación están en
-[docs/instalacion.md](docs/instalacion.md).
+The `server.conf` requirements, updating and uninstalling are in
+[docs/en/installation.md](docs/en/installation.md).
 
-## 📚 Documentación
+## 📚 Documentation
 
 | | |
 |---|---|
-| 📖 [**Wiki de uso**](docs/wiki/README.md) | **El día a día**: clientes, políticas, dos pasos, seguridad, vigilancia y mantenimiento |
-| [Instalación](docs/instalacion.md) | Requisitos, `server.conf`, instalar, actualizar y desinstalar |
-| [Configuración](docs/configuracion.md) | Todas las claves de `config.yaml`, con sus valores por defecto |
-| [Seguridad](docs/seguridad.md) | La frontera de privilegios y las reglas que la sostienen |
-| [Arquitectura](docs/arquitectura.md) | Cómo está montado por dentro y por qué |
-| [Solución de problemas](docs/solucion-problemas.md) | Los fallos habituales y cómo diagnosticarlos |
-| [Contribuir](CONTRIBUTING.md) | Entorno de desarrollo, estilo y pruebas |
-| [Cambios](CHANGELOG.md) | Registro de versiones |
+| 📖 [**Usage wiki**](docs/en/wiki/README.md) | **Day to day**: clients, policies, two-step, security, monitoring and maintenance |
+| [Installation](docs/en/installation.md) | Requirements, `server.conf`, installing, updating and uninstalling |
+| [Configuration](docs/en/configuration.md) | Every `config.yaml` key, with its default value |
+| [Security](docs/en/security.md) | The privilege boundary and the rules that hold it up |
+| [Architecture](docs/arquitectura.md) (Spanish) | How it is put together inside, and why |
+| [Troubleshooting](docs/en/troubleshooting.md) | The usual failures and how to diagnose them |
+| [Contributing](CONTRIBUTING.md) (Spanish) | Development environment, style and tests |
+| [Changelog](CHANGELOG.md) (Spanish) | Version history |
 
-## 🧪 Desarrollo
+## 🧪 Development
 
 ```bash
 python -m venv .venv
@@ -243,39 +249,39 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-La suite corre entera en Windows o Linux, sin OpenVPN instalado. La mitad
-privilegiada —el helper, el instalador, la regla de sudo y la unidad de
-systemd— la prueba la integración continua sobre Ubuntu, con OpenVPN y systemd
-reales. Ver [CONTRIBUTING.md](CONTRIBUTING.md).
+The whole suite runs on Windows or Linux, with no OpenVPN installed. The
+privileged half — the helper, the installer, the sudo rule and the systemd unit
+— is exercised by continuous integration on Ubuntu, with real OpenVPN and real
+systemd. See [CONTRIBUTING.md](CONTRIBUTING.md) (Spanish).
 
-## ⚖️ Licencia
+## ⚖️ License
 
-**Apache License 2.0.** Ver [LICENSE](LICENSE) y [NOTICE](NOTICE).
+**Apache License 2.0.** See [LICENSE](LICENSE) and [NOTICE](NOTICE) (Spanish).
 
-Puedes usarlo, modificarlo y distribuirlo, incluso comercialmente. A cambio se
-piden tres cosas: conservar los avisos de copyright y el contenido de `NOTICE`,
-señalar los archivos que hayas cambiado, e incluir una copia de la licencia.
+You may use, modify and distribute it, including commercially. In return three
+things are asked: keep the copyright notices and the contents of `NOTICE`,
+identify the files you changed, and include a copy of the license.
 
 <details>
-<summary>Patentes, marcas y material de terceros</summary>
+<summary>Patents, trademarks and third-party material</summary>
 
-Dos cosas que conviene saber, y que la licencia MIT no cubre:
+Two things worth knowing, which the MIT license does not cover:
 
-- **Patentes.** Quien contribuye concede expresamente los derechos de patente
-  necesarios para usar su aportación. Si alguien demanda al proyecto por
-  patentes, pierde esa concesión.
-- **Marcas.** «BridgesMGR» y «Electrobridges» son marcas de Daniel Puentes. La
-  sección 6 de la licencia **no concede derecho a usarlas**: un derivado puede
-  reutilizar este código, pero no presentarse con este nombre ni con esta
-  identidad visual.
+- **Patents.** Contributors expressly grant the patent rights needed to use
+  their contribution. If someone sues the project over patents, they lose that
+  grant.
+- **Trademarks.** "BridgesMGR" and "Electrobridges" are trademarks of Daniel
+  Puentes. Section 6 of the license **does not grant the right to use them**: a
+  derivative work may reuse this code, but may not present itself under this
+  name or with this visual identity.
 
-Material de terceros incluido en el repositorio, con su propia licencia (el
-detalle completo, en [NOTICE](NOTICE)):
+Third-party material included in the repository, under its own license (full
+detail in [NOTICE](NOTICE) (Spanish)):
 
-| Qué | Dónde | Licencia |
+| What | Where | License |
 | --- | --- | --- |
 | Poppins | `app/static/fuentes/` | SIL Open Font License 1.1 |
-| Material Design Icons (vía `react-icons/md`) | `app/templates/partials/fondo_marca.html` | Apache License 2.0 |
+| Material Design Icons (via `react-icons/md`) | `app/templates/partials/fondo_marca.html` | Apache License 2.0 |
 
 </details>
 
@@ -283,6 +289,6 @@ detalle completo, en [NOTICE](NOTICE)):
 
 <div align="center">
 
-Hecho por **Daniel Puentes** · [Electrobridges](https://github.com/Electrobridges)
+Made by **Daniel Puentes** · [Electrobridges](https://github.com/Electrobridges)
 
 </div>

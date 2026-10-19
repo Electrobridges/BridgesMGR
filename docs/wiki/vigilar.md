@@ -1,5 +1,7 @@
 # 📊 Vigilar la VPN
 
+[English](../en/wiki/monitoring.md) · **Español**
+
 [← Wiki](README.md)
 
 ## El panel
