@@ -24,6 +24,7 @@ After any change: `sudo systemctl restart ovpn-web`.
 | `puerto` | `55443` | The panel's HTTPS port |
 | `tls_cert` | `/etc/ovpn-web/tls/cert.pem` | The panel's certificate (the installer generates it) |
 | `tls_key` | `/etc/ovpn-web/tls/key.pem` | Private key of the certificate |
+| `idioma` | `es` | Interface language, `es` or `en`, for anyone who has not picked another one in the panel. Also the language of email and Discord alerts |
 
 ## `openvpn`
 

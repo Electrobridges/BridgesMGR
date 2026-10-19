@@ -358,6 +358,13 @@ a { color: var(--cian); }
 .boton-plano:hover { color: var(--rojo); }
 .boton-plano:focus-visible { box-shadow: var(--foco); }
 
+/* Cambio de idioma: discreto, como "Salir". El activo en blanco y sin enlace. */
+.selector-idioma { display: flex; gap: .55rem; font: 600 .8rem/1 var(--tipo); }
+.selector-idioma a { color: var(--tenue); text-decoration: none; padding: .4rem .1rem; }
+.selector-idioma a:hover, .selector-idioma a:focus-visible { color: var(--cian-claro); }
+.selector-idioma .activo { color: var(--texto); padding: .4rem .1rem; }
+.login-caja .selector-idioma { justify-content: center; margin-top: 1rem; }
+
 /* --------------------------------------------------------------- formularios */
 .formulario { display: flex; flex-direction: column; gap: .6rem; }
 .formulario.en-fila { flex-direction: row; flex-wrap: wrap; align-items: center; }

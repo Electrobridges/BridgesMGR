@@ -1,0 +1,43 @@
+{
+  "textos": {
+    "Abre tu aplicación de autenticación y escribe el código de %(usuario)s.": "Open your authenticator app and enter the code for %(usuario)s.",
+    "Abrir menú": "Open menu",
+    "admin": "admin",
+    "Administración del servidor OpenVPN": "OpenVPN server administration",
+    "Auditoría": "Audit log",
+    "Cancelar": "Cancel",
+    "Cerrar menú": "Close menu",
+    "Clientes VPN": "VPN clients",
+    "Conexiones": "Connections",
+    "Configuración": "Settings",
+    "Confirmar": "Confirm",
+    "Continuar": "Continue",
+    "Contraseña": "Password",
+    "Código de 6 dígitos": "6-digit code",
+    "Código incorrecto o caducado": "Incorrect or expired code",
+    "El código cambia cada 30 segundos.": "The code changes every 30 seconds.",
+    "ElectroBridges Solutions — abre en una pestaña nueva": "ElectroBridges Solutions — opens in a new tab",
+    "Entrar": "Sign in",
+    "La verificación ha caducado. Entra otra vez.": "The verification has expired. Sign in again.",
+    "Logs": "Logs",
+    "Panel": "Dashboard",
+    "Salir": "Sign out",
+    "Secciones del panel": "Panel sections",
+    "Seguridad": "Security",
+    "superusuario": "superuser",
+    "supervisor": "supervisor",
+    "Usuario": "Username",
+    "Usuario o contraseña incorrectos": "Incorrect username or password",
+    "Usuarios": "Users",
+    "Verificación": "Verification",
+    "Verificación en dos pasos": "Two-step verification",
+    "Verificar": "Verify",
+    "Volver a empezar": "Start over"
+  },
+  "plurales": {
+    "Demasiados intentos fallidos. Prueba de nuevo en %(n)s minuto.": [
+      "Too many failed attempts. Try again in %(n)s minute.",
+      "Too many failed attempts. Try again in %(n)s minutes."
+    ]
+  }
+}

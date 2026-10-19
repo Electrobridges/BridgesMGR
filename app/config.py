@@ -23,6 +23,9 @@ class ServidorCfg:
     puerto: int = 55443
     tls_cert: str = "/etc/ovpn-web/tls/cert.pem"
     tls_key: str = "/etc/ovpn-web/tls/key.pem"
+    # Idioma de la interfaz para quien no ha elegido otro, y el de los avisos
+    # por correo y Discord, que no los pide nadie desde un navegador.
+    idioma: str = "es"
 
 
 @dataclass
@@ -153,8 +156,12 @@ def cargar_config(ruta=None):
     if not isinstance(datos, dict):
         raise ValueError("El archivo de configuración debe ser un mapa YAML")
 
+    servidor = _seccion(datos, "servidor", ServidorCfg)
+    if servidor.idioma not in ("es", "en"):
+        raise ValueError("servidor.idioma tiene que ser 'es' o 'en', no '%s'" % servidor.idioma)
+
     return Config(
-        servidor=_seccion(datos, "servidor", ServidorCfg),
+        servidor=servidor,
         openvpn=_seccion(datos, "openvpn", OpenVPNCfg),
         cliente_ovpn=_seccion(datos, "cliente_ovpn", ClienteOvpnCfg),
         seguridad=_seccion(datos, "seguridad", SeguridadCfg),
