@@ -21,6 +21,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
 from .core import eventos_vpn
+from .idiomas import MensajeError
 
 # Jerarquía de tres escalones, de más a menos:
 #
@@ -437,17 +438,17 @@ def crear_usuario(ruta, usuario, password, rol=ROL_SUPERVISOR):
     el rol devuelto y no el que pidió, o dirá una cosa distinta de la que pasó.
     """
     if rol not in ROLES_ASIGNABLES:
-        raise ValueError("Rol no válido: %s" % rol)
+        raise MensajeError("Rol no válido: %(rol)s", rol=rol)
 
     usuario = usuario.strip()
     if not usuario:
-        raise ValueError("El nombre de usuario no puede estar vacío")
+        raise MensajeError("El nombre de usuario no puede estar vacío")
     if usuario.startswith("("):
         # '(sistema)' firma en la auditoría lo que hace el panel por su cuenta.
         # Una cuenta llamada así podría hacerse pasar por él en el registro.
-        raise ValueError("Los nombres entre paréntesis están reservados para el propio panel")
+        raise MensajeError("Los nombres entre paréntesis están reservados para el propio panel")
     if len(password) < 12:
-        raise ValueError("La contraseña debe tener al menos 12 caracteres")
+        raise MensajeError("La contraseña debe tener al menos 12 caracteres")
 
     with conexion(ruta) as con:
         if con.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0] == 0:
@@ -464,8 +465,8 @@ def crear_usuario(ruta, usuario, password, rol=ROL_SUPERVISOR):
             # mismo tipo de error; decir cuál de los dos fue es la diferencia
             # entre un mensaje útil y uno que despista.
             if "usuarios.rol" in str(e):
-                raise ValueError("Ya hay un superusuario en esta instalación")
-            raise ValueError("El usuario '%s' ya existe" % usuario)
+                raise MensajeError("Ya hay un superusuario en esta instalación")
+            raise MensajeError("El usuario '%(usuario)s' ya existe", usuario=usuario)
 
         return cur.lastrowid, rol
 
@@ -530,7 +531,7 @@ def verificar_password(ruta, usuario, password):
 
 def cambiar_password(ruta, usuario, password):
     if len(password) < 12:
-        raise ValueError("La contraseña debe tener al menos 12 caracteres")
+        raise MensajeError("La contraseña debe tener al menos 12 caracteres")
 
     with conexion(ruta) as con:
         cur = con.execute(
@@ -538,7 +539,7 @@ def cambiar_password(ruta, usuario, password):
             (hash_password(password), usuario),
         )
         if cur.rowcount == 0:
-            raise ValueError("No existe el usuario '%s'" % usuario)
+            raise MensajeError("No existe el usuario '%(usuario)s'", usuario=usuario)
 
 
 def cambiar_rol(ruta, usuario, rol):
@@ -550,7 +551,7 @@ def cambiar_rol(ruta, usuario, rol):
     error de más arriba pueda degradarlo.
     """
     if rol not in ROLES_ASIGNABLES:
-        raise ValueError("Rol no válido: %s" % rol)
+        raise MensajeError("Rol no válido: %(rol)s", rol=rol)
 
     with conexion(ruta) as con:
         con.execute(
@@ -580,9 +581,9 @@ def designar_superusuario(ruta, usuario):
         ).fetchone()
 
         if not fila:
-            raise ValueError("No existe el usuario '%s'" % usuario)
+            raise MensajeError("No existe el usuario '%(usuario)s'", usuario=usuario)
         if fila["rol"] == ROL_SUPER:
-            raise ValueError("'%s' ya es el superusuario" % usuario)
+            raise MensajeError("'%(usuario)s' ya es el superusuario", usuario=usuario)
 
         anterior = con.execute(
             "SELECT usuario FROM usuarios WHERE rol = ?", (ROL_SUPER,)
@@ -625,7 +626,7 @@ def guardar_secreto_totp(ruta, usuario, secreto):
             (secreto, usuario),
         )
         if cur.rowcount == 0:
-            raise ValueError("No existe el usuario '%s'" % usuario)
+            raise MensajeError("No existe el usuario '%(usuario)s'", usuario=usuario)
 
 
 def activar_totp(ruta, usuario, paso):

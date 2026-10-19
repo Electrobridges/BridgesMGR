@@ -160,6 +160,33 @@ def N_(texto):
     return texto
 
 
+
+class MensajeError(ValueError):
+    """
+    Un error que acaba en pantalla, lanzado desde un módulo que no debe
+    traducir (db.py, la validación del núcleo).
+
+    Guarda el texto fuente y sus valores sin traducir, así que:
+    - str(e) es el mensaje en español, ya rellenado: es lo que va a la
+      auditoría y a los logs, que son datos y no cambian de idioma;
+    - mensaje(e) es el mismo mensaje en el idioma de quien lo va a leer.
+
+    Es un ValueError: los `except ValueError` de siempre lo siguen cogiendo.
+    """
+
+    def __init__(self, texto, **valores):
+        super().__init__(_formatear(texto, valores))
+        self.texto = texto
+        self.valores = valores
+
+
+def mensaje(error):
+    """El texto de un error para enseñarlo. Los que no son MensajeError, tal cual."""
+    if isinstance(error, MensajeError):
+        return t(error.texto, **error.valores)
+    return str(error)
+
+
 # Los roles se guardan en la base con su nombre español y así se quedan: son
 # datos, y hay índices y comprobaciones que dependen de ellos. Lo que se
 # traduce es solo cómo se enseñan.

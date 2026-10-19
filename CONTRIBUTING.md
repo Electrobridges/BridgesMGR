@@ -221,6 +221,7 @@ español es la clave del catálogo `app/idiomas/en.json`:
 | `tn("%(n)s día", "%(n)s días", n)` | Singular o plural según `n` |
 | `th("Texto con <strong>%(cn)s</strong>", cn=x)` | Literal con HTML en línea; los valores se escapan |
 | `N_("Texto")` | Marca un texto fijo de módulo para traducirlo más tarde con `t(variable)` |
+| `raise MensajeError("Texto %(x)s", x=…)` | Un error que acaba en pantalla, desde un módulo que no traduce. `str(e)` es el español (para auditar), `mensaje(e)` el texto traducido (para enseñar) |
 
 En las plantillas son las mismas: `{{ t('Guardar') }}`. Cuatro reglas, que
 vigila `tests/test_idiomas.py`:

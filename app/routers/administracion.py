@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from .. import db, eventos
 from ..auth import solo_admin, usuario_actual, verificar_csrf
 from ..core import eventos_vpn
+from ..idiomas import mensaje
 from .comun import auditar, aviso, cfg, error_htmx, paginar, render
 
 router = APIRouter(prefix="/admin")
@@ -115,7 +116,7 @@ def crear_usuario(
     try:
         _, concedido = db.crear_usuario(cfg(request).seguridad.db_path, usuario, password, rol)
     except ValueError as e:
-        return error_htmx(request, str(e))
+        return error_htmx(request, mensaje(e))
 
     # Se informa del rol concedido, no del pedido: en una base vacía no son el
     # mismo. Por el panel no puede pasar —hace falta sesión— pero decir una
@@ -141,7 +142,7 @@ def cambiar_password(
     try:
         db.cambiar_password(ruta, usuario, password)
     except ValueError as e:
-        return error_htmx(request, str(e))
+        return error_htmx(request, mensaje(e))
 
     # Cambiar la contraseña invalida las sesiones abiertas de esa cuenta
     db.borrar_sesiones_de(ruta, registro["id"])
@@ -183,7 +184,7 @@ def cambiar_rol(
     try:
         db.cambiar_rol(ruta, usuario, rol)
     except ValueError as e:
-        return error_htmx(request, str(e))
+        return error_htmx(request, mensaje(e))
 
     db.borrar_sesiones_de(ruta, registro["id"])
     auditar(request, sesion, "cambiar_rol_panel", usuario,

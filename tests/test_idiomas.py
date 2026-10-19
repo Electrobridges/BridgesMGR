@@ -137,9 +137,29 @@ SIN_TRADUCCION = (
 
 @pytest.mark.parametrize("modulo", SIN_TRADUCCION)
 def test_los_modulos_de_datos_no_traducen(modulo):
-    texto = (RAIZ / modulo).read_text(encoding="utf-8")
-    assert "idiomas" not in texto
-    assert list(_llamadas_t(ast.parse(texto))) == []
+    """
+    Pueden lanzar MensajeError, que guarda el texto sin traducir y se traduce
+    donde se enseña; lo que no pueden es traducir ellos.
+    """
+    arbol = ast.parse((RAIZ / modulo).read_text(encoding="utf-8"))
+    assert list(_llamadas_t(arbol)) == []
+    for nodo in ast.walk(arbol):
+        if isinstance(nodo, ast.ImportFrom) and nodo.module and nodo.module.endswith("idiomas"):
+            assert {a.name for a in nodo.names} <= {"MensajeError", "N_"}, modulo
+
+
+def test_mensaje_error_guarda_el_espanol_y_traduce_al_ensenarlo():
+    from app import db
+    with idiomas.usar("en"):
+        try:
+            db.cambiar_password(":memory:", "ana", "corta")
+        except ValueError as e:
+            error = e
+    # str(): lo que va a la auditoría, siempre en español
+    assert str(error) == "La contraseña debe tener al menos 12 caracteres"
+    with idiomas.usar("en"):
+        assert idiomas.mensaje(error) == "The password must be at least 12 characters long"
+    assert idiomas.mensaje(RuntimeError("del helper")) == "del helper"
 
 
 def test_lo_que_cruza_la_frontera_no_importa_idiomas():

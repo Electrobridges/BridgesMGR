@@ -25,7 +25,7 @@ APP = os.path.join(RAIZ, "app")
 PLANTILLAS = os.path.join(APP, "templates")
 CATALOGO_EN = os.path.join(APP, "idiomas", "en.json")
 
-FUNCIONES = {"t", "th", "N_"}
+FUNCIONES = {"t", "th", "N_", "MensajeError"}
 PLURALES = {"tn"}
 
 # Un literal entre comillas simples o dobles, con escapes
@@ -69,7 +69,7 @@ def de_python(ruta):
             arg = nodo.args[0]
             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                 textos.setdefault(arg.value, []).append(sitio)
-            elif isinstance(arg, (ast.JoinedStr, ast.BinOp)) or nombre == "N_":
+            elif isinstance(arg, (ast.JoinedStr, ast.BinOp)) or nombre in ("N_", "MensajeError"):
                 # f-string, "a" + b o "x %s" % y: el extractor no lo puede leer
                 problemas.append("%s: %s() con un texto que no es un literal" % (sitio, nombre))
         elif nombre in PLURALES:

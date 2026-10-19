@@ -1,5 +1,6 @@
 {
   "textos": {
+    "'%(usuario)s' ya es el superusuario": "'%(usuario)s' is already the superuser",
     "Abre tu aplicación de autenticación y escribe el código de %(usuario)s.": "Open your authenticator app and enter the code for %(usuario)s.",
     "Abrir menú": "Open menu",
     "admin": "admin",
@@ -16,11 +17,17 @@
     "Código de 6 dígitos": "6-digit code",
     "Código incorrecto o caducado": "Incorrect or expired code",
     "El código cambia cada 30 segundos.": "The code changes every 30 seconds.",
+    "El nombre de usuario no puede estar vacío": "The username cannot be empty",
+    "El usuario '%(usuario)s' ya existe": "The user '%(usuario)s' already exists",
     "ElectroBridges Solutions — abre en una pestaña nueva": "ElectroBridges Solutions — opens in a new tab",
     "Entrar": "Sign in",
+    "La contraseña debe tener al menos 12 caracteres": "The password must be at least 12 characters long",
     "La verificación ha caducado. Entra otra vez.": "The verification has expired. Sign in again.",
     "Logs": "Logs",
+    "Los nombres entre paréntesis están reservados para el propio panel": "Names in parentheses are reserved for the panel itself",
+    "No existe el usuario '%(usuario)s'": "The user '%(usuario)s' does not exist",
     "Panel": "Dashboard",
+    "Rol no válido: %(rol)s": "Invalid role: %(rol)s",
     "Salir": "Sign out",
     "Secciones del panel": "Panel sections",
     "Seguridad": "Security",
@@ -32,7 +39,8 @@
     "Verificación": "Verification",
     "Verificación en dos pasos": "Two-step verification",
     "Verificar": "Verify",
-    "Volver a empezar": "Start over"
+    "Volver a empezar": "Start over",
+    "Ya hay un superusuario en esta instalación": "This installation already has a superuser"
   },
   "plurales": {
     "Demasiados intentos fallidos. Prueba de nuevo en %(n)s minuto.": [
