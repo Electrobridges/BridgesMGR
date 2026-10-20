@@ -337,9 +337,15 @@ def restos_en_espanol(html):
 # Páginas ya traducidas, con qué parte se comprueba: "todo" o la barra
 # superior (que es de base.html y se traduce antes que el contenido). Cada
 # fase de la traducción añade las suyas aquí; al terminar, todas en "todo".
+#
+# "todo" significa que la página entera se lee en inglés: si queda una frase
+# en español, la prueba lo dice. Por eso, desde la fase 1, la barra deja de
+# ser una parte aparte: el panel, las conexiones y los logs ya van enteros.
 PAGINAS = {
     "/login": ("anonimo", "todo"),
-    "/": ("admin", "barra"),
+    "/": ("admin", "todo"),
+    "/conexiones": ("admin", "todo"),
+    "/logs": ("admin", "todo"),
 }
 
 
