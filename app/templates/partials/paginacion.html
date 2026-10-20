@@ -7,15 +7,18 @@
    Se pinta también con una sola página, porque el selector de tamaño y el
    recuento siguen siendo información útil; solo desaparece si no hay nada. #}
 {% if pg.total %}
-<nav class="paginacion" aria-label="Paginación">
+<nav class="paginacion" aria-label="{{ t('Paginación') }}">
 
+  {# La frase entera va en th() y no en t(): lleva <strong> dentro, y th()
+     devuelve Markup para que las etiquetas se pinten y los números se
+     escapen. #}
   <p class="paginacion-cuenta tenue">
-    Mostrando <strong>{{ pg.desde }}</strong>–<strong>{{ pg.hasta }}</strong>
-    de <strong>{{ pg.total }}</strong>
+    {{ th('Mostrando <strong>%(desde)s</strong>–<strong>%(hasta)s</strong> de <strong>%(total)s</strong>',
+          desde=pg.desde, hasta=pg.hasta, total=pg.total) }}
   </p>
 
   <div class="paginacion-tamano">
-    <span class="tenue">Por página:</span>
+    <span class="tenue">{{ t('Por página:') }}</span>
     {% for t in pg.tamanos %}
     <a class="{{ 'activa' if t == pg.por_pagina }}"
        {% if t == pg.por_pagina %}aria-current="true"{% endif %}
@@ -28,19 +31,19 @@
     {% if pg.pagina > 1 %}
     <a class="boton pequeno"
        href="{{ pg.base }}&amp;por_pagina={{ pg.por_pagina }}&amp;pagina={{ pg.pagina - 1 }}"
-       rel="prev">← Anterior</a>
+       rel="prev">← {{ t('Anterior') }}</a>
     {% else %}
-    <span class="boton pequeno desactivado" aria-hidden="true">← Anterior</span>
+    <span class="boton pequeno desactivado" aria-hidden="true">← {{ t('Anterior') }}</span>
     {% endif %}
 
-    <span class="tenue">Página {{ pg.pagina }} de {{ pg.paginas }}</span>
+    <span class="tenue">{{ t('Página %(pagina)s de %(paginas)s', pagina=pg.pagina, paginas=pg.paginas) }}</span>
 
     {% if pg.pagina < pg.paginas %}
     <a class="boton pequeno"
        href="{{ pg.base }}&amp;por_pagina={{ pg.por_pagina }}&amp;pagina={{ pg.pagina + 1 }}"
-       rel="next">Siguiente →</a>
+       rel="next">{{ t('Siguiente') }} →</a>
     {% else %}
-    <span class="boton pequeno desactivado" aria-hidden="true">Siguiente →</span>
+    <span class="boton pequeno desactivado" aria-hidden="true">{{ t('Siguiente') }} →</span>
     {% endif %}
   </div>
   {% endif %}

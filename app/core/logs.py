@@ -9,6 +9,8 @@ el helper privilegiado.
 import os
 from collections import deque
 
+from ..idiomas import t
+
 NIVELES = {
     "error": ("ERROR", "error", "TLS Error", "Cannot", "FATAL"),
     "aviso": ("WARNING", "warning", "Warn"),
@@ -38,7 +40,9 @@ def leer_log(ruta, lineas=200, filtro=None):
     filtro = (filtro or "").strip().lower()
 
     if not os.path.exists(ruta):
-        raise FileNotFoundError("No se encontró el archivo de log: %s" % ruta)
+        # El tipo de excepción no cambia: panel.py lo distingue con
+        # 'except FileNotFoundError'. Lo que cambia es el idioma del texto.
+        raise FileNotFoundError(t("No se encontró el archivo de log: %(ruta)s", ruta=ruta))
 
     ultimas = deque(maxlen=lineas)
 
