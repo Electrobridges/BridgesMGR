@@ -15,10 +15,11 @@ Se aplican en tres sitios, y cada uno cubre lo que los otros no pueden:
   qué destinos llega un cliente con IP fija. Sin IP fija no hay nada contra lo
   que escribir la regla, y por eso los destinos la exigen.
 
-Solo stdlib, como todo `core/`. El helper y el script `client-connect`
-repiten la validación y la evaluación por su cuenta: están al otro lado de la
-frontera de privilegios y no se fían del panel. Hay pruebas que comparan las
-tres copias con los mismos casos.
+Solo stdlib y `app.idiomas`, como el resto de `core/`: los textos que se
+enseñan se traducen, y lo que es dato no se toca. El helper y el script
+`client-connect` repiten la validación y la evaluación por su cuenta: están al
+otro lado de la frontera de privilegios y no se fían del panel. Hay pruebas que
+comparan las tres copias con los mismos casos.
 """
 
 import ipaddress
@@ -63,10 +64,10 @@ MOTIVO_CADUCADO = "caducado"
 MOTIVO_HORARIO = "fuera_de_horario"
 MOTIVO_DURACION = "duracion_maxima"
 
-# Los nombres de los días. El ÍNDICE es lo que se guarda (0 = lunes) y no
-# cambia nunca; el nombre es solo para enseñarlo, y se traduce como cualquier
-# otro texto. El script de conexión y el helper tienen su propia copia, con
-# los índices: eso no se toca.
+# Los nombres de los días, en su orden. El ÍNDICE es lo que se guarda (0 =
+# lunes) y no cambia nunca; el nombre es solo para enseñarlo, y se traduce
+# como cualquier otro texto. Ni el helper ni el script de conexión tienen
+# nombres de días: usan el índice, y el rango 0..6 no se toca.
 DIAS = (N_("lunes"), N_("martes"), N_("miércoles"), N_("jueves"), N_("viernes"),
         N_("sábado"), N_("domingo"))
 

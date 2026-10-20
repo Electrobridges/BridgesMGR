@@ -20,7 +20,7 @@ from ..core import politicas as pol
 from ..core.conexiones import obtener_conexiones
 from ..core.mgmt import ErrorManagement, desconectar_cliente
 from ..core.validacion import CNInvalido, validar_cn
-from ..idiomas import MensajeError, N_, mensaje, t
+from ..idiomas import MensajeError, N_, mensaje, t, tn
 from .comun import auditar, aviso, cfg, error_htmx, render
 
 router = APIRouter(prefix="/clientes")
@@ -54,13 +54,16 @@ def _estado_clientes(request):
 
     def fila(cn, estado, conectado):
         p = politicas.get(cn)
+        # El motivo se calcula una vez: dos llamadas a motivo_rechazo() con
+        # dos 'ahora' distintos podían dar condiciones y valores que no
+        # casaran, y la tabla enseñaría un motivo que no era el del momento.
+        motivo = pol.motivo_rechazo(p, ahora) if p else None
         return {
             "cn": cn, "estado": estado, "conectado": conectado,
             "politica": pol.resumen_traducido(p),
             # Lo que impide entrar AHORA, aunque el certificado sea válido. Sin
             # esto la tabla diría 'válido' de alguien que no puede conectar.
-            "rechazo": t(pol.TEXTO_MOTIVO[pol.motivo_rechazo(p, ahora)])
-                       if p and pol.motivo_rechazo(p, ahora) else None,
+            "rechazo": t(pol.TEXTO_MOTIVO[motivo]) if motivo and motivo in pol.TEXTO_MOTIVO else None,
             # Días que le quedan al CERTIFICADO, solo si son pocos. Es otra
             # cosa que la caducidad de la política: esta no se cambia en el
             # panel, hay que reemitir.
@@ -78,7 +81,6 @@ def _estado_clientes(request):
 
     filas.sort(key=lambda f: (f["estado"] != "valido", f["cn"].lower()))
     return filas, errores
-
 
 @router.get("")
 def pagina_clientes(request: Request, sesion=Depends(usuario_actual)):
@@ -130,9 +132,10 @@ def _clave_pedida(con_clave, clave, clave2):
     if not con_clave:
         return None
 
-    # OJO: aquí el texto va como literal, sin N_(). El extractor lee las
-    # llamadas a MensajeError() y saca la clave de ahí; si el texto venia
-    # envuelto en N_() no lo vería y el mensaje se quedaría en español.
+    # OJO: aquí el texto va como literal, sin N_(). El extractor marca como
+    # problema una llamada a MensajeError() cuyo texto no sea un literal, y
+    # una prueba lo vigila: si el texto venía envuelto en N_(), el extractor
+    # se quejaría de esto, no de la traducción.
     if not clave:
         raise MensajeError(
             "Marcaste cifrar la clave privada pero no escribiste ninguna contraseña")
@@ -439,8 +442,10 @@ def aceptar_reparto(
     auditar(request, sesion, "cerrar_reparto", str(reparto_id), detalle=detalle)
 
     if sin_descargar:
-        texto = t("Aviso retirado, pero quedaban %(n)s perfiles sin descargar. "
-                  "Esos clientes seguirán sin poder conectar.", n=sin_descargar)
+        texto = tn("Aviso retirado, pero quedaba %(n)s perfil sin descargar. "
+                   "Esos clientes seguirán sin poder conectar.",
+                   "Aviso retirado, pero quedaban %(n)s perfiles sin descargar. "
+                   "Esos clientes seguirán sin poder conectar.", sin_descargar)
         tipo = "aviso"
     else:
         texto = t("Aviso retirado. Todos los perfiles se descargaron.")
@@ -544,7 +549,7 @@ def _politica_del_formulario(anterior, ip_fija, destinos, franjas, expira, max_s
     try:
         maximo = int(max_sesion_min) if max_sesion_min else 0
     except ValueError:
-        raise pol.PoliticaInvalida("La duración máxima tiene que ser un número de minutos")
+        raise pol.PoliticaInvalida(N_("La duración máxima tiene que ser un número de minutos"))
 
     return pol.normalizar({
         "ip_fija": ip_fija,
@@ -571,6 +576,7 @@ def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
     red = serverconf.red(directivas) if directivas is not None else None
     gancho = serverconf.gancho(directivas) if directivas is not None else None
 
+    motivo = pol.motivo_rechazo(politica, datetime.now())
     franjas = list(politica["horario"])
     franjas += [{"dias": [], "desde": "", "hasta": ""}] * (FRANJAS_FORMULARIO - len(franjas))
 
@@ -582,15 +588,15 @@ def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
         "bloqueo_texto": t(pol.TEXTO_BLOQUEO.get(politica["bloqueo"], politica["bloqueo"]))
                          if politica.get("bloqueo") else "",
         "franjas": franjas[:max(FRANJAS_FORMULARIO, len(politica["horario"]))],
-        "dias": pol.DIAS,
         "dias_cortos": pol.dias_cortos_formulario_traducidos(),
         "red": red,
-        "gancho": gancho,
+        # El motivo del gancho se enseña, así que va traducido; el informe de
+        # la auditoría lo usa en español, porque es un dato.
+        "gancho": (gancho[0], t(gancho[1])) if gancho and gancho[1] else gancho,
         "error_servidor": error,
         "max_sesion_global": db.max_sesion_global(c.seguridad.db_path),
         "describir_minutos": pol.describir_minutos,
-        "rechazo": t(pol.TEXTO_MOTIVO[pol.motivo_rechazo(politica, datetime.now())])
-                   if pol.motivo_rechazo(politica, datetime.now()) else None,
+        "rechazo": t(pol.TEXTO_MOTIVO[motivo]) if motivo and motivo in pol.TEXTO_MOTIVO else None,
         "dos_pasos": _estado_dos_pasos(c, cn, directivas),
         "uso_mes": trafico.uso_mes(c.seguridad.db_path).get(cn, 0),
         "grafica_trafico": estadisticas.trafico_diario(c.seguridad.db_path, cn),

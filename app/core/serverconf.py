@@ -10,6 +10,8 @@ Solo stdlib y sin E/S: se le pasa la lista y se prueba sin servidor.
 
 import ipaddress
 
+from ..idiomas import N_
+
 HOOK_CLIENT_CONNECT = "/usr/local/lib/ovpn-web/client-connect"
 VERIFICAR_TOTP = "/usr/local/lib/ovpn-web/verificar-totp"
 GRUPO_VPN = "ovpnweb-vpn"
@@ -85,15 +87,18 @@ def gancho(directivas):
 
     Devuelve (bool, motivo). Sin él, las políticas solo se aplican expulsando
     por el management, y quien es expulsado vuelve a entrar en segundos.
+    El motivo es un texto que se enseña, y se marca con N_() para que se
+    pueda traducir al enseñarlo. El informe de la auditoría lo usa tal cual,
+    en español, porque es un dato.
     """
     cc = ultima(directivas, "client-connect")
     if not cc:
-        return False, "el server.conf no tiene 'client-connect'"
+        return False, N_("el server.conf no tiene 'client-connect'")
     if cc[0] != HOOK_CLIENT_CONNECT:
-        return False, "'client-connect' apunta a otro script (%s)" % cc[0]
+        return False, N_("'client-connect' apunta a otro script (%s)") % cc[0]
     nivel = ultima(directivas, "script-security")
     if not nivel or nivel[0] not in ("2", "3"):
-        return False, "falta 'script-security 2', y sin él OpenVPN no ejecuta el script"
+        return False, N_("falta 'script-security 2', y sin él OpenVPN no ejecuta el script")
     return True, None
 
 

@@ -347,6 +347,7 @@ PAGINAS = {
     "/conexiones": ("admin", "todo"),
     "/logs": ("admin", "todo"),
     "/clientes": ("admin", "todo"),
+    "/clientes/ana/politica": ("admin", "todo"),
 }
 
 
@@ -438,6 +439,30 @@ def test_el_403_se_enseña_en_el_idioma_de_quien_lo_recibe(cliente, usuarios):
     assert "Tu rol no permite" not in r.text
 
 
+def test_el_motivo_del_gancho_se_enseña_traducido(cliente, usuarios, monkeypatch):
+    """
+    El aviso de que las políticas no se aplican al conectar lleva el motivo
+    que da el server.conf. Sin el server.conf, el aviso no se pinta y el
+    motivo no sale, así que esta prueba lo monta ella.
+    """
+    from app.core import easyrsa
+
+    monkeypatch.setattr(easyrsa, "server_conf", lambda c: {"directivas": [
+        ["server", "10.8.0.0", "255.255.255.0", "nopool"],
+        ["port", "1194"],
+    ]})
+
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    r = cliente.get("/clientes/ana/politica")
+
+    assert r.status_code == 200
+    assert "The policies are not applied on connect" in r.text
+    # th() escapa el valor, así que las comillas van como &#39;
+    assert "the server.conf has no" in r.text
+    assert restos_en_espanol(r.text) == []
+
+
 def test_la_verificacion_en_dos_pasos_en_ingles(app):
     """Sin pasar por todo el alta del segundo factor: se pinta la plantilla"""
     pedido = Request({"type": "http", "method": "GET", "path": "/login/codigo",
@@ -487,6 +512,23 @@ def test_las_etiquetas_de_la_politica_no_se_separan():
 
     for p in politicas:
         assert len(pol.resumen(p)) == len(pol.resumen_traducido(p)), p
+        # Y en el MISMO orden: si a una se le añade una etiqueta delante y a la
+        # otra detrás, el número sigue igual y la prueba pasaba, pero la tabla
+        # y la auditoría enseñarían las etiquetas en distinto orden.
+        assert _forma(pol.resumen(p)) == _forma(pol.resumen_traducido(p)), p
+
+
+def _forma(etiquetas):
+    """Qué campo representa cada etiqueta, para comparar el orden"""
+    formas = []
+    for etiqueta in etiquetas:
+        if "(" in etiqueta:
+            formas.append(etiqueta.split("(")[0].strip())
+        elif "%(" in etiqueta:
+            formas.append(etiqueta.split("%(")[0].strip())
+        else:
+            formas.append(etiqueta)
+    return formas
 
 
 def test_las_etiquetas_de_la_politica_se_traducen():
