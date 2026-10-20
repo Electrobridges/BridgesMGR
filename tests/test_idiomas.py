@@ -24,7 +24,7 @@ from app import idiomas
 from app.idiomas import extraer
 from app.routers.idioma import COOKIE, del_navegador
 
-from .conftest import PASSWORD_ADMIN
+from .conftest import PASSWORD_ADMIN, PASSWORD_SUPERVISOR
 
 RAIZ = Path(__file__).resolve().parents[1]
 APP = RAIZ / "app"
@@ -368,6 +368,71 @@ def test_pagina_en_ingles_sin_restos_en_espanol(cliente, usuarios, ruta):
     assert r.status_code == 200, r.text[:300]
     assert '<html lang="en">' in r.text
     assert restos_en_espanol(_parte(r.text, parte)) == []
+
+
+# Los fragmentos que HTMX inserta en las páginas. No son páginas: no llevan
+# <html lang>, así que no valen para la prueba de arriba, y sin ellos la
+# mayor parte del texto de la tabla de conexiones y del visor de logs
+# —encabezados, plurales, el hx-confirm de desconectar— no lo vigila nadie.
+FRAGMENTOS = {
+    "/conexiones/tabla": "admin",
+    "/logs/contenido": "admin",
+}
+
+
+@pytest.fixture
+def conexiones_simuladas(monkeypatch):
+    """
+    Una conexión de mentira, para que la tabla tenga filas.
+
+    Sin ella la tabla sale vacía y el botón de desconectar no se pinta: el
+    texto que más falta vigilar es justamente el que vive en las filas.
+    """
+    import app.routers.panel as mod
+
+    def obtener(cfg):
+        return ([{
+            "user": "ana",
+            "real_ip": "192.168.1.50",
+            "virtual_ip": "10.8.0.6",
+            "bytes_recv": 1024,
+            "bytes_sent": 2048,
+            "connected_since": "10:15",
+            "connected_seconds": 3600,
+        }], "management", [])
+
+    monkeypatch.setattr(mod, "obtener_conexiones", obtener)
+
+
+@pytest.mark.parametrize("ruta", sorted(FRAGMENTOS))
+def test_fragmento_en_ingles_sin_restos_en_espanol(cliente, usuarios, ruta, conexiones_simuladas):
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    r = cliente.get(ruta)
+    assert r.status_code == 200, r.text[:300]
+    assert restos_en_espanol(r.text) == []
+
+
+def test_la_tabla_de_conexiones_despide_en_ingles(cliente, usuarios, conexiones_simuladas):
+    """La fila tiene que estar en inglés, y el botón con su confirmación"""
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    html = cliente.get("/conexiones/tabla").text
+
+    assert "Real IP" in html and "Connected for" in html
+    assert "Disconnect ana?" in html
+    assert restos_en_espanol(html) == []
+
+
+def test_el_403_se_enseña_en_el_idioma_de_quien_lo_recibe(cliente, usuarios):
+    """La página de error es de la fase 1, así que su mensaje va con ella"""
+    cliente.post("/login", data={"usuario": "mirona", "password": PASSWORD_SUPERVISOR})
+    cliente.cookies.set(COOKIE, "en")
+    r = cliente.get("/seguridad")
+
+    assert r.status_code == 403
+    assert "Your role does not allow this action" in r.text
+    assert "Tu rol no permite" not in r.text
 
 
 def test_la_verificacion_en_dos_pasos_en_ingles(app):
