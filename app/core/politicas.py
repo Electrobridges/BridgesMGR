@@ -50,6 +50,12 @@ BYTES_MB = 1_000_000
 BLOQUEO_CUOTA = "cuota"
 BLOQUEOS = (BLOQUEO_CUOTA,)
 
+# Cómo se enseña cada código de bloqueo. El código es lo que se guarda y lo
+# que se compara, y no se toca; esto es solo el texto de la pantalla.
+TEXTO_BLOQUEO = {
+    BLOQUEO_CUOTA: N_("cuota"),
+}
+
 # Por qué se rechaza o se expulsa. Mismas cadenas en el script de conexión:
 # son CÓDIGOS, no textos, y no se traducen.
 MOTIVO_BLOQUEO = "bloqueado"
@@ -67,6 +73,12 @@ DIAS = (N_("lunes"), N_("martes"), N_("miércoles"), N_("jueves"), N_("viernes")
 # Los nombres cortos, para las etiquetas de la tabla. En inglés no valen las
 # iniciales españolas, así que también se traducen.
 DIAS_CORTOS = (N_("L"), N_("M"), N_("X"), N_("J"), N_("V"), N_("S"), N_("D"))
+
+# Los nombres cortos de las casillas del formulario. Son tres letras, como los
+# que salían de cortar el nombre, y tienen su propia lista porque se traducen:
+# en inglés hace falta "Mon", no "lun". En español no cambia nada.
+DIAS_CORTOS_FORMULARIO = (N_("lun"), N_("mar"), N_("mié"), N_("jue"),
+                           N_("vie"), N_("sáb"), N_("dom"))
 
 FORMATO_EXPIRA = "%Y-%m-%dT%H:%M"
 
@@ -358,6 +370,16 @@ def dias_cortos_traducidos():
     return [t(d) for d in DIAS_CORTOS]
 
 
+def dias_cortos_formulario_traducidos():
+    """
+    Los nombres cortos de las casillas, en el idioma de quien las mira.
+
+    En inglés son Mon, Tue, Wed, Thu, Fri, Sat y Sun; en español siguen siendo
+    lun, mar, mié, jue, vie, sáb y dom, que es lo que se veía antes.
+    """
+    return [t(d) for d in DIAS_CORTOS_FORMULARIO]
+
+
 def describir_horario(horario, dias_cortos=None):
     """
     'L–V 08:00–19:00; S 09:00–13:00' para la tabla de clientes.
@@ -429,7 +451,8 @@ def resumen_traducido(politica):
     p = politica or vacia()
     partes = []
     if p.get("bloqueo"):
-        partes.append(t("bloqueado (%(bloqueo)s)", bloqueo=p["bloqueo"]))
+        partes.append(t("bloqueado (%(bloqueo)s)",
+                        bloqueo=t(TEXTO_BLOQUEO.get(p["bloqueo"], p["bloqueo"]))))
     if p.get("expira"):
         fecha = datetime.strptime(p["expira"], FORMATO_EXPIRA)
         partes.append(t("caduca %(fecha)s", fecha=fecha.strftime("%d/%m/%Y %H:%M")))

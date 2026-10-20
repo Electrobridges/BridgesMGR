@@ -20,7 +20,7 @@ from ..core import politicas as pol
 from ..core.conexiones import obtener_conexiones
 from ..core.mgmt import ErrorManagement, desconectar_cliente
 from ..core.validacion import CNInvalido, validar_cn
-from ..idiomas import N_, mensaje, t
+from ..idiomas import MensajeError, N_, mensaje, t
 from .comun import auditar, aviso, cfg, error_htmx, render
 
 router = APIRouter(prefix="/clientes")
@@ -130,6 +130,9 @@ def _clave_pedida(con_clave, clave, clave2):
     if not con_clave:
         return None
 
+    # OJO: aquí el texto va como literal, sin N_(). El extractor lee las
+    # llamadas a MensajeError() y saca la clave de ahí; si el texto venia
+    # envuelto en N_() no lo vería y el mensaje se quedaría en español.
     if not clave:
         raise MensajeError(
             "Marcaste cifrar la clave privada pero no escribiste ninguna contraseña")
@@ -574,9 +577,13 @@ def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
     return render(request, "cliente_politica.html", {
         "cn": cn,
         "politica": politica,
+        # El código del bloqueo se guarda y se compara, pero se enseña: aquí
+        # va ya traducido, que es lo que se ve en la página.
+        "bloqueo_texto": t(pol.TEXTO_BLOQUEO.get(politica["bloqueo"], politica["bloqueo"]))
+                         if politica.get("bloqueo") else "",
         "franjas": franjas[:max(FRANJAS_FORMULARIO, len(politica["horario"]))],
         "dias": pol.DIAS,
-        "dias_cortos": pol.dias_cortos_traducidos(),
+        "dias_cortos": pol.dias_cortos_formulario_traducidos(),
         "red": red,
         "gancho": gancho,
         "error_servidor": error,

@@ -47,13 +47,13 @@
     <div class="franja">
       <span class="franja-titulo">{{ t('Franja %(n)s', n=n) }}</span>
       <div class="franja-dias" role="group" aria-label="{{ t('Días de la franja %(n)s', n=n) }}">
-        {% for nombre in dias %}
+        {% for nombre in dias_cortos %}
         <label class="casilla">
           <input type="checkbox" name="f{{ n }}_dias" value="{{ loop.index0 }}"
                  {% if loop.index0 in f.dias %}checked{% endif %}>
           {# El nombre corto viene en su propia lista, traducida: en inglés las
              iniciales españolas no dicen nada. #}
-          {{ dias_cortos[loop.index0] }}
+          {{ nombre }}
         </label>
         {% endfor %}
       </div>
@@ -135,7 +135,7 @@
 
   {% if politica.bloqueo %}
   <div class="aviso aviso-aviso">
-    {{ t('Bloqueado por el panel (%(bloqueo)s). Se levanta solo cuando deja de cumplirse la condición.', bloqueo=politica.bloqueo) }}
+    {{ t('Bloqueado por el panel (%(bloqueo)s). Se levanta solo cuando deja de cumplirse la condición.', bloqueo=bloqueo_texto) }}
   </div>
   {% endif %}
 

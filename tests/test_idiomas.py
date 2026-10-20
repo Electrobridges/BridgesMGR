@@ -346,6 +346,7 @@ PAGINAS = {
     "/": ("admin", "todo"),
     "/conexiones": ("admin", "todo"),
     "/logs": ("admin", "todo"),
+    "/clientes": ("admin", "todo"),
 }
 
 
@@ -377,6 +378,8 @@ def test_pagina_en_ingles_sin_restos_en_espanol(cliente, usuarios, ruta):
 FRAGMENTOS = {
     "/conexiones/tabla": "admin",
     "/logs/contenido": "admin",
+    "/clientes/tabla": "admin",
+    "/clientes/archivados": "admin",
 }
 
 
@@ -453,3 +456,58 @@ def test_la_heuristica_detecta_lo_que_tiene_que_detectar():
     assert restos_en_espanol("<p>Descargar el perfil</p>") == ["Descargar el perfil"]
     assert restos_en_espanol('<input placeholder="contraseña">') == ["contraseña"]
     assert restos_en_espanol("<p>Download the profile</p>") == []
+
+
+# ------------------------------------------------- las etiquetas de la política
+
+def test_las_etiquetas_de_la_politica_no_se_separan():
+    """
+    Las etiquetas cortas de la tabla tienen dos versiones: una en español, que
+    es la que va a la auditoría porque es un dato, y otra traducida para la
+    tabla. Si a una se le añade una etiqueta y a la otra no, se separan sin que
+    nadie lo note: la tabla enseñaría menos de lo que la auditoría guarda.
+    """
+    from app.core import politicas as pol
+
+    politicas = [
+        {},
+        {"bloqueo": "cuota"},
+        {"expira": "2030-01-02T03:04"},
+        {"horario": [{"dias": [0, 1, 2, 3, 4], "desde": "08:00", "hasta": "19:00"}]},
+        {"max_sesion_min": 480},
+        {"cuota_mb_mes": 5000},
+        {"ip_fija": "10.8.0.6"},
+        {"destinos": ["192.168.1.10"]},
+        {"destinos": ["192.168.1.10", "192.168.1.11"]},
+        {"bloqueo": "cuota", "expira": "2030-01-02T03:04", "ip_fija": "10.8.0.6",
+         "max_sesion_min": 480, "cuota_mb_mes": 5000,
+         "horario": [{"dias": [4, 5], "desde": "09:00", "hasta": "13:00"}],
+         "destinos": ["192.168.1.10"]},
+    ]
+
+    for p in politicas:
+        assert len(pol.resumen(p)) == len(pol.resumen_traducido(p)), p
+
+
+def test_las_etiquetas_de_la_politica_se_traducen():
+    from app.core import politicas as pol
+
+    p = {"bloqueo": "cuota", "expira": "2030-01-02T03:04", "ip_fija": "10.8.0.6",
+         "max_sesion_min": 480, "cuota_mb_mes": 5000,
+         "horario": [{"dias": [0, 1, 2, 3, 4], "desde": "08:00", "hasta": "19:00"}],
+         "destinos": ["192.168.1.10", "192.168.1.11"]}
+
+    with idiomas.usar("en"):
+        etiquetas = pol.resumen_traducido(p)
+    juntos = " | ".join(etiquetas)
+
+    assert "blocked (quota)" in juntos
+    assert "expires 02/01/2030 03:04" in juntos
+    assert "Mon–Fri 08:00–19:00" in juntos
+    assert "max. session 8 h" in juntos
+    assert "quota 5 GB/month" in juntos
+    assert "IP 10.8.0.6" in juntos
+    assert "2 destinations" in juntos
+    # Y en español siguen igual, porque es lo que va a la auditoría.
+    assert "bloqueado (cuota)" in pol.resumen(p)
+    assert "L–V 08:00–19:00" in " ".join(pol.resumen(p))
