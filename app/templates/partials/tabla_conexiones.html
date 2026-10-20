@@ -4,20 +4,20 @@
 
 {% if conexiones %}
 <p class="tenue">
-  {{ conexiones | length }} conexión(es) &middot; fuente: {{ fuente }}
+  {{ tn('%(n)s conexión', '%(n)s conexiones', conexiones|length) }} &middot; {{ t('fuente') }}: {{ fuente }}
 </p>
 <div class="tabla-scroll">
 <table class="tabla">
   <thead>
     <tr>
-      <th>Cliente</th>
-      <th>IP real</th>
-      <th>IP virtual</th>
-      <th>Descarga</th>
-      <th>Subida</th>
-      <th>Conectado desde</th>
-      <th>Tiempo conectado</th>
-      {% if puede_desconectar %}<th>Acciones</th>{% endif %}
+      <th>{{ t('Cliente') }}</th>
+      <th>{{ t('IP real') }}</th>
+      <th>{{ t('IP virtual') }}</th>
+      <th>{{ t('Descarga') }}</th>
+      <th>{{ t('Subida') }}</th>
+      <th>{{ t('Conectado desde') }}</th>
+      <th>{{ t('Tiempo conectado') }}</th>
+      {% if puede_desconectar %}<th>{{ t('Acciones') }}</th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -37,7 +37,7 @@
           {{ formatear_duracion(c.connected_seconds) }}
         {%- else -%}
           <span class="tenue"
-                title="El status no da la hora de conexión en un formato reconocible">&mdash;</span>
+                title="{{ t('El status no da la hora de conexión en un formato reconocible') }}">&mdash;</span>
         {%- endif -%}
       </td>
       {% if puede_desconectar %}
@@ -47,8 +47,8 @@
                 hx-post="/clientes/{{ c.user }}/desconectar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"
-                hx-confirm="¿Desconectar a {{ c.user }}? Podrá volver a conectarse enseguida.">
-          Desconectar
+                hx-confirm="{{ t('¿Desconectar a %(cn)s? Podrá volver a conectarse enseguida.', cn=c.user) }}">
+          {{ t('Desconectar') }}
         </button>
       </td>
       {% endif %}
@@ -58,5 +58,5 @@
 </table>
 </div>
 {% elif not errores %}
-<p class="tenue">No hay clientes conectados ahora mismo.</p>
+<p class="tenue">{{ t('No hay clientes conectados ahora mismo.') }}</p>
 {% endif %}

@@ -8,12 +8,22 @@ marca END, porque un solo recv() trunca la respuesta con varios clientes.
 
 import socket
 
+from ..idiomas import MensajeError, N_
 from .parsers import parse_v3_output
 from .validacion import validar_cn
 
 
-class ErrorManagement(Exception):
+class ErrorManagement(MensajeError):
     """Fallo al hablar con el management interface"""
+
+
+# Los mensajes se marcan con N_() y van con marcadores con nombre: así el
+# texto se enseña en el idioma de quien lo lee, pero str(e) —que es lo que va
+# a la auditoría y a los logs— sale siempre en español, como un dato más.
+_SIN_MGMT = N_("Management interface (%(host)s:%(puerto)s) no disponible: %(error)s")
+_ERROR_LEYENDO = N_("Error leyendo del management: %(error)s")
+_ERROR_KILL = N_("Error enviando kill: %(error)s")
+_SIN_CONFIRMAR = N_("El management no confirmó la desconexión")
 
 
 def _conectar(host, puerto, timeout=5):
@@ -65,15 +75,13 @@ def obtener_conexiones(host, puerto, timeout=5):
     try:
         sock = _conectar(host, puerto, timeout)
     except OSError as e:
-        raise ErrorManagement(
-            "Management interface (%s:%s) no disponible: %s" % (host, puerto, e)
-        )
+        raise ErrorManagement(_SIN_MGMT, host=host, puerto=puerto, error=e)
 
     try:
         sock.send(b"status 3\n")
         data = _leer_hasta_end(sock)
     except OSError as e:
-        raise ErrorManagement("Error leyendo del management: %s" % e)
+        raise ErrorManagement(_ERROR_LEYENDO, error=e)
     finally:
         sock.close()
 
@@ -93,19 +101,21 @@ def desconectar_cliente(host, puerto, cn, timeout=5):
     try:
         sock = _conectar(host, puerto, timeout)
     except OSError as e:
-        raise ErrorManagement(
-            "Management interface (%s:%s) no disponible: %s" % (host, puerto, e)
-        )
+        raise ErrorManagement(_SIN_MGMT, host=host, puerto=puerto, error=e)
 
     try:
         sock.send(("kill %s\n" % cn).encode())
         respuesta = sock.recv(1024).decode('utf-8', errors='replace').strip()
     except OSError as e:
-        raise ErrorManagement("Error enviando kill: %s" % e)
+        raise ErrorManagement(_ERROR_KILL, error=e)
     finally:
         sock.close()
 
     if 'SUCCESS' not in respuesta:
-        raise ErrorManagement(respuesta or "El management no confirmó la desconexión")
+        # La respuesta cruda del management no se traduce: cruza la frontera
+        # y es un dato. Si viene vacía, se lanza el mensaje propio, que sí.
+        if respuesta:
+            raise ErrorManagement(respuesta)
+        raise ErrorManagement(_SIN_CONFIRMAR)
 
     return respuesta

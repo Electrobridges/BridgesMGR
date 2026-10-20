@@ -14,9 +14,23 @@ from .. import db, estadisticas, exportacion, notificar, respaldar
 from ..core import easyrsa, respaldos
 from ..core.easyrsa import ErrorHelper, estado_servicio, listar_certificados
 from ..core.parsers import format_bytes
+from ..idiomas import N_, t, mensaje
 from .comun import auditar, aviso, cfg, error_htmx, render
 
 router = APIRouter()
+
+# El valor interno de 'fuente' no cambia ('management', 'status' o None): lo
+# que cambia es cómo se enseña. Las claves son las de siempre y los valores
+# son el texto que va en pantalla, ya traducido.
+_FUENTES = {
+    "management": N_("management"),
+    "status": N_("status"),
+}
+
+
+def _fuente_legible(fuente):
+    """La fuente de datos como se enseña: traducida, o None si no se pudo leer."""
+    return t(_FUENTES[fuente]) if fuente in _FUENTES else None
 
 
 @router.get("/")
@@ -28,13 +42,13 @@ def dashboard(request: Request, sesion=Depends(usuario_actual)):
         certificados = listar_certificados(c)
     except ErrorHelper as e:
         certificados = {"validos": [], "revocados": []}
-        errores.append("No se pudo consultar la PKI: %s" % e)
+        errores.append(t("No se pudo consultar la PKI: %(error)s", error=mensaje(e)))
 
     try:
         servicio = estado_servicio(c)
     except ErrorHelper as e:
-        servicio = {"activo": False, "estado": "desconocido", "servicio": c.openvpn.servicio}
-        errores.append("No se pudo consultar el servicio: %s" % e)
+        servicio = {"activo": False, "estado": t("desconocido"), "servicio": c.openvpn.servicio}
+        errores.append(t("No se pudo consultar el servicio: %(error)s", error=mensaje(e)))
 
     return render(request, "dashboard.html", {
         "graficas": estadisticas.panel(c.seguridad.db_path),
@@ -42,7 +56,7 @@ def dashboard(request: Request, sesion=Depends(usuario_actual)):
         "top": top_por_trafico(conexiones),
         "certificados": certificados,
         "servicio": servicio,
-        "fuente": fuente,
+        "fuente": _fuente_legible(fuente),
         "errores": errores,
     })
 
@@ -59,7 +73,7 @@ def tabla_conexiones(request: Request, sesion=Depends(usuario_actual)):
 
     return render(request, "partials/tabla_conexiones.html", {
         "conexiones": conexiones,
-        "fuente": fuente,
+        "fuente": _fuente_legible(fuente),
         "errores": errores,
         "puede_desconectar": sesion["rol"] == "admin",
     })
@@ -93,15 +107,15 @@ def contenido_logs(
 
     try:
         entradas = core_logs.leer_log(c.openvpn.log_path, lineas, filtro)
-    except FileNotFoundError as e:
-        error = str(e)
+    except FileNotFoundError:
+        # El error lleva el texto en español, que es un dato; lo que se
+        # enseña se arma aquí, en el idioma de quien lo lee.
+        error = t("No se encontró el archivo de log: %(ruta)s", ruta=c.openvpn.log_path)
     except PermissionError:
-        error = (
-            "Sin permisos para leer %s. El usuario del servicio debe pertenecer "
-            "al grupo 'adm'." % c.openvpn.log_path
-        )
+        error = t("Sin permisos para leer %(ruta)s. El usuario del servicio debe "
+                  "pertenecer al grupo 'adm'.", ruta=c.openvpn.log_path)
     except OSError as e:
-        error = "Error leyendo el log: %s" % e
+        error = t("Error leyendo el log: %(error)s", error=e)
 
     # El momento va SIEMPRE, también con error o sin líneas: es la única
     # señal de que la lectura ocurrió. Sin él, pulsar «Actualizar» con un log

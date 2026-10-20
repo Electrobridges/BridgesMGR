@@ -14,7 +14,7 @@
   </ul>
   {% endif %}
   <svg class="grafica-svg" viewBox="0 0 {{ g.ancho }} {{ g.alto }}" role="img"
-       aria-label="{{ titulo or 'Gráfica' }}" preserveAspectRatio="xMidYMid meet">
+       aria-label="{{ titulo or t('Gráfica') }}" preserveAspectRatio="xMidYMid meet">
     {% for m in g.marcas %}
     <line class="rejilla{{ ' base' if loop.first }}" x1="{{ g.x0 }}" x2="{{ g.x1 }}" y1="{{ m.y }}" y2="{{ m.y }}"></line>
     <text class="eje" x="{{ g.x0 - 6 }}" y="{{ m.y + 4 }}" text-anchor="end">{{ m.texto }}</text>
@@ -30,12 +30,12 @@
     <text class="eje" x="{{ x.x }}" y="{{ g.alto - 6 }}" text-anchor="middle">{{ x.texto }}</text>
     {% endfor %}
   </svg>
-  {% if g.vacia %}<p class="tenue pequeno grafica-vacia">Sin datos todavía en este periodo.</p>{% endif %}
+  {% if g.vacia %}<p class="tenue pequeno grafica-vacia">{{ t('Sin datos todavía en este periodo.') }}</p>{% endif %}
   <details class="grafica-tabla">
-    <summary class="tenue pequeno">Ver los datos</summary>
+    <summary class="tenue pequeno">{{ t('Ver los datos') }}</summary>
     <div class="tabla-scroll">
     <table class="tabla">
-      <thead><tr><th>Día</th>{% for h in g.tabla.cabecera %}<th class="num">{{ h }}</th>{% endfor %}</tr></thead>
+      <thead><tr><th>{{ t('Día') }}</th>{% for h in g.tabla.cabecera %}<th class="num">{{ h }}</th>{% endfor %}</tr></thead>
       <tbody>
         {% for nombre, valores in g.tabla.filas | reverse %}
         <tr><td>{{ nombre }}</td>{% for v in valores %}<td class="num">{{ v }}</td>{% endfor %}</tr>

@@ -20,7 +20,7 @@ from ..core import politicas as pol
 from ..core.conexiones import obtener_conexiones
 from ..core.mgmt import ErrorManagement, desconectar_cliente
 from ..core.validacion import CNInvalido, validar_cn
-from ..idiomas import MensajeError, N_, mensaje, t
+from ..idiomas import N_, mensaje, t
 from .comun import auditar, aviso, cfg, error_htmx, render
 
 router = APIRouter(prefix="/clientes")
@@ -323,6 +323,8 @@ def desconectar(
     try:
         desconectar_cliente(c.openvpn.mgmt_host, c.openvpn.mgmt_port, cn)
     except ErrorManagement as e:
+        # A la auditoría va str(e), que es el mensaje en español: es un dato.
+        # Lo que se enseña va traducido, y el de dentro también.
         auditar(request, sesion, "desconectar", cn, "error", str(e))
         return error_htmx(request, t("No se pudo desconectar a '%(cn)s': %(error)s",
                                      cn=cn, error=mensaje(e)))
