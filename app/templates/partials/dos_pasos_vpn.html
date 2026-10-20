@@ -7,35 +7,33 @@
 
 {% if e.faltan %}
 <div class="aviso aviso-aviso">
-  El servidor aún no puede pedir el código. Añade al <code>server.conf</code>
-  y reinicia OpenVPN:
+  {{ th('El servidor aún no puede pedir el código. Añade al <code>server.conf</code> y reinicia OpenVPN:') }}
   {% for linea in e.faltan %}<code>{{ linea }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
-  y <code>auth-gen-token 0</code>.
+  {{ th('y <code>auth-gen-token 0</code>.') }}
 </div>
 {% endif %}
 
 {% if e.recien %}
   <div class="alta-totp">
     {% if e.qr %}
-    <figure class="qr"><img src="{{ e.qr }}" alt="Código QR con la clave de {{ e.cn }}" width="200" height="200"></figure>
+    <figure class="qr"><img src="{{ e.qr }}" alt="{{ t('Código QR con la clave de %(cn)s', cn=e.cn) }}" width="200" height="200"></figure>
     {% endif %}
     <div class="alta-totp-manual">
-      <p><span class="etiqueta etiqueta-ok">activada</span>
-        <strong>Esta clave solo se enseña ahora.</strong> Que {{ e.cn }} la
-        escanee con su app, o que la teclee:</p>
+      <p><span class="etiqueta etiqueta-ok">{{ t('activada') }}</span>
+        {{ th('<strong>Esta clave solo se enseña ahora.</strong>') }}
+        {{ t('Que %(cn)s la escanee con su app, o que la teclee:', cn=e.cn) }}</p>
       <p class="secreto"><code>{{ e.secreto_legible }}</code></p>
-      {% if e.fallo_qr %}<p class="tenue">Sin QR: {{ e.fallo_qr }}</p>{% endif %}
+      {% if e.fallo_qr %}<p class="tenue">{{ t('Sin QR: %(error)s', error=e.fallo_qr) }}</p>{% endif %}
       <ol class="pasos">
-        <li><strong>Descárgale un <code>.ovpn</code> nuevo</strong>: el de ahora no pide código.</li>
-        <li>Al conectar, su cliente pedirá usuario y contraseña: el usuario da igual
-          (que ponga <code>{{ e.cn }}</code>) y la <strong>contraseña es el código</strong> de la app.</li>
+        <li>{{ th('<strong>Descárgale un <code>.ovpn</code> nuevo</strong>: el de ahora no pide código.') }}</li>
+        <li>{{ th('Al conectar, su cliente pedirá usuario y contraseña: el usuario da igual (que ponga <code>%(cn)s</code>) y la <strong>contraseña es el código</strong> de la app.', cn=e.cn) }}</li>
       </ol>
     </div>
   </div>
 {% elif e.activada %}
-  <p><span class="etiqueta etiqueta-ok">activada</span> Se le pide el código al conectar.</p>
+  <p><span class="etiqueta etiqueta-ok">{{ t('activada') }}</span> {{ t('Se le pide el código al conectar.') }}</p>
 {% elif e.activada is not none %}
-  <p><span class="etiqueta">desactivada</span> Entra solo con su certificado.</p>
+  <p><span class="etiqueta">{{ t('desactivada') }}</span> {{ t('Entra solo con su certificado.') }}</p>
 {% endif %}
 
 {% if manda and e.activada is not none %}
@@ -44,16 +42,16 @@
           hx-disabled-elt="this"
           hx-post="/clientes/{{ e.cn }}/dos-pasos/activar"
           hx-target="#dos-pasos-vpn" hx-swap="innerHTML"
-          {% if e.activada or e.recien %}hx-confirm="Se generará una clave nueva y la de su app dejará de valer. ¿Continuar?"{% endif %}>
-    {{ 'Generar clave nueva' if e.activada or e.recien else 'Activar' }}
+          {% if e.activada or e.recien %}hx-confirm="{{ t('Se generará una clave nueva y la de su app dejará de valer. ¿Continuar?') }}"{% endif %}>
+    {{ t('Generar clave nueva') if e.activada or e.recien else t('Activar') }}
   </button>
   {% if e.activada or e.recien %}
   <button class="boton boton-peligro"
           hx-disabled-elt="this"
           hx-post="/clientes/{{ e.cn }}/dos-pasos/quitar"
           hx-target="#dos-pasos-vpn" hx-swap="innerHTML"
-          hx-confirm="¿Quitar la verificación en dos pasos de {{ e.cn }}? Volverá a entrar solo con el certificado.">
-    Quitar
+          hx-confirm="{{ t('¿Quitar la verificación en dos pasos de %(cn)s? Volverá a entrar solo con el certificado.', cn=e.cn) }}">
+    {{ t('Quitar') }}
   </button>
   {% endif %}
 </div>

@@ -13,21 +13,19 @@
   {# Clase propia y no .aviso: aquel es flex con un glifo antepuesto, pensado
      para una línea de texto, y aquí hay título, lista y botón. #}
   <section class="reparto" role="status">
-    <h2>Hay perfiles pendientes de repartir</h2>
+    <h2>{{ t('Hay perfiles pendientes de repartir') }}</h2>
 
     <p>
       {% if reparto.motivo == 'rotacion_tls_crypt' %}
-        Se rotó la clave <code>tls-crypt</code> del servidor.
+        {{ th('Se rotó la clave <code>tls-crypt</code> del servidor.') }}
       {% elif reparto.motivo == 'reconstruccion_ca' %}
-        Se reconstruyó la autoridad certificadora.
+        {{ t('Se reconstruyó la autoridad certificadora.') }}
       {% elif reparto.motivo == 'migracion_tls_crypt_v2' %}
-        El servidor pasó a <code>tls-crypt-v2</code>: cada perfil lleva ahora su
-        propia clave, y hacen falta clientes OpenVPN 2.6 o posteriores.
+        {{ th('El servidor pasó a <code>tls-crypt-v2</code>: cada perfil lleva ahora su propia clave, y hacen falta clientes OpenVPN 2.6 o posteriores.') }}
       {% else %}
-        Se hizo una operación que invalida los perfiles.
+        {{ t('Se hizo una operación que invalida los perfiles.') }}
       {% endif %}
-      <strong>Los <code>.ovpn</code> que repartiste antes ya no sirven</strong>,
-      así que estos clientes no podrán conectar hasta que reciban uno nuevo.
+      {{ th('<strong>Los <code>.ovpn</code> que repartiste antes ya no sirven</strong>, así que estos clientes no podrán conectar hasta que reciban uno nuevo.') }}
     </p>
 
     {% if reparto.detalle %}<p class="tenue">{{ reparto.detalle }}</p>{% endif %}
@@ -36,15 +34,13 @@
       {% for c in reparto.clientes %}
         <li class="{{ 'hecho' if c.descargado else 'pendiente' }}">
           <code>{{ c.cn }}</code>
-          {% if c.descargado %}<span class="tenue">descargado</span>{% endif %}
+          {% if c.descargado %}<span class="tenue">{{ t('descargado') }}</span>{% endif %}
         </li>
       {% endfor %}
     </ul>
 
     <p class="tenue">
-      Quedan <strong>{{ reparto.pendientes }}</strong> de
-      {{ reparto.clientes | length }} por descargar. La marca solo dice que
-      bajaste el archivo, no que haya llegado a su destino.
+      {{ th('Quedan <strong>%(pendientes)s</strong> de %(total)s por descargar. La marca solo dice que bajaste el archivo, no que haya llegado a su destino.', pendientes=reparto.pendientes, total=reparto.clientes | length) }}
     </p>
 
     {% if manda %}
@@ -52,7 +48,7 @@
           hx-post="/clientes/reparto/{{ reparto.id }}/aceptar"
           hx-target="#avisos"
           hx-swap="innerHTML">
-      <button type="submit" class="boton">Aceptar: ya los he repartido</button>
+      <button type="submit" class="boton">{{ t('Aceptar: ya los he repartido') }}</button>
     </form>
     {% endif %}
   </section>

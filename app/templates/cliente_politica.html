@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% set activo = 'clientes' %}
-{% block titulo %}Políticas de {{ cn }} — BridgesMGR{% endblock %}
+{% block titulo %}{{ t('Políticas de %(cn)s', cn=cn) }} — BridgesMGR{% endblock %}
 
 {% block contenido %}
-<p class="tenue"><a href="/clientes">← Clientes VPN</a></p>
-<h1>Políticas de <code>{{ cn }}</code></h1>
+<p class="tenue"><a href="/clientes">← {{ t('Clientes VPN') }}</a></p>
+<h1>{{ t('Políticas de') }} <code>{{ cn }}</code></h1>
 
 {% if rechazo %}
-<div class="aviso aviso-aviso">Ahora mismo no puede entrar: {{ rechazo }}.</div>
+<div class="aviso aviso-aviso">{{ t('Ahora mismo no puede entrar: %(motivo)s.', motivo=rechazo) }}</div>
 {% endif %}
 
 {# Sin el script enganchado las políticas se aplican a medias: el vigilante
@@ -17,12 +17,7 @@
 <div class="aviso aviso-aviso">{{ error_servidor }}</div>
 {% elif gancho and not gancho[0] %}
 <div class="aviso aviso-error">
-  Las políticas no se aplican al conectar: {{ gancho[1] }}. Hasta que se
-  corrija, quien quede fuera será desconectado cada minuto, pero su cliente
-  volverá a entrar solo. Añade al <code>server.conf</code>:
-  <code>script-security 2</code> y
-  <code>client-connect /usr/local/lib/ovpn-web/client-connect</code>,
-  y reinicia OpenVPN.
+  {{ th('Las políticas no se aplican al conectar: %(detalle)s. Hasta que se corrija, quien quede fuera será desconectado cada minuto, pero su cliente volverá a entrar solo. Añade al <code>server.conf</code>: <code>script-security 2</code> y <code>client-connect /usr/local/lib/ovpn-web/client-connect</code>, y reinicia OpenVPN.', detalle=gancho[1]) }}
 </div>
 {% endif %}
 
@@ -34,39 +29,37 @@
 
   <fieldset {% if not manda %}disabled{% endif %}>
   <section class="panel-accion">
-    <h2>Acceso temporal</h2>
+    <h2>{{ t('Acceso temporal') }}</h2>
     <p class="tenue">
-      Desde esa fecha no podrá conectar, quien esté dentro será desconectado y
-      su certificado se revocará solo. Vacío = acceso permanente.
+      {{ t('Desde esa fecha no podrá conectar, quien esté dentro será desconectado y su certificado se revocará solo. Vacío = acceso permanente.') }}
     </p>
-    <label for="expira">Caduca</label>
+    <label for="expira">{{ t('Caduca') }}</label>
     <input type="datetime-local" id="expira" name="expira" value="{{ politica.expira }}">
   </section>
 
   <section class="panel-accion">
-    <h2>Horario</h2>
+    <h2>{{ t('Horario') }}</h2>
     <p class="tenue">
-      Fuera de estas franjas no puede conectar, y quien esté dentro se
-      desconecta al cerrarse la suya. Hora del servidor. Sin franjas = a
-      cualquier hora. Para terminar a medianoche pon <code>00:00</code>; si
-      una franja cruza la medianoche, pártela en dos.
+      {{ th('Fuera de estas franjas no puede conectar, y quien esté dentro se desconecta al cerrarse la suya. Hora del servidor. Sin franjas = a cualquier hora. Para terminar a medianoche pon <code>00:00</code>; si una franja cruza la medianoche, pártela en dos.') }}
     </p>
     {% for f in franjas %}
     {% set n = loop.index %}
     <div class="franja">
-      <span class="franja-titulo">Franja {{ n }}</span>
-      <div class="franja-dias" role="group" aria-label="Días de la franja {{ n }}">
+      <span class="franja-titulo">{{ t('Franja %(n)s', n=n) }}</span>
+      <div class="franja-dias" role="group" aria-label="{{ t('Días de la franja %(n)s', n=n) }}">
         {% for nombre in dias %}
         <label class="casilla">
           <input type="checkbox" name="f{{ n }}_dias" value="{{ loop.index0 }}"
                  {% if loop.index0 in f.dias %}checked{% endif %}>
-          {{ nombre[:3] }}
+          {# El nombre corto viene en su propia lista, traducida: en inglés las
+             iniciales españolas no dicen nada. #}
+          {{ dias_cortos[loop.index0] }}
         </label>
         {% endfor %}
       </div>
-      <label class="en-linea">de
+      <label class="en-linea">{{ t('de') }}
         <input type="time" name="f{{ n }}_desde" value="{{ f.desde }}"></label>
-      <label class="en-linea">a
+      <label class="en-linea">{{ t('a') }}
         <input type="time" name="f{{ n }}_hasta"
                value="{{ '00:00' if f.hasta == '24:00' else f.hasta }}"></label>
     </div>
@@ -74,29 +67,28 @@
   </section>
 
   <section class="panel-accion">
-    <h2>Duración máxima de sesión</h2>
+    <h2>{{ t('Duración máxima de sesión') }}</h2>
+    {% set global_texto = describir_minutos(max_sesion_global) if max_sesion_global else t('sin límite') %}
     <p class="tenue">
-      Al cumplirla se le desconecta y tiene que volver a entrar; si su
-      certificado lleva contraseña, tendrá que escribirla otra vez.
-      Vacío o 0 = la de todos
-      ({{ describir_minutos(max_sesion_global) if max_sesion_global else 'sin límite' }}).
+      {{ t('Al cumplirla se le desconecta y tiene que volver a entrar; si su certificado lleva contraseña, tendrá que escribirla otra vez. Vacío o 0 = la de todos (%(global)s).', global=global_texto) }}
     </p>
-    <label for="max_sesion_min">Minutos</label>
+    <label for="max_sesion_min">{{ t('Minutos') }}</label>
     <input type="number" id="max_sesion_min" name="max_sesion_min" min="0" step="1"
-           value="{{ politica.max_sesion_min or '' }}" placeholder="p. ej. 480 = 8 h">
+           value="{{ politica.max_sesion_min or '' }}" placeholder="{{ t('p. ej. 480 = 8 h') }}">
   </section>
 
   <section class="panel-accion">
-    <h2>Cuota de tráfico mensual</h2>
+    <h2>{{ t('Cuota de tráfico mensual') }}</h2>
     <p class="tenue">
-      Subida más bajada. Al agotarla se le desconecta y no puede volver a entrar
-      hasta el día 1 del mes siguiente, cuando se levanta sola. Vacío = sin cuota.
+      {{ t('Subida más bajada. Al agotarla se le desconecta y no puede volver a entrar hasta el día 1 del mes siguiente, cuando se levanta sola. Vacío = sin cuota.') }}
     </p>
     {% set limite = politica.cuota_mb_mes * bytes_mb %}
     <p>
-      Este mes lleva <strong>{{ bytes_decimales(uso_mes) }}</strong>
-      {% if limite %}de {{ bytes_decimales(limite) }}
-      ({{ (100 * uso_mes / limite) | round | int }} %){% endif %}.
+      {% if limite %}
+      {{ th('Este mes lleva <strong>%(usado)s</strong> de %(limite)s (%(pct)s %%).', usado=bytes_decimales(uso_mes), limite=bytes_decimales(limite), pct=(100 * uso_mes / limite) | round | int) }}
+      {% else %}
+      {{ th('Este mes lleva <strong>%(usado)s</strong>.', usado=bytes_decimales(uso_mes)) }}
+      {% endif %}
     </p>
     {% if limite %}
     {% set pct = [100, 100 * uso_mes / limite] | min %}
@@ -108,38 +100,34 @@
             x="0" y="0" width="{{ [pct, 1] | max }}" height="6" rx="3"></rect>
     </svg>
     {% endif %}
-    <label for="cuota_gb">GB al mes</label>
+    <label for="cuota_gb">{{ t('GB al mes') }}</label>
     <input type="number" id="cuota_gb" name="cuota_gb" min="0" step="0.1"
            value="{{ (politica.cuota_mb_mes / 1000) if politica.cuota_mb_mes else '' }}"
-           placeholder="sin cuota">
-    {% with g = grafica_trafico, titulo = 'Su tráfico, últimos 30 días' %}{% include "partials/grafica.html" %}{% endwith %}
+           placeholder="{{ t('sin cuota') }}">
+    {% with g = grafica_trafico, titulo = t('Su tráfico, últimos 30 días') %}{% include "partials/grafica.html" %}{% endwith %}
   </section>
 
   <section class="panel-accion">
-    <h2>IP fija y destinos</h2>
+    <h2>{{ t('IP fija y destinos') }}</h2>
     <p class="tenue">
-      Con IP fija recibe siempre la misma dirección dentro de la VPN.
+      {{ t('Con IP fija recibe siempre la misma dirección dentro de la VPN.') }}
       {% if red %}
-        La red es <code>{{ red.red }}</code>{% if red.pool %} y el pool dinámico va de
-        <code>{{ red.pool[0] }}</code> a <code>{{ red.pool[1] }}</code>{% endif %}.
+        {{ th('La red es <code>%(red)s</code>', red=red.red) }}{% if red.pool %} {{ th('y el pool dinámico va de <code>%(desde)s</code> a <code>%(hasta)s</code>', desde=red.pool[0], hasta=red.pool[1]) }}{% endif %}.
         {% if red.libres %}
-          Libres para IP fijas: <code>{{ red.libres[0] }}</code> – <code>{{ red.libres[1] }}</code>.
+          {{ th('Libres para IP fijas: <code>%(desde)s</code> – <code>%(hasta)s</code>.', desde=red.libres[0], hasta=red.libres[1]) }}
         {% else %}
-          <strong>El pool ocupa toda la red</strong>: para usar IP fijas hay que
-          reducirlo con <code>server … nopool</code> más <code>ifconfig-pool</code>.
+          {{ th('<strong>El pool ocupa toda la red</strong>: para usar IP fijas hay que reducirlo con <code>server … nopool</code> más <code>ifconfig-pool</code>.') }}
         {% endif %}
       {% endif %}
     </p>
-    <label for="ip_fija">IP fija</label>
+    <label for="ip_fija">{{ t('IP fija') }}</label>
     <input type="text" id="ip_fija" name="ip_fija" value="{{ politica.ip_fija }}"
            placeholder="{{ red.libres[0] if red and red.libres else '10.8.0.200' }}"
            inputmode="decimal" autocomplete="off">
 
-    <label for="destinos">Destinos permitidos</label>
+    <label for="destinos">{{ t('Destinos permitidos') }}</label>
     <p class="tenue">
-      Uno por línea: <code>192.168.1.0/24</code>, <code>192.168.1.10</code> o
-      <code>192.168.1.10:443/tcp</code>. Si pones alguno, <strong>solo</strong>
-      llegará a esos, también al propio servidor. Vacío = sin límite. Exige IP fija.
+      {{ th('Uno por línea: <code>192.168.1.0/24</code>, <code>192.168.1.10</code> o <code>192.168.1.10:443/tcp</code>. Si pones alguno, <strong>solo</strong> llegará a esos, también al propio servidor. Vacío = sin límite. Exige IP fija.') }}
     </p>
     <textarea id="destinos" name="destinos" rows="4"
               placeholder="192.168.1.0/24">{{ politica.destinos | join('\n') }}</textarea>
@@ -147,14 +135,13 @@
 
   {% if politica.bloqueo %}
   <div class="aviso aviso-aviso">
-    Bloqueado por el panel ({{ politica.bloqueo }}). Se levanta solo cuando
-    deja de cumplirse la condición.
+    {{ t('Bloqueado por el panel (%(bloqueo)s). Se levanta solo cuando deja de cumplirse la condición.', bloqueo=politica.bloqueo) }}
   </div>
   {% endif %}
 
   {% if manda %}
   <div>
-    <button type="submit" class="boton boton-principal">Guardar y aplicar</button>
+    <button type="submit" class="boton boton-principal">{{ t('Guardar y aplicar') }}</button>
   </div>
   {% endif %}
   </fieldset>
@@ -163,12 +150,9 @@
 {# Fuera del formulario de políticas: tiene sus propios botones y su propio
    ciclo, y el QR no puede acabar dentro de un <form> que se envía entero. #}
 <section class="panel-accion">
-  <h2>Verificación en dos pasos</h2>
+  <h2>{{ t('Verificación en dos pasos') }}</h2>
   <p class="tenue">
-    Además del certificado, pide al conectar el código de 6 dígitos de una app
-    como Google Authenticator o Aegis. Un <code>.ovpn</code> robado deja de
-    bastar: hace falta también su móvil. Solo se pide al conectar, no en cada
-    renovación de claves.
+    {{ th('Además del certificado, pide al conectar el código de 6 dígitos de una app como Google Authenticator o Aegis. Un <code>.ovpn</code> robado deja de bastar: hace falta también su móvil. Solo se pide al conectar, no en cada renovación de claves.') }}
   </p>
   <div id="dos-pasos-vpn">
     {% with d = dos_pasos %}{% include "partials/dos_pasos_vpn.html" %}{% endwith %}

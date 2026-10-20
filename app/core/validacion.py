@@ -8,6 +8,8 @@ archivos. Nunca construyas un comando ni una ruta con un CN sin validar.
 
 import re
 
+from ..idiomas import MensajeError, N_
+
 # EasyRSA acepta CNs bastante libres, pero nosotros restringimos a propósito:
 # sin espacios, sin barras, sin puntos iniciales o finales. Así un CN jamás
 # puede convertirse en un argumento extra, en una opción (-rf) ni en '../'.
@@ -17,8 +19,15 @@ _CN_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$')
 _RESERVADOS = {'server', 'ca'}
 
 
-class CNInvalido(ValueError):
-    """El Common Name no supera la validación"""
+class CNInvalido(MensajeError):
+    """
+    El Common Name no supera la validación.
+
+    Es un MensajeError: guarda el texto en español y sus huecos, así que
+    str(e) va a la auditoría y logs en español y mensaje(e) se enseña en el
+    idioma de quien lo lee. Sigue siendo un ValueError, de modo que los
+    `except ValueError` de siempre lo siguen cogiendo.
+    """
 
 
 def validar_cn(cn):
@@ -28,24 +37,24 @@ def validar_cn(cn):
     Devuelve el CN tal cual si es válido; lanza CNInvalido si no.
     """
     if not isinstance(cn, str):
-        raise CNInvalido("El nombre de usuario debe ser texto")
+        raise CNInvalido(N_("El nombre de usuario debe ser texto"))
 
     cn = cn.strip()
 
     if not cn:
-        raise CNInvalido("El nombre de usuario no puede estar vacío")
+        raise CNInvalido(N_("El nombre de usuario no puede estar vacío"))
 
     if len(cn) > 64:
-        raise CNInvalido("El nombre de usuario no puede superar 64 caracteres")
+        raise CNInvalido(N_("El nombre de usuario no puede superar 64 caracteres"))
 
     if not _CN_RE.match(cn):
         raise CNInvalido(
-            "Solo se permiten letras, números, punto, guion y guion bajo, "
-            "empezando y terminando en letra o número"
+            N_("Solo se permiten letras, números, punto, guion y guion bajo, "
+               "empezando y terminando en letra o número")
         )
 
     if cn.lower() in _RESERVADOS:
-        raise CNInvalido("'%s' es un nombre reservado del servidor" % cn)
+        raise CNInvalido(N_("'%(cn)s' es un nombre reservado del servidor"), cn=cn)
 
     return cn
 

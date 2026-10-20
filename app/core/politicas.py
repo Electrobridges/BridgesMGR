@@ -25,6 +25,7 @@ import ipaddress
 import re
 from datetime import datetime
 
+from ..idiomas import MensajeError, N_, t, tn
 from .validacion import validar_cn
 
 # Versión del documento que se le pasa al helper. Si cambia la forma, el helper
@@ -49,14 +50,23 @@ BYTES_MB = 1_000_000
 BLOQUEO_CUOTA = "cuota"
 BLOQUEOS = (BLOQUEO_CUOTA,)
 
-# Por qué se rechaza o se expulsa. Mismas cadenas en el script de conexión.
+# Por qué se rechaza o se expulsa. Mismas cadenas en el script de conexión:
+# son CÓDIGOS, no textos, y no se traducen.
 MOTIVO_BLOQUEO = "bloqueado"
 MOTIVO_CADUCADO = "caducado"
 MOTIVO_HORARIO = "fuera_de_horario"
 MOTIVO_DURACION = "duracion_maxima"
 
-DIAS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
-DIAS_CORTOS = ("L", "M", "X", "J", "V", "S", "D")
+# Los nombres de los días. El ÍNDICE es lo que se guarda (0 = lunes) y no
+# cambia nunca; el nombre es solo para enseñarlo, y se traduce como cualquier
+# otro texto. El script de conexión y el helper tienen su propia copia, con
+# los índices: eso no se toca.
+DIAS = (N_("lunes"), N_("martes"), N_("miércoles"), N_("jueves"), N_("viernes"),
+        N_("sábado"), N_("domingo"))
+
+# Los nombres cortos, para las etiquetas de la tabla. En inglés no valen las
+# iniciales españolas, así que también se traducen.
+DIAS_CORTOS = (N_("L"), N_("M"), N_("X"), N_("J"), N_("V"), N_("S"), N_("D"))
 
 FORMATO_EXPIRA = "%Y-%m-%dT%H:%M"
 
@@ -64,8 +74,13 @@ _HORA = re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$|^24:00$')
 _DESTINO = re.compile(r'^(?P<red>[0-9./]+)(?::(?P<puerto>\d{1,5})/(?P<proto>tcp|udp))?$')
 
 
-class PoliticaInvalida(ValueError):
-    """La política no supera la validación. El mensaje va a la pantalla."""
+class PoliticaInvalida(MensajeError):
+    """
+    La política no supera la validación. El mensaje va a la pantalla.
+
+    Es un MensajeError: str(e) deja el texto en español —que es un dato— y
+    mensaje(e) lo enseña en el idioma de quien lo va a leer.
+    """
 
 
 def vacia():
@@ -95,7 +110,7 @@ def validar_ip(texto):
     try:
         ip = ipaddress.IPv4Address(texto.strip())
     except ValueError:
-        raise PoliticaInvalida("'%s' no es una dirección IPv4" % texto)
+        raise PoliticaInvalida(N_("'%(ip)s' no es una dirección IPv4"), ip=texto)
     return str(ip)
 
 
@@ -110,49 +125,54 @@ def validar_destino(texto):
     m = _DESTINO.match(texto)
     if not m:
         raise PoliticaInvalida(
-            "Destino no válido: '%s'. Se escribe como 192.168.1.0/24, "
-            "192.168.1.10 o 192.168.1.10:443/tcp" % texto
+            N_("Destino no válido: '%(destino)s'. Se escribe como 192.168.1.0/24, "
+               "192.168.1.10 o 192.168.1.10:443/tcp"),
+            destino=texto,
         )
 
     try:
         red = ipaddress.IPv4Network(m.group("red"), strict=False)
     except ValueError:
-        raise PoliticaInvalida("Red no válida en el destino '%s'" % texto)
+        raise PoliticaInvalida(N_("Red no válida en el destino '%(destino)s'"),
+                                destino=texto)
 
     if m.group("puerto") is None:
         return str(red)
 
     puerto = int(m.group("puerto"))
     if not 1 <= puerto <= 65535:
-        raise PoliticaInvalida("Puerto fuera de rango en '%s'" % texto)
+        raise PoliticaInvalida(N_("Puerto fuera de rango en '%(destino)s'"),
+                                destino=texto)
 
     return "%s:%d/%s" % (red, puerto, m.group("proto"))
 
 
 def validar_franja(franja):
     if not isinstance(franja, dict):
-        raise PoliticaInvalida("Franja horaria mal formada")
+        raise PoliticaInvalida(N_("Franja horaria mal formada"))
 
     dias = franja.get("dias")
     if not isinstance(dias, list) or not dias:
-        raise PoliticaInvalida("Cada franja necesita al menos un día")
+        raise PoliticaInvalida(N_("Cada franja necesita al menos un día"))
     if any(not isinstance(d, int) or isinstance(d, bool) or not 0 <= d <= 6 for d in dias):
-        raise PoliticaInvalida("Día de la semana no válido en una franja")
+        raise PoliticaInvalida(N_("Día de la semana no válido en una franja"))
 
     desde = str(franja.get("desde", ""))
     hasta = str(franja.get("hasta", ""))
     for hora in (desde, hasta):
         if not _HORA.match(hora):
-            raise PoliticaInvalida("Hora no válida: '%s' (se escribe HH:MM)" % hora)
+            raise PoliticaInvalida(N_("Hora no válida: '%(hora)s' (se escribe HH:MM)"),
+                                    hora=hora)
     if desde == "24:00":
-        raise PoliticaInvalida("Una franja no puede empezar a las 24:00")
+        raise PoliticaInvalida(N_("Una franja no puede empezar a las 24:00"))
     if _minutos(desde) >= _minutos(hasta):
         # Las franjas que cruzan la medianoche se escriben como dos: no hay
         # forma de que '22:00-06:00' signifique una sola cosa sin ambigüedad
         # sobre a qué día pertenece cada mitad.
         raise PoliticaInvalida(
-            "La franja %s–%s termina antes de empezar. Si cruza la medianoche, "
-            "divídela en dos (hasta las 24:00 y desde las 00:00)." % (desde, hasta)
+            N_("La franja %(desde)s–%(hasta)s termina antes de empezar. Si cruza "
+               "la medianoche, divídela en dos (hasta las 24:00 y desde las 00:00)."),
+            desde=desde, hasta=hasta,
         )
 
     return {"dias": sorted(set(dias)), "desde": desde, "hasta": hasta}
@@ -165,7 +185,7 @@ def validar_expira(texto):
     try:
         return datetime.strptime(texto, FORMATO_EXPIRA).strftime(FORMATO_EXPIRA)
     except ValueError:
-        raise PoliticaInvalida("Fecha de caducidad no válida: '%s'" % texto)
+        raise PoliticaInvalida(N_("Fecha de caducidad no válida: '%(fecha)s'"), fecha=texto)
 
 
 def normalizar(politica):
@@ -175,11 +195,12 @@ def normalizar(politica):
     Lanza PoliticaInvalida con un mensaje que se puede enseñar tal cual.
     """
     if not isinstance(politica, dict):
-        raise PoliticaInvalida("La política debe ser un mapa")
+        raise PoliticaInvalida(N_("La política debe ser un mapa"))
 
     desconocidas = set(politica) - set(vacia())
     if desconocidas:
-        raise PoliticaInvalida("Campos desconocidos: %s" % ", ".join(sorted(desconocidas)))
+        raise PoliticaInvalida(N_("Campos desconocidos: %(campos)s"),
+                                campos=", ".join(sorted(desconocidas)))
 
     p = vacia()
 
@@ -188,9 +209,9 @@ def normalizar(politica):
 
     destinos = politica.get("destinos") or []
     if not isinstance(destinos, list):
-        raise PoliticaInvalida("Los destinos deben ser una lista")
+        raise PoliticaInvalida(N_("Los destinos deben ser una lista"))
     if len(destinos) > MAX_DESTINOS:
-        raise PoliticaInvalida("Como mucho %d destinos por cliente" % MAX_DESTINOS)
+        raise PoliticaInvalida(N_("Como mucho %(n)s destinos por cliente"), n=MAX_DESTINOS)
     canon = []
     for d in destinos:
         d = validar_destino(d)
@@ -202,30 +223,30 @@ def normalizar(politica):
         # La regla de nftables se escribe contra la IP de origen. Sin IP fija,
         # el cliente recibe una cualquiera del pool y la regla no le alcanza:
         # aceptarla sería prometer un límite que no existe.
-        raise PoliticaInvalida("Limitar los destinos exige asignarle una IP fija")
+        raise PoliticaInvalida(N_("Limitar los destinos exige asignarle una IP fija"))
 
     horario = politica.get("horario") or []
     if not isinstance(horario, list):
-        raise PoliticaInvalida("El horario debe ser una lista de franjas")
+        raise PoliticaInvalida(N_("El horario debe ser una lista de franjas"))
     if len(horario) > MAX_FRANJAS:
-        raise PoliticaInvalida("Como mucho %d franjas horarias" % MAX_FRANJAS)
+        raise PoliticaInvalida(N_("Como mucho %(n)s franjas horarias"), n=MAX_FRANJAS)
     p["horario"] = [validar_franja(f) for f in horario]
 
     p["expira"] = validar_expira(politica.get("expira"))
 
     maximo = politica.get("max_sesion_min") or 0
     if isinstance(maximo, bool) or not isinstance(maximo, int) or not 0 <= maximo <= MAX_SESION_MIN:
-        raise PoliticaInvalida("Duración máxima de sesión fuera de rango")
+        raise PoliticaInvalida(N_("Duración máxima de sesión fuera de rango"))
     p["max_sesion_min"] = maximo
 
     cuota = politica.get("cuota_mb_mes") or 0
     if isinstance(cuota, bool) or not isinstance(cuota, int) or not 0 <= cuota <= MAX_CUOTA_MB:
-        raise PoliticaInvalida("Cuota mensual fuera de rango")
+        raise PoliticaInvalida(N_("Cuota mensual fuera de rango"))
     p["cuota_mb_mes"] = cuota
 
     bloqueo = politica.get("bloqueo") or ""
     if bloqueo and bloqueo not in BLOQUEOS:
-        raise PoliticaInvalida("Bloqueo desconocido: %s" % bloqueo)
+        raise PoliticaInvalida(N_("Bloqueo desconocido: %(bloqueo)s"), bloqueo=bloqueo)
     p["bloqueo"] = bloqueo
 
     return p
@@ -248,11 +269,12 @@ def documento(politicas, max_sesion_global=0):
     ips = [p["ip_fija"] for p in clientes.values() if p["ip_fija"]]
     repetidas = sorted({ip for ip in ips if ips.count(ip) > 1})
     if repetidas:
-        raise PoliticaInvalida("IP fija asignada a más de un cliente: %s" % ", ".join(repetidas))
+        raise PoliticaInvalida(N_("IP fija asignada a más de un cliente: %(ips)s"),
+                                ips=", ".join(repetidas))
 
     if isinstance(max_sesion_global, bool) or not isinstance(max_sesion_global, int) \
             or not 0 <= max_sesion_global <= MAX_SESION_MIN:
-        raise PoliticaInvalida("Duración máxima global fuera de rango")
+        raise PoliticaInvalida(N_("Duración máxima global fuera de rango"))
 
     return {
         "version": VERSION,
@@ -326,29 +348,55 @@ def motivo_expulsion(politica, max_global, segundos_dentro, ahora):
 
 # ------------------------------------------------------------ presentación
 
-def describir_horario(horario):
-    """'L–V 08:00–19:00; S 09:00–13:00' para la tabla de clientes"""
+def dias_cortos_traducidos():
+    """
+    Los nombres cortos de los días, en el idioma de quien los mira.
+
+    En inglés no valen las iniciales españolas: L, M, X, J, V, S y D no dicen
+    nada. La traducción es Mon, Tue, Wed, Thu, Fri, Sat y Sun.
+    """
+    return [t(d) for d in DIAS_CORTOS]
+
+
+def describir_horario(horario, dias_cortos=None):
+    """
+    'L–V 08:00–19:00; S 09:00–13:00' para la tabla de clientes.
+
+    Los nombres cortos vienen en 'dias_cortos' porque se traducen. Sin él
+    salen en español, que es lo que va a la auditoría.
+    """
+    dias_cortos = DIAS_CORTOS if dias_cortos is None else dias_cortos
     partes = []
     for f in horario:
         dias = f["dias"]
         if len(dias) > 2 and dias == list(range(dias[0], dias[-1] + 1)):
-            texto_dias = "%s–%s" % (DIAS_CORTOS[dias[0]], DIAS_CORTOS[dias[-1]])
+            texto_dias = "%s–%s" % (dias_cortos[dias[0]], dias_cortos[dias[-1]])
         else:
-            texto_dias = ",".join(DIAS_CORTOS[d] for d in dias)
+            texto_dias = ",".join(dias_cortos[d] for d in dias)
         partes.append("%s %s–%s" % (texto_dias, f["desde"], f["hasta"]))
     return "; ".join(partes)
 
 
+# Los textos de los motivos. Las CLAVES (MOTIVO_BLOQUEO y compañía) son
+# códigos y no se tocan; lo que se traduce es el texto que se enseña. Con
+# N_() el texto sale en español —que es lo que va a la auditoría— y t() lo
+# enseña en el idioma de quien lo lee.
 TEXTO_MOTIVO = {
-    MOTIVO_BLOQUEO: "bloqueado por el panel",
-    MOTIVO_CADUCADO: "acceso caducado",
-    MOTIVO_HORARIO: "fuera de su horario",
-    MOTIVO_DURACION: "superó la duración máxima de sesión",
+    MOTIVO_BLOQUEO: N_("bloqueado por el panel"),
+    MOTIVO_CADUCADO: N_("acceso caducado"),
+    MOTIVO_HORARIO: N_("fuera de su horario"),
+    MOTIVO_DURACION: N_("superó la duración máxima de sesión"),
 }
 
 
 def resumen(politica):
-    """Etiquetas cortas para la tabla de clientes, en orden de importancia."""
+    """
+    Etiquetas cortas para la tabla de clientes, en orden de importancia.
+
+    Van en español: esto es lo que se guarda en la auditoría, y es un dato que
+    no cambia de idioma. Para la tabla, que va en el idioma de quien la mira,
+    está resumen_traducido().
+    """
     p = politica or vacia()
     partes = []
     if p.get("bloqueo"):
@@ -367,6 +415,35 @@ def resumen(politica):
     if p.get("destinos"):
         n = len(p["destinos"])
         partes.append("%d destino%s" % (n, "" if n == 1 else "s"))
+    return partes
+
+
+def resumen_traducido(politica):
+    """
+    Las mismas etiquetas que resumen(), en el idioma de quien las va a leer.
+
+    Para la tabla de clientes. Las dos funciones tienen que ir en paralelo:
+    si aquí se añade una etiqueta, tiene que estar también en resumen(), y al
+    revés. Hay una prueba que las compara.
+    """
+    p = politica or vacia()
+    partes = []
+    if p.get("bloqueo"):
+        partes.append(t("bloqueado (%(bloqueo)s)", bloqueo=p["bloqueo"]))
+    if p.get("expira"):
+        fecha = datetime.strptime(p["expira"], FORMATO_EXPIRA)
+        partes.append(t("caduca %(fecha)s", fecha=fecha.strftime("%d/%m/%Y %H:%M")))
+    if p.get("horario"):
+        partes.append(describir_horario(p["horario"], dias_cortos_traducidos()))
+    if p.get("max_sesion_min"):
+        partes.append(t("sesión máx. %(minutos)s",
+                        minutos=describir_minutos(p["max_sesion_min"])))
+    if p.get("cuota_mb_mes"):
+        partes.append(t("cuota %(cuota)s/mes", cuota=describir_mb(p["cuota_mb_mes"])))
+    if p.get("ip_fija"):
+        partes.append(t("IP %(ip)s", ip=p["ip_fija"]))
+    if p.get("destinos"):
+        partes.append(tn("%(n)s destino", "%(n)s destinos", len(p["destinos"])))
     return partes
 
 

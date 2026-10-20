@@ -13,6 +13,7 @@ traduce el resultado.
 import json
 import subprocess
 
+from ..idiomas import MensajeError, N_
 from .validacion import validar_cn
 
 TIMEOUT_POR_DEFECTO = 120
@@ -85,8 +86,14 @@ def revocar(cfg, cn):
     return _ejecutar(cfg, ["revocar", cn])
 
 
-class ClaveInvalida(ValueError):
-    """La contraseña del certificado no cumple el mínimo"""
+class ClaveInvalida(MensajeError):
+    """
+    La contraseña del certificado no cumple el mínimo.
+
+    MensajeError: str(e) deja el texto en español (lo que va a los logs) y
+    mensaje(e) lo enseña en el idioma de quien lo lee. Sigue siendo un
+    ValueError, así que los `except ValueError` de siempre lo cogen.
+    """
 
 
 def _argumentos_de_emision(sub, cn, clave):
@@ -101,12 +108,15 @@ def _argumentos_de_emision(sub, cn, clave):
 
     if len(clave) < MIN_CLAVE:
         raise ClaveInvalida(
-            "La contraseña del certificado debe tener al menos %d caracteres" % MIN_CLAVE
+            N_("La contraseña del certificado debe tener al menos %(n)s caracteres"),
+            n=MIN_CLAVE,
         )
     if "\n" in clave or "\r" in clave:
         # El helper lee la primera línea de stdin: un salto partiría la
         # contraseña en dos y cifraría con un trozo, en silencio.
-        raise ClaveInvalida("La contraseña del certificado no puede tener saltos de línea")
+        raise ClaveInvalida(
+            N_("La contraseña del certificado no puede tener saltos de línea")
+        )
 
     return [sub, cn, MARCA_CLAVE], clave + "\n"
 

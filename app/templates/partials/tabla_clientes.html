@@ -7,11 +7,11 @@
 <table class="tabla">
   <thead>
     <tr>
-      <th>Cliente</th>
-      <th>Certificado</th>
-      <th>Conexión</th>
-      <th>Acceso</th>
-      {% if manda %}<th>Acciones</th>{% endif %}
+      <th>{{ t('Cliente') }}</th>
+      <th>{{ t('Certificado') }}</th>
+      <th>{{ t('Conexión') }}</th>
+      <th>{{ t('Acceso') }}</th>
+      {% if manda %}<th>{{ t('Acciones') }}</th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -20,12 +20,12 @@
       <td class="destacado">{{ f.cn }}</td>
       <td>
         <span class="etiqueta etiqueta-{{ 'ok' if f.estado == 'valido' else 'mal' }}">
-          {{ 'válido' if f.estado == 'valido' else 'revocado' }}
+          {{ t('válido') if f.estado == 'valido' else t('revocado') }}
         </span>
       </td>
       <td>
         {% if f.conectado %}
-        <span class="etiqueta etiqueta-ok">conectado</span>
+        <span class="etiqueta etiqueta-ok">{{ t('conectado') }}</span>
         {% else %}
         <span class="tenue">—</span>
         {% endif %}
@@ -34,30 +34,30 @@
         <div class="acceso">
         {% if f.cert_caduca is not none %}
         <span class="etiqueta etiqueta-{{ 'mal' if f.cert_caduca < 7 else 'aviso' }}">
-          {{- 'certificado caducado' if f.cert_caduca < 0 else 'certificado caduca en %d d' % f.cert_caduca }}</span>
+          {{- t('certificado caducado') if f.cert_caduca < 0 else t('certificado caduca en %(dias)s d', dias=f.cert_caduca) }}</span>
         {% endif %}
         {% if f.rechazo and f.estado == 'valido' %}
         <span class="etiqueta etiqueta-aviso">{{ f.rechazo }}</span>
         {% endif %}
-        {% if f.uso_mes %}<span class="tenue pequeno" title="Tráfico este mes">{{ f.uso_mes }} este mes</span>{% endif %}
+        {% if f.uso_mes %}<span class="tenue pequeno" title="{{ t('Tráfico este mes') }}">{{ f.uso_mes }} {{ t('este mes') }}</span>{% endif %}
         {% for parte in f.politica %}
         <span class="etiqueta etiqueta-info">{{ parte }}</span>
         {% endfor %}
         <a class="pequeno" href="/clientes/{{ f.cn }}/politica">
-          {{- 'Políticas' if manda else 'Ver' }}</a>
+          {{- t('Políticas') if manda else t('Ver') }}</a>
         </div>
       </td>
       {% if manda %}
       <td class="acciones">
         {% if f.estado == 'valido' %}
-        <a class="boton pequeno" href="/clientes/{{ f.cn }}/ovpn">Descargar .ovpn</a>
+        <a class="boton pequeno" href="/clientes/{{ f.cn }}/ovpn">{{ t('Descargar .ovpn') }}</a>
         <button class="boton boton-peligro pequeno"
                 hx-disabled-elt="this"
                 hx-post="/clientes/{{ f.cn }}/revocar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"
-                hx-confirm="¿Revocar el acceso de {{ f.cn }}? Su certificado dejará de servir.">
-          Revocar
+                hx-confirm="{{ t('¿Revocar el acceso de %(cn)s? Su certificado dejará de servir.', cn=f.cn) }}">
+          {{ t('Revocar') }}
         </button>
         {% else %}
         <button class="boton pequeno"
@@ -65,8 +65,8 @@
                 hx-post="/clientes/{{ f.cn }}/restaurar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"
-                hx-confirm="Se reemitirá el certificado de {{ f.cn }}. El .ovpn anterior dejará de funcionar. ¿Continuar?">
-          Restaurar
+                hx-confirm="{{ t('Se reemitirá el certificado de %(cn)s. El .ovpn anterior dejará de funcionar. ¿Continuar?', cn=f.cn) }}">
+          {{ t('Restaurar') }}
         </button>
         {# Solo en revocados: ocultar uno válido escondería un acceso vivo. El
            router lo comprueba igualmente, que un botón que no se pinta no es
@@ -76,8 +76,8 @@
                 hx-post="/clientes/{{ f.cn }}/archivar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"
-                hx-confirm="{{ f.cn }} pasará a los perfiles eliminados. Su certificado seguirá revocado y en la CRL: se oculta de la lista, no se borra de la PKI. ¿Continuar?">
-          Eliminar
+                hx-confirm="{{ t('%(cn)s pasará a los perfiles eliminados. Su certificado seguirá revocado y en la CRL: se oculta de la lista, no se borra de la PKI. ¿Continuar?', cn=f.cn) }}">
+          {{ t('Eliminar') }}
         </button>
         {% endif %}
         {% if f.conectado %}
@@ -86,8 +86,8 @@
                 hx-post="/clientes/{{ f.cn }}/desconectar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"
-                hx-confirm="¿Desconectar a {{ f.cn }}?">
-          Desconectar
+                hx-confirm="{{ t('¿Desconectar a %(cn)s?', cn=f.cn) }}">
+          {{ t('Desconectar') }}
         </button>
         {% endif %}
       </td>
@@ -98,7 +98,7 @@
 </table>
 </div>
 {% elif not errores %}
-<p class="tenue">No hay certificados de cliente emitidos todavía.</p>
+<p class="tenue">{{ t('No hay certificados de cliente emitidos todavía.') }}</p>
 {% endif %}
 
 {# El histórico de eliminados NO va aquí: este fragmento se recarga solo cada
