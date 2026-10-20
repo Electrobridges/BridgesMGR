@@ -19,10 +19,12 @@
 
   <div class="paginacion-tamano">
     <span class="tenue">{{ t('Por página:') }}</span>
-    {% for t in pg.tamanos %}
-    <a class="{{ 'activa' if t == pg.por_pagina }}"
-       {% if t == pg.por_pagina %}aria-current="true"{% endif %}
-       href="{{ pg.base }}&amp;por_pagina={{ t }}&amp;pagina=1">{{ t }}</a>
+    {# La variable del bucle no se llama 't': en Jinja taparía la función
+       t() de traducción dentro del bucle, y el error sería confuso. #}
+    {% for tamano in pg.tamanos %}
+    <a class="{{ 'activa' if tamano == pg.por_pagina }}"
+       {% if tamano == pg.por_pagina %}aria-current="true"{% endif %}
+       href="{{ pg.base }}&amp;por_pagina={{ tamano }}&amp;pagina=1">{{ tamano }}</a>
     {% endfor %}
   </div>
 

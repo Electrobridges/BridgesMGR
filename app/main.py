@@ -95,17 +95,19 @@ def crear_app(cfg=None):
 
     @app.exception_handler(SinPermiso)
     def _sin_permiso(request: Request, exc):
+        # El texto va en el idioma de quien lo lee: la página de error se
+        # enseña traducida, y el aviso de HTMX también.
         if _es_htmx(request):
             return plantillas.TemplateResponse(
                 request,
                 "partials/aviso.html",
-                {"tipo": "error", "mensaje": exc.mensaje},
+                {"tipo": "error", "mensaje": idiomas.mensaje(exc)},
                 status_code=403,
             )
         return plantillas.TemplateResponse(
             request,
             "error.html",
-            {"codigo": 403, "mensaje": exc.mensaje, "sesion": sesion_opcional(request)},
+            {"codigo": 403, "mensaje": idiomas.mensaje(exc), "sesion": sesion_opcional(request)},
             status_code=403,
         )
 

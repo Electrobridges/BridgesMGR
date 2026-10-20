@@ -107,9 +107,10 @@ def contenido_logs(
 
     try:
         entradas = core_logs.leer_log(c.openvpn.log_path, lineas, filtro)
-    except FileNotFoundError as e:
-        # El mensaje ya viene traducido por core.logs.
-        error = str(e)
+    except FileNotFoundError:
+        # El error lleva el texto en español, que es un dato; lo que se
+        # enseña se arma aquí, en el idioma de quien lo lee.
+        error = t("No se encontró el archivo de log: %(ruta)s", ruta=c.openvpn.log_path)
     except PermissionError:
         error = t("Sin permisos para leer %(ruta)s. El usuario del servicio debe "
                   "pertenecer al grupo 'adm'.", ruta=c.openvpn.log_path)
