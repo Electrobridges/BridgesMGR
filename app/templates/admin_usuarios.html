@@ -1,44 +1,40 @@
 {% extends "base.html" %}
 {% set activo = 'usuarios' %}
-{% block titulo %}Usuarios del panel — BridgesMGR{% endblock %}
+{% block titulo %}{{ t('Usuarios del panel') }} — BridgesMGR{% endblock %}
 
 {% block contenido %}
-<h1>Usuarios del panel</h1>
+<h1>{{ t('Usuarios del panel') }}</h1>
 <p class="tenue">
-  Cuentas que entran a este panel. No confundir con los
-  <a href="/clientes">clientes VPN</a>.
+  {{ th('Cuentas que entran a este panel. No confundir con los <a href="/clientes">clientes VPN</a>.') }}
 </p>
 
 <section class="panel-accion">
-  <h2>Nuevo usuario</h2>
+  <h2>{{ t('Nuevo usuario') }}</h2>
   <form class="formulario en-fila"
         hx-disabled-elt="find button"
         hx-post="/admin/usuarios"
         hx-target="#avisos"
         hx-swap="innerHTML">
-    <label for="nuevo-usuario">Usuario</label>
+    <label for="nuevo-usuario">{{ t('Usuario') }}</label>
     <input type="text" id="nuevo-usuario" name="usuario" required maxlength="64"
-           placeholder="usuario" autocomplete="off">
-    <label for="nueva-password">Contraseña</label>
+           placeholder="{{ t('usuario') }}" autocomplete="off">
+    <label for="nueva-password">{{ t('Contraseña') }}</label>
     <input type="password" id="nueva-password" name="password" required minlength="12"
-           placeholder="mín. 12 caracteres" autocomplete="new-password">
+           placeholder="{{ t('mín. 12 caracteres') }}" autocomplete="new-password">
     {# El de superusuario no se ofrece: lo tiene la primera cuenta que se creó
        y no se concede desde aquí. #}
-    <select name="rol" aria-label="Rol">
-      <option value="supervisor">supervisor — solo consulta</option>
-      <option value="admin">admin — puede modificar</option>
+    <select name="rol" aria-label="{{ t('Rol') }}">
+      <option value="supervisor">{{ nombre_rol('supervisor') }} — {{ t('solo consulta') }}</option>
+      <option value="admin">{{ nombre_rol('admin') }} — {{ t('puede modificar') }}</option>
     </select>
-    <button type="submit" class="boton boton-principal">Crear</button>
+    <button type="submit" class="boton boton-principal">{{ t('Crear') }}</button>
   </form>
 </section>
 
 <section class="panel-accion">
-  <h2>Verificación en dos pasos</h2>
+  <h2>{{ t('Verificación en dos pasos') }}</h2>
   <p class="tenue">
-    Cada administrador activa el suyo desde <a href="/perfil">su perfil</a>;
-    desde aquí no se le puede imponer a otro. Lo que sí puedes decidir es si
-    las cuentas de rol <span class="rol rol-supervisor">supervisor</span> están
-    obligadas a usarlo.
+    {{ th('Cada administrador activa el suyo desde <a href="/perfil">su perfil</a>; desde aquí no se le puede imponer a otro. Lo que sí puedes decidir es si las cuentas de rol <span class="rol rol-supervisor">%(rol)s</span> están obligadas a usarlo.', rol=nombre_rol('supervisor')) }}
   </p>
 
   <div id="politica-totp"
@@ -53,6 +49,6 @@
      hx-get="/admin/usuarios/tabla"
      hx-trigger="load, usuarios-actualizados from:body"
      hx-swap="innerHTML">
-  <p class="tenue">Cargando…</p>
+  <p class="tenue">{{ t('Cargando…') }}</p>
 </div>
 {% endblock %}

@@ -324,6 +324,10 @@ def restos_en_espanol(html):
     # Fuera lo que no se lee o no es texto de la interfaz
     html = re.sub(r"<(script|style)\b.*?</\1>", " ", html, flags=re.S | re.I)
     html = re.sub(r"<!--.*?-->", " ", html, flags=re.S)
+    # El contenido de <code> y <pre> son literales: órdenes, claves de
+    # config.yaml, directivas del server.conf, nombres de archivo. Nunca se
+    # traducen, así que no pueden contar como un resto en español.
+    html = re.sub(r"<(code|pre)\b.*?</\1>", " ", html, flags=re.S | re.I)
     # El selector nombra cada idioma en su idioma, a propósito
     html = re.sub(r'<nav class="selector-idioma".*?</nav>', " ", html, flags=re.S)
     # Atributos que lee una persona (lector de pantalla, tooltip, ejemplo)
@@ -348,6 +352,8 @@ PAGINAS = {
     "/logs": ("admin", "todo"),
     "/clientes": ("admin", "todo"),
     "/clientes/ana/politica": ("admin", "todo"),
+    "/perfil": ("admin", "todo"),
+    "/admin/usuarios": ("admin", "todo"),
 }
 
 

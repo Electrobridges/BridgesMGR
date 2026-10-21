@@ -11,22 +11,21 @@
 {% if activado %}
 
   <p>
-    <span class="etiqueta etiqueta-ok">activado</span>
-    Se te pide un código cada vez que entras.
+    <span class="etiqueta etiqueta-ok">{{ t('activado') }}</span>
+    {{ t('Se te pide un código cada vez que entras.') }}
   </p>
 
   {% if obligatorio %}
   <p class="tenue">
-    Un administrador ha impuesto el segundo factor para las cuentas de tu rol,
-    así que no puedes desactivarlo.
+    {{ t('Un administrador ha impuesto el segundo factor para las cuentas de tu rol, así que no puedes desactivarlo.') }}
   </p>
   {% else %}
   <button class="boton boton-peligro"
           hx-disabled-elt="this"
           hx-post="/perfil/totp/desactivar"
           hx-target="#totp-panel" hx-swap="innerHTML"
-          hx-confirm="¿Desactivar la verificación en dos pasos de tu cuenta?">
-    Desactivar
+          hx-confirm="{{ t('¿Desactivar la verificación en dos pasos de tu cuenta?') }}">
+    {{ t('Desactivar') }}
   </button>
   {% endif %}
 
@@ -37,38 +36,37 @@
      activar, que al pulsarlo generaba un secreto nuevo y dejaba muerta la
      cuenta ya guardada en el móvil. #}
   <p>
-    <span class="etiqueta etiqueta-mal">sin confirmar</span>
-    Tienes un alta a medias. Escribe el código de tu aplicación para terminarla.
+    <span class="etiqueta etiqueta-mal">{{ t('sin confirmar') }}</span>
+    {{ t('Tienes un alta a medias. Escribe el código de tu aplicación para terminarla.') }}
   </p>
 
   <form class="formulario en-fila"
         hx-disabled-elt="find button"
         hx-post="/perfil/totp/confirmar"
         hx-target="#totp-panel" hx-swap="innerHTML">
-    <label for="codigo-pendiente">Código de la aplicación</label>
+    <label for="codigo-pendiente">{{ t('Código de la aplicación') }}</label>
     <input type="text" id="codigo-pendiente" name="codigo" required
            inputmode="numeric" pattern="[0-9 ]*" maxlength="9"
            autocomplete="off" placeholder="000000">
-    <button type="submit" class="boton boton-principal">Confirmar</button>
+    <button type="submit" class="boton boton-principal">{{ t('Confirmar') }}</button>
   </form>
 
   <p class="tenue">
-    ¿Perdiste la clave o no llegaste a guardarla? Descarta este alta y empieza
-    otra. La clave anterior dejará de valer.
+    {{ t('¿Perdiste la clave o no llegaste a guardarla? Descarta este alta y empieza otra. La clave anterior dejará de valer.') }}
   </p>
   <button class="boton"
           hx-post="/perfil/totp/descartar"
           hx-target="#totp-panel" hx-swap="innerHTML"
           hx-disabled-elt="this"
-          hx-confirm="Se descartará el alta en curso y tendrás que empezar de nuevo. La clave que tengas guardada en la aplicación dejará de servir. ¿Continuar?">
-    Descartar y empezar de nuevo
+          hx-confirm="{{ t('Se descartará el alta en curso y tendrás que empezar de nuevo. La clave que tengas guardada en la aplicación dejará de servir. ¿Continuar?') }}">
+    {{ t('Descartar y empezar de nuevo') }}
   </button>
 
 {% elif secreto %}
 
   <p>
-    <span class="etiqueta etiqueta-mal">sin confirmar</span>
-    Da de alta la cuenta en tu aplicación y escribe un código para terminar.
+    <span class="etiqueta etiqueta-mal">{{ t('sin confirmar') }}</span>
+    {{ t('Da de alta la cuenta en tu aplicación y escribe un código para terminar.') }}
   </p>
 
   <div class="alta-totp">
@@ -77,8 +75,8 @@
       {# data: URI dentro de un <img>: la CSP ya admite img-src 'self' data:,
          y así el SVG se dibuja en modo restringido, sin scripts. #}
       <img src="{{ qr }}" width="220" height="220"
-           alt="Código QR para dar de alta {{ sesion.usuario }} en tu aplicación de autenticación">
-      <figcaption class="tenue">Escanéalo con la app</figcaption>
+           alt="{{ t('Código QR para dar de alta %(usuario)s en tu aplicación de autenticación', usuario=sesion.usuario) }}">
+      <figcaption class="tenue">{{ t('Escanéalo con la app') }}</figcaption>
     </figure>
     {% endif %}
 
@@ -89,51 +87,47 @@
 
       <ol class="pasos">
         <li>
-          Abre Google Authenticator, Aegis, FreeOTP o la que uses
-          {%- if qr %} y escanea el código{% else %} y añade una cuenta nueva{% endif -%}.
+          {{ t('Abre Google Authenticator, Aegis, FreeOTP o la que uses') }}
+          {%- if qr %} {{ t('y escanea el código') }}{% else %} {{ t('y añade una cuenta nueva') }}{% endif -%}.
         </li>
         <li>
-          {% if qr %}Si prefieres no escanear, introduce la clave a mano:
-          {% else %}Introduce la clave manualmente:{% endif %}
+          {% if qr %}{{ t('Si prefieres no escanear, introduce la clave a mano:') }}
+          {% else %}{{ t('Introduce la clave manualmente:') }}{% endif %}
           <code class="secreto">{{ secreto_legible }}</code>
-          <span class="tenue">(tipo: basada en tiempo, 6 dígitos, 30 s)</span>
+          <span class="tenue">{{ t('(tipo: basada en tiempo, 6 dígitos, 30 s)') }}</span>
         </li>
         <li>
-          Escribe abajo el código que te muestre, para confirmar que ha
-          quedado bien dada de alta.
+          {{ t('Escribe abajo el código que te muestre, para confirmar que ha quedado bien dada de alta.') }}
         </li>
       </ol>
     </div>
   </div>
 
   <p class="tenue">
-    Guarda la clave en sitio seguro antes de continuar: no se vuelve a
-    mostrar. Si la pierdes, un administrador tendrá que restablecerte el
-    segundo factor.
+    {{ t('Guarda la clave en sitio seguro antes de continuar: no se vuelve a mostrar. Si la pierdes, un administrador tendrá que restablecerte el segundo factor.') }}
   </p>
 
   <form class="formulario en-fila"
         hx-disabled-elt="find button"
         hx-post="/perfil/totp/confirmar"
         hx-target="#totp-panel" hx-swap="innerHTML">
-    <label for="codigo-alta">Código de la aplicación</label>
+    <label for="codigo-alta">{{ t('Código de la aplicación') }}</label>
     <input type="text" id="codigo-alta" name="codigo" required
            inputmode="numeric" pattern="[0-9 ]*" maxlength="9"
            autocomplete="off" placeholder="000000">
-    <button type="submit" class="boton boton-principal">Confirmar</button>
+    <button type="submit" class="boton boton-principal">{{ t('Confirmar') }}</button>
   </form>
 
 {% else %}
 
   <p>
-    <span class="etiqueta etiqueta-mal">desactivado</span>
-    Solo se te pide la contraseña para entrar.
+    <span class="etiqueta etiqueta-mal">{{ t('desactivado') }}</span>
+    {{ t('Solo se te pide la contraseña para entrar.') }}
   </p>
 
   {% if obligatorio %}
   <p class="aviso aviso-error" role="alert">
-    Un administrador ha impuesto el segundo factor para las cuentas de tu rol.
-    Actívalo para poder usar el panel.
+    {{ t('Un administrador ha impuesto el segundo factor para las cuentas de tu rol. Actívalo para poder usar el panel.') }}
   </p>
   {% endif %}
 
@@ -144,7 +138,7 @@
           hx-post="/perfil/totp/iniciar"
           hx-target="#totp-panel" hx-swap="innerHTML"
           hx-disabled-elt="this">
-    Activar verificación en dos pasos
+    {{ t('Activar verificación en dos pasos') }}
   </button>
 
 {% endif %}
