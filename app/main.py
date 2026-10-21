@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import __version__, db, idiomas
+from .idiomas import t
 from .auth import (
     CSRFInvalido,
     NoAutenticado,
@@ -127,7 +128,8 @@ def crear_app(cfg=None):
             request,
             "partials/aviso.html",
             {"tipo": "error",
-             "mensaje": "Token CSRF no válido. Recarga la página e inténtalo de nuevo."},
+             "mensaje": t("Token CSRF no válido. Recarga la página e "
+                          "inténtalo de nuevo.")},
             status_code=403,
         )
 

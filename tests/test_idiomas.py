@@ -387,6 +387,8 @@ FRAGMENTOS = {
     "/logs/contenido": "admin",
     "/clientes/tabla": "admin",
     "/clientes/archivados": "admin",
+    "/admin/usuarios/tabla": "admin",
+    "/admin/politica/totp-supervisor": "admin",
 }
 
 
@@ -478,6 +480,32 @@ def test_la_verificacion_en_dos_pasos_en_ingles(app):
             request=pedido, sesion=None, manda=False, usuario="ana", error=None)
     assert restos_en_espanol(html) == []
     assert "Open your authenticator app and enter the code for ana." in html
+
+
+@pytest.mark.parametrize("estado", ["secreto", "pendiente", "activado", "desactivado"])
+def test_el_panel_del_segundo_factor_en_ingles(app, estado):
+    """
+    Los tres estados del panel de segundo factor solo salen en la respuesta de
+    un POST: la página del perfil enseña el cuarto. Sin esto, el alta con QR, el
+    alta a medias y el ya activado no los vigila nadie.
+    """
+    pedido = Request({"type": "http", "method": "GET", "path": "/perfil/totp",
+                      "query_string": b"", "headers": [], "app": app})
+    contexto = {
+        "activado": estado == "activado",
+        "obligatorio": False,
+        "pendiente": estado == "pendiente",
+        "secreto": "JBSWY3DPEHPK3PXP" if estado == "secreto" else None,
+        "secreto_legible": "JBSW Y3DP EHPK 3PXP" if estado == "secreto" else None,
+        "qr": None,
+        "fallo_qr": None,
+        "mensaje": None,
+        "error": None,
+    }
+    with idiomas.usar("en"):
+        html = app.state.plantillas.get_template("partials/totp_panel.html").render(
+            request=pedido, sesion={"usuario": "ana"}, manda=True, **contexto)
+    assert restos_en_espanol(html) == []
 
 
 def test_la_heuristica_detecta_lo_que_tiene_que_detectar():

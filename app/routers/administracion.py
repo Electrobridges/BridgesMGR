@@ -68,10 +68,10 @@ def _veto(sesion, registro):
     contraseña, activación, borrado y segundo factor. Si un admin pudiera
     cambiarle la contraseña, sería superusuario en dos pasos.
 
-    Devuelve el texto del motivo con el hueco del nombre sin rellenar: así el
-    mismo texto sirve para las dos cosas, y cada una lo usa como le toca. En la
-    pantalla se enseña traducido (t(motivo, usuario=...)); en la auditoría se
-    queda en español, que es como se guardan los datos.
+    Devuelve el texto del motivo con el hueco del nombre sin rellenar, para
+    que quien lo use lo rellene con su cuenta. En la pantalla se enseña
+    traducido, con t(motivo, usuario=...). A la auditoría NO va este texto: va
+    la etiqueta corta "cuenta blindada", que es un dato y se queda en español.
     """
     if registro["rol"] == db.ROL_SUPER and registro["usuario"] != sesion["usuario"]:
         return VETO_SUPERUSUARIO
