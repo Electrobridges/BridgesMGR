@@ -514,7 +514,7 @@ def pagina_auditoria(
             "sesiones_vpn": sesiones_vpn[
                 pg["desplazamiento"]:pg["desplazamiento"] + pg["por_pagina"]
             ],
-            "avisos": eventos.avisos(c) + avisos,
+            "avisos": eventos.avisos(c) + [eventos.traducir_aviso(a) for a in avisos],
             "pg": pg,
         })
     elif fuente == "vpn":

@@ -356,6 +356,7 @@ PAGINAS = {
     "/perfil": ("admin", "todo"),
     "/admin/usuarios": ("admin", "todo"),
     "/admin/auditoria": ("admin", "todo"),
+    "/admin/auditoria?fuente=vpn": ("admin", "todo"),
     "/seguridad": ("admin", "todo"),
     "/configuracion": ("admin", "todo"),
 }
@@ -544,6 +545,44 @@ def test_el_aviso_va_en_el_idioma_de_la_instalacion_tambien_en_ingles(cfg, monke
     asunto, cuerpo = enviados[0]
     assert "Action:" in cuerpo and "Result:" in cuerpo
     assert "Acción:" not in cuerpo
+
+
+def test_los_avisos_de_la_vpn_se_traducen():
+    """
+    Los avisos de la pestaña de VPN se guardan en español y se traducen al
+    enseñarlos. Los que devuelve revisar_archivo() vienen con la ruta ya
+    puesta, así que el diccionario los reconoce por una expresión regular.
+    """
+    from app import eventos
+    from app.core import eventos_vpn
+
+    with idiomas.usar("en"):
+        for ruta in ("", "/var/log/openvpn/openvpn.log"):
+            for aviso in eventos_vpn.revisar_archivo(ruta):
+                traducido = eventos.traducir_aviso(aviso)
+                assert traducido != aviso, "no se ha traducido: %r" % aviso
+                assert restos_en_espanol(traducido) == [], traducido
+
+        # Y un texto que no es un aviso se queda tal cual, sin reventar nada.
+        assert eventos.traducir_aviso("lo que sea") == "lo que sea"
+
+
+def test_el_diccionario_de_avisos_sigue_casando():
+    """
+    El diccionario de los avisos duplica los textos de app/core/eventos_vpn.py,
+    que no se puede tocar. Si uno de los dos cambia y el otro no, el aviso se
+    queda sin traducir sin que nada lo note. Esta prueba lo vigila.
+    """
+    from app import eventos
+    from app.core import eventos_vpn
+
+    with idiomas.usar("en"):
+        for ruta in ("", "/var/log/openvpn/openvpn.log"):
+            for aviso in eventos_vpn.revisar_archivo(ruta):
+                assert eventos.traducir_aviso(aviso) != aviso, (
+                    "El aviso %r ya no casa con el diccionario de app/eventos.py: "
+                    "alguien cambió uno de los dos textos." % aviso
+                )
 
 
 def test_el_informe_de_seguridad_en_ingles(cliente, usuarios, monkeypatch):
