@@ -37,6 +37,11 @@ CIFRADOS_DEBILES = re.compile(r'(^|[:-])(BF|DES|RC2|RC4|CAST5|DES-EDE3)(-|$)', r
 DIGESTS_DEBILES = {"MD5", "SHA1", "SHA", "RSA-MD5", "RSA-SHA1"}
 
 
+def _tiene_hueco(texto):
+    """Si el texto tiene algún marcador %(nombre)s, que es lo que se rellena"""
+    return "%(" in texto
+
+
 def _h(nivel, clave, titulo, porque, arreglo=None, valores=None):
     """
     Un hallazgo.
@@ -368,14 +373,14 @@ def _sistema(d):
                             N_("Script de políticas enganchado"),
                             N_("Horarios, caducidades e IP fijas se deciden al conectar.")))
     else:
-        # El motivo viene de serverconf, que lo marca con N_() para poder
-        # traducirlo. Se enseña traducido, como el resto del informe.
+        # El motivo viene de serverconf, que ya lo devuelve traducido: es un
+        # texto que se enseña, no un dato que se guarde.
         hallazgos.append(_h(AVISO, "politicas",
                             N_("Políticas por cliente a medias: %(motivo)s"),
                             N_("El vigilante expulsa a quien se quede fuera, pero su cliente "
                                "vuelve a entrar en segundos."),
                             N_("script-security 2  y  client-connect %(hook)s"),
-                            {"motivo": t(motivo), "hook": sc.HOOK_CLIENT_CONNECT}))
+                            {"motivo": motivo, "hook": sc.HOOK_CLIENT_CONNECT}))
     return hallazgos
 
 
@@ -405,9 +410,11 @@ def auditar(directivas, version="", crl_dias=None):
         elif crl_dias < 30:
             hallazgos.append(_h(AVISO, "crl-fecha",
                                 # Con plural de verdad: 'en 1 días' no vale ni en
-                                # español ni en inglés.
+                                # español ni en inglés. Ojo: tn() solo pone 'n' en
+                                # los valores, así que el hueco del texto va
+                                # también, o al formatear sale un KeyError.
                                 tn("La CRL caduca en %(dias)s día",
-                                   "La CRL caduca en %(dias)s días", crl_dias),
+                                   "La CRL caduca en %(dias)s días", crl_dias, dias=crl_dias),
                                 N_("Al caducar, OpenVPN rechazará a todo el mundo."),
                                 N_("Revoca o restaura cualquier cliente desde el panel para "
                                    "regenerarla"),
@@ -416,12 +423,17 @@ def auditar(directivas, version="", crl_dias=None):
     # Los textos que se enseñan van traducidos. El arreglo se traduce también,
     # pero las directivas del server.conf no están en el catálogo y salen
     # tal cual, sin cambios.
+    #
+    # Ojo con dar los valores a t(): t() formatea con % siempre que le pase
+    # algo, y una directiva con un % literal (una ruta con un % en el nombre)
+    # reventaría con ValueError. Por eso solo se formatea lo que tiene hueco.
     for h in hallazgos:
         valores = h.pop("valores")
         h["titulo"] = t(h["titulo"], **valores)
         h["porque"] = t(h["porque"], **valores)
         if h["arreglo"]:
-            h["arreglo"] = t(h["arreglo"], **valores)
+            h["arreglo"] = t(h["arreglo"], **valores) if _tiene_hueco(h["arreglo"]) \
+                else h["arreglo"]
 
     orden = {n: i for i, n in enumerate(NIVELES)}
     hallazgos.sort(key=lambda h: orden[h["nivel"]])

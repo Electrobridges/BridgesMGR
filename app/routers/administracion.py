@@ -397,6 +397,7 @@ ACCIONES_AUDITORIA = {
     "crear_cliente": N_("Crear cliente"),
     "revocar": N_("Revocar"),
     "restaurar": N_("Restaurar"),
+    "desconectar": N_("Desconectar"),
     "archivar": N_("Archivar"),
     "desarchivar": N_("Desarchivar"),
     "descargar_ovpn": N_("Descargar perfil"),

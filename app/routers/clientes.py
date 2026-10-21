@@ -590,9 +590,9 @@ def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
         "franjas": franjas[:max(FRANJAS_FORMULARIO, len(politica["horario"]))],
         "dias_cortos": pol.dias_cortos_formulario_traducidos(),
         "red": red,
-        # El motivo del gancho se enseña, así que va traducido; el informe de
-        # la auditoría lo usa en español, porque es un dato.
-        "gancho": (gancho[0], t(gancho[1])) if gancho and gancho[1] else gancho,
+        # El motivo del gancho lo devuelve serverconf ya traducido: es un
+        # texto que se enseña, no un dato que se guarde.
+        "gancho": gancho,
         "error_servidor": error,
         "max_sesion_global": db.max_sesion_global(c.seguridad.db_path),
         "describir_minutos": pol.describir_minutos,

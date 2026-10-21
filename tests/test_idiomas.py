@@ -508,6 +508,31 @@ def test_el_informe_de_seguridad_en_ingles(cliente, usuarios, monkeypatch):
     assert restos_en_espanol(r.text) == []
 
 
+@pytest.mark.parametrize("dias, es, en", [
+    (1, "La CRL caduca en 1 día", "The CRL expires in 1 day"),
+    (10, "La CRL caduca en 10 días", "The CRL expires in 10 days"),
+])
+def test_el_plural_de_la_caducidad_de_la_crl(dias, es, en):
+    """
+    El título de la caducidad lleva un número, y con plural de verdad.
+
+    Con un día sale 'caduca en 1 día', no 'en 1 días'. Y el hueco del número
+    tiene que llegarle al texto: si no, al formatear sale un KeyError y la
+    página del servidor se queda en un 500.
+    """
+    from app.core import auditor
+
+    with idiomas.usar("es"):
+        informe = auditor.auditar([], crl_dias=dias)
+        titulo = [h for h in informe["hallazgos"] if h["clave"] == "crl-fecha"][0]["titulo"]
+        assert titulo == es
+
+    with idiomas.usar("en"):
+        informe = auditor.auditar([], crl_dias=dias)
+        titulo = [h for h in informe["hallazgos"] if h["clave"] == "crl-fecha"][0]["titulo"]
+        assert titulo == en
+
+
 def test_la_verificacion_en_dos_pasos_en_ingles(app):
     """Sin pasar por todo el alta del segundo factor: se pinta la plantilla"""
     pedido = Request({"type": "http", "method": "GET", "path": "/login/codigo",
