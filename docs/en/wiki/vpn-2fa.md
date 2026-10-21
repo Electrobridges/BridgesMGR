@@ -14,8 +14,8 @@ leave the routers as they are.
 
 ## Enabling it
 
-1. **Clientes VPN → Políticas** (VPN clients → Policies) for the client →
-   **Verificación en dos pasos → Activar** (Two-step verification → Enable).
+1. **VPN clients → Policies** for the client, then **Two-step verification →
+   Enable**.
 2. A QR code and the key in text appear. **They are shown only this time**: have
    the person scan it at that moment, or pass them the key through a secure
    channel.
@@ -43,11 +43,11 @@ does not ask them every hour. A code already used is not valid twice.
 
 ## If they lose the phone or change it
 
-**Generar clave nueva** (Generate a new key) invalidates the previous one and
-shows a new QR code. The `.ovpn` they already have still works, because what
-changes is the key, not the profile.
+**Generate a new key** invalidates the previous one and shows a new QR code.
+The `.ovpn` they already have still works, because what changes is the key,
+not the profile.
 
-**Quitar** (Remove) takes them back to signing in with the certificate alone.
+**Remove** takes them back to signing in with the certificate alone.
 
 ## If nobody can get in
 

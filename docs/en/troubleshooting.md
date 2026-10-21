@@ -80,7 +80,7 @@ Two causes, and they often come together:
    `crl-verify /etc/openvpn/easy-rsa/pki/crl.pem` and restart OpenVPN.
 2. **The already established session does not cut itself.** Revoking prevents
    reconnecting, but does not kick out. Use the disconnect button from
-   *Conexiones*.
+   *Connections*.
 
 ## The downloaded `.ovpn` does not connect
 
@@ -109,9 +109,9 @@ If drift is not the problem, check that you registered the account as
 
 ## I am locked out for losing my phone
 
-Any admin can remove your second factor from *Usuarios* →
-**Restablecer 2FA** (*Users → Reset 2FA*). If the one who is locked out is the
-only administrator, it has to be done from the server:
+Any admin can remove your second factor from *Users* → **Reset 2FA**. If the
+one who is locked out is the only administrator, it has to be done from the
+server:
 
 ```bash
 cd /opt/ovpn-web

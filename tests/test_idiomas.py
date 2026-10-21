@@ -347,6 +347,7 @@ def restos_en_espanol(html):
 # ser una parte aparte: el panel, las conexiones y los logs ya van enteros.
 PAGINAS = {
     "/login": ("anonimo", "todo"),
+    "/login/codigo": ("login2fa", "todo"),
     "/": ("admin", "todo"),
     "/conexiones": ("admin", "todo"),
     "/logs": ("admin", "todo"),
@@ -370,15 +371,32 @@ def _parte(html, parte):
 
 
 @pytest.mark.parametrize("ruta", sorted(PAGINAS))
-def test_pagina_en_ingles_sin_restos_en_espanol(cliente, usuarios, ruta):
+def test_pagina_en_ingles_sin_restos_en_espanol(cliente, usuarios, cfg, ruta):
     quien, parte = PAGINAS[ruta]
     if quien == "admin":
         cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    elif quien == "login2fa":
+        _preparar_login_a_medias(cliente, cfg)
     cliente.cookies.set(COOKIE, "en")
     r = cliente.get(ruta)
     assert r.status_code == 200, r.text[:300]
     assert '<html lang="en">' in r.text
     assert restos_en_espanol(_parte(r.text, parte)) == []
+
+
+def _preparar_login_a_medias(cliente, cfg):
+    """
+    Deja a una cuenta con la contraseña correcta y el código pendiente.
+
+    Es lo que hace falta para que la página del segundo paso del login se
+    pueda pedir: sin el permiso temporal, redirige a /login.
+    """
+    from app import db
+    from app.auth import COOKIE_PENDIENTE
+
+    registro = db.obtener_usuario(cfg.seguridad.db_path, "jefa")
+    token = db.crear_login_pendiente(cfg.seguridad.db_path, registro["id"], "10.0.0.1")
+    cliente.cookies.set(COOKIE_PENDIENTE, token)
 
 
 # Los fragmentos que HTMX inserta en las páginas. No son páginas: no llevan
@@ -394,6 +412,7 @@ FRAGMENTOS = {
     "/admin/politica/totp-supervisor": "admin",
     "/seguridad/bloqueos/tabla": "admin",
     "/configuracion/respaldos/tabla": "admin",
+    "/perfil/totp": "admin",
 }
 
 
@@ -630,6 +649,58 @@ def test_la_heuristica_detecta_lo_que_tiene_que_detectar():
     assert restos_en_espanol("<p>Descargar el perfil</p>") == ["Descargar el perfil"]
     assert restos_en_espanol('<input placeholder="contraseña">') == ["contraseña"]
     assert restos_en_espanol("<p>Download the profile</p>") == []
+
+
+# ------------------------------------------- ninguna página sin vigilar
+
+# Lo que no devuelve HTML: el selector de idioma (cambia una cookie y
+# redirige), las métricas de Prometheus (no son HTML) y las dos descargas.
+FUERA_DE_LAS_PAGINAS = (
+    "/idioma/{codigo}",
+    "/metrics",
+    "/configuracion/exportar",
+    "/clientes/{cn}/ovpn",
+)
+
+
+def _rutas_html(app):
+    """Las rutas GET que devuelven una página, con los routers desplegados"""
+    def todas(rutas, prefijo=""):
+        for r in rutas:
+            original = getattr(r, "original_router", None)
+            if original is not None:
+                # Las rutas ya vienen con el prefijo del router puesto, así que
+                # no hay que añadirlo otra vez.
+                for x in todas(original.routes, prefijo):
+                    yield x
+            elif hasattr(r, "routes") and not hasattr(r, "methods"):
+                for x in todas(r.routes, prefijo):
+                    yield x
+            else:
+                yield prefijo + getattr(r, "path", ""), r
+
+    for path, r in todas(app.routes):
+        metodos = getattr(r, "methods", None) or set()
+        if "GET" in metodos and "{" not in path:
+            yield path
+
+
+def test_ninguna_pagina_del_panel_queda_sin_vigilar(app):
+    """
+    Toda página del panel tiene que estar en la lista de las que se comprueban.
+
+    Sin esto, una página nueva se cuela sin traducir y ninguna prueba lo
+    dice: la lista la escribe a mano y nadie avisa de que se ha quedado corta.
+    """
+    vistas = set(PAGINAS) | set(FRAGMENTOS)
+    sin_vigilar = sorted(r for r in _rutas_html(app)
+                         if r not in vistas and r not in FUERA_DE_LAS_PAGINAS)
+
+    assert sin_vigilar == [], (
+        "Páginas que no vigila ninguna prueba: %s. Añádelas a PAGINAS (o a "
+        "FRAGMENTOS, si son fragmentos que HTMX inserta) o a FUERA_DE_LAS_PAGINAS "
+        "si no devuelven HTML." % ", ".join(sin_vigilar)
+    )
 
 
 # ------------------------------------------------- las etiquetas de la política

@@ -12,8 +12,11 @@ el versionado es [SemVer](https://semver.org/lang/es/).
 - **Documentación en inglés.** La portada del repositorio (`README.md`) pasa
   al inglés, con la versión en español en `README.es.md`, y la wiki de uso,
   la instalación, la configuración, el modelo de seguridad y la solución de
-  problemas tienen su versión inglesa en `docs/en/`. El panel sigue solo en
-  español.
+  problemas tienen su versión inglesa en `docs/en/`.
+- **La interfaz en inglés.** La del panel está en español y en inglés: el
+  idioma se elige con el selector de la barra superior, con el idioma del
+  navegador o con `servidor.idioma` en `config.yaml`, que es el idioma de la
+  instalación y el que usan los avisos por correo.
 
 ## [0.5.0] — 2026-10-15
 

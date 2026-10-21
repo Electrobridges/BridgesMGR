@@ -227,7 +227,7 @@ Three roles, in hierarchy:
 |---|---|
 | `superusuario` | Everything an admin can. On top of that it is **untouchable**: nobody can change its role, deactivate it, delete it, or touch its password or second factor |
 | `admin` | Create, revoke, restore, disconnect, download profiles and manage accounts, including other admins' |
-| `supervisor` | Read only: panel, connections, clients, logs and audit log. They do not get into *Usuarios* or *Configuración* |
+| `supervisor` | Read only: panel, connections, clients, logs and audit log. They do not get into *Users* or *Settings* |
 
 The superusuario **is not granted**: it is the first account created in the
 installation, whatever role was asked for. `--rol superusuario` does not exist,
@@ -247,9 +247,9 @@ themselves by mistake would be locked out of the page where you could fix it.
 
 ### Two-step verification
 
-Each user enables it from **Mi cuenta** (*My account*, `/perfil`), with the
-phone's authenticator app. For those in charge — superusuario and admins — it is
-optional; for `supervisor` accounts it can be required from *Usuarios* or from
+Each user enables it from **My account** (`/perfil`), with the phone's
+authenticator app. For those in charge — superusuario and admins — it is
+optional; for `supervisor` accounts it can be required from *Users* or from
 the CLI:
 
 ```bash
@@ -316,10 +316,9 @@ sudo systemctl restart ovpn-web
 
 The panel copies its database to `/var/lib/ovpn-web/respaldos/` using SQLite's
 backup API, so the copy is consistent even while people are using the panel. The
-schedule is set in **Configuración → Respaldos de la base**
-(*Settings → Database backups*): daily or weekly, at the hour you
-choose, keeping the last N. The watchdog checks it every five minutes, and if
-the panel was stopped at that hour it backs up as soon as it comes back.
+schedule is set in **Settings → Database backups**: daily or weekly, at the
+hour you choose, keeping the last N. The watchdog checks it every five minutes,
+and if the panel was stopped at that hour it backs up as soon as it comes back.
 
 **Backups are not downloadable from the web, and that is not an oversight.** A
 backup is the whole database: the hashes of every password and the second
@@ -333,9 +332,9 @@ sudo chown $USER /tmp/ovpn-web-*.db.gz
 scp servidor:/tmp/ovpn-web-20260907-030000.db.gz .
 ```
 
-To look at the audit log outside the server there is **Configuración → Exportar**
-(*Settings → Export*), which downloads a ZIP with the audit log and the
-archived profiles as CSV and **with no secrets whatsoever**.
+To look at the audit log outside the server there is **Settings → Export and
+clean up**, which downloads a ZIP with the audit log and the archived profiles
+as CSV and **with no secrets whatsoever**.
 
 ### Restoring
 

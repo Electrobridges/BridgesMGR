@@ -47,9 +47,8 @@ to do.
 
 ## Backups
 
-In **Configuración → Respaldos de la base** (Settings → Database backups) you
-schedule a daily or weekly copy, keeping the last N, in
-`/var/lib/ovpn-web/respaldos/`.
+In **Settings → Database backups** you schedule a daily or weekly copy,
+keeping the last N, in `/var/lib/ovpn-web/respaldos/`.
 
 > [!WARNING]
 > Backups are **not downloadable from the web** on purpose: they contain the
@@ -59,8 +58,8 @@ schedule a daily or weekly copy, keeping the last N, in
 
 How to restore one: [Installation → Restoring](../installation.md#restoring).
 
-To review the audit log in a spreadsheet, **Configuración → Exportar** (Settings
-→ Export) downloads a ZIP of CSVs, with no secrets whatsoever.
+To review the audit log in a spreadsheet, **Settings → Export and clean up**
+downloads a ZIP of CSVs, with no secrets whatsoever.
 
 ## Locked out of the panel
 
@@ -68,7 +67,7 @@ To review the audit log in a spreadsheet, **Configuración → Exportar** (Setti
 |---|---|
 | Many failed attempts | Wait 15 minutes or come in from another IP: the lock is per user **+ IP** |
 | I forgot the password | `sudo -u ovpnweb venv/bin/python -m app.cli cambiar-password tu_usuario` |
-| I lost my 2FA phone | Another admin: **Usuarios → Restablecer 2FA** (Users → Reset 2FA). If there is no other: `… app.cli totp-restablecer tu_usuario` |
+| I lost my 2FA phone | Another admin: **Users → Reset 2FA**. If there is no other: `… app.cli totp-restablecer tu_usuario` |
 
 The commands are run from `/opt/ovpn-web`, on the server itself.
 

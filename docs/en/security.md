@@ -226,7 +226,7 @@ Three steps. `superusuario` and `admin` can mutate the server — which is what
 |---|---|
 | `superusuario` | Commands the same as an admin and on top of that is **untouchable**: nobody can change its role, deactivate it, delete it, or touch its password or second factor |
 | `admin` | Mutates the server and manages accounts, including other admins'. It does not reach the superusuario |
-| `supervisor` | Read only: panel, connections, clients, logs and audit log. They do not get into *Usuarios* or *Configuración* |
+| `supervisor` | Read only: panel, connections, clients, logs and audit log. They do not get into *Users* or *Settings* |
 
 What a supervisor does **not** see does not appear in their menu either. And no
 template decides that by comparing the role name: `routers/comun.py:render()`
@@ -236,8 +236,8 @@ it happened when `superusuario` was introduced, which lost half the panel withou
 a single route failing. There is a test that prevents comparing `sesion.rol`
 with a string again.
 
-*Configuración* is outside the supervisor's scope because it shows the PKI and
-log paths, the management port and the unit status: it is the installation's
+*Settings* is outside the supervisor's scope because it shows the PKI and log
+paths, the management port and the unit status: it is the installation's
 blueprint, and someone who only looks does not need it.
 
 **The superusuario is not granted: you are born with it.** It is the first
@@ -344,7 +344,7 @@ They are locked out: that is what a second factor means. There are two ways out,
 both audited:
 
 ```bash
-# Desde el panel, cualquier admin:  /admin/usuarios -> "Restablecer 2FA"
+# Desde el panel, cualquier admin:  /admin/usuarios -> "Reset 2FA"
 
 # Desde el servidor, cuando el que se ha quedado fuera es el único admin:
 cd /opt/ovpn-web
@@ -400,7 +400,7 @@ How it travels, which is the part that matters:
   repeats the minimum on its own account, as with the CN: from that side of the
   boundary the panel is not to be trusted.
 - **It cannot be recovered.** If it is lost, the certificate has to be reissued
-  with *Restaurar* — which is why that also accepts a password.
+  with *Restore* — which is why that also accepts a password.
 
 Give it to whoever uses the profile through a channel other than the `.ovpn`
 itself. Sending both together over the same email protects nothing.
