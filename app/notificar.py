@@ -21,21 +21,32 @@ guarda. El último mensaje que sale por ahí es el que delata que lo callaron.
 import queue
 import threading
 
-from . import db
+from . import db, idiomas
 from .core import notificaciones
+from .idiomas import N_, mensaje, t
 
 # Categorías de suceso. Cadenas fijas: se guardan en `ajustes` y se comparan
 # con lo que llega del formulario, así que no pueden ser texto libre.
+#
+# Las CLAVES son esos códigos y no se tocan. Lo que se traduce es el texto que
+# se enseña: con N_() al definirlo y t() al usarlo.
 SEGURIDAD = "seguridad"
 CERTIFICADOS = "certificados"
 SERVICIO = "servicio"
 RECHAZOS = "rechazos"
 
 CATEGORIAS = {
-    SEGURIDAD: "Seguridad del panel",
-    CERTIFICADOS: "Certificados y CA",
-    SERVICIO: "Salud del servicio",
-    RECHAZOS: "Rechazos de conexión a la VPN",
+    SEGURIDAD: N_("Seguridad del panel"),
+    CERTIFICADOS: N_("Certificados y CA"),
+    SERVICIO: N_("Salud del servicio"),
+    RECHAZOS: N_("Rechazos de conexión a la VPN"),
+}
+
+# Los canales son códigos también (van en la base y en el formulario), pero
+# salen en los avisos, así que su nombre tiene versión traducida.
+CANAELES = {
+    "correo": N_("correo"),
+    "discord": N_("discord"),
 }
 
 # Qué acción auditada cae en qué categoría. Lo que no está aquí no notifica:
@@ -113,10 +124,69 @@ def categoria_de(accion, resultado):
     return None
 
 
+# --------------------------------------------------- las listas que se enseñan
+
+def categorias_traducidas():
+    """
+    Las categorías con su texto ya traducido, para la página de configuración.
+
+    Las CLAVES son códigos (van en el value del <option> y en la base) y no se
+    tocan; solo el texto se traduce. Una clave que no esté en el diccionario
+    sale tal cual: no puede reventar con un KeyError.
+    """
+    return {clave: t(CATEGORIAS.get(clave, clave)) for clave in CATEGORIAS}
+
+
+def texto_categoria(clave):
+    """El texto de una categoría, en el idioma de quien lo va a leer."""
+    return t(CATEGORIAS.get(clave, clave))
+
+
+def texto_canal(canal):
+    """El nombre de un canal, en el idioma de quien lo va a leer."""
+    return t(CANAELES.get(canal, canal))
+
+
+def texto_canales(canales):
+    """'correo', 'correo y discord', 'correo, discord y otro'."""
+    canales = [texto_canal(c) for c in canales]
+    if len(canales) <= 1:
+        return ", ".join(canales)
+    return "%s %s %s" % (", ".join(canales[:-1]), t("y"), canales[-1])
+
+
+def fallos_texto(fallos, traducir=False):
+    """
+    Los fallos de un envío, en una línea.
+
+    Para la auditoría van en español —son datos, y el texto de un error es el
+    que tuvo el servidor—, y para la pantalla traducidos: también el nombre
+    del canal, que en la base es un código.
+    """
+    partes = []
+    for canal, e in fallos:
+        if traducir:
+            partes.append("%s: %s" % (texto_canal(canal), mensaje(e)))
+        else:
+            partes.append("%s: %s" % (canal, str(e)))
+    return "; ".join(partes)
+
+
 # Quién firma en la auditoría lo que hace el panel por su cuenta. No es una
 # cuenta: db.crear_usuario() rechaza los nombres que empiezan por paréntesis,
 # así que nadie puede hacerse pasar por el panel en el registro.
 ACTOR_SISTEMA = "(sistema)"
+
+
+# Las etiquetas de los avisos van en una columna, como en un formulario. Se
+# traducen y se vuelven a alinear, porque en inglés no miden lo mismo que en
+# español y si no el texto sale descuadrado.
+ANCHO_ETIQUETA = 10
+
+
+def _linea(etiqueta, valor):
+    """Una línea 'etiqueta:   valor', con la etiqueta en una columna fija."""
+    return "%s %s" % (etiqueta.ljust(ANCHO_ETIQUETA), valor)
 
 
 def notificar_accion(cfg, accion, objetivo, usuario, ip, resultado="ok", detalle=None):
@@ -125,20 +195,24 @@ def notificar_accion(cfg, accion, objetivo, usuario, ip, resultado="ok", detalle
     if not categoria:
         return
 
-    estado = "FALLÓ" if resultado != "ok" else "correcto"
-    avisar(
-        cfg, categoria,
-        "[%s] %s%s" % (cfg.servidor.host_bind, accion,
-                       "" if resultado == "ok" else " (falló)"),
-        "\n".join([
-            "Acción:    %s" % accion,
-            "Objetivo:  %s" % (objetivo or "—"),
-            "Usuario:   %s" % (usuario or "—"),
-            "Desde:     %s" % (ip or "—"),
-            "Resultado: %s" % estado,
-        ] + (["Detalle:   %s" % detalle] if detalle else [])),
-        grave=(resultado != "ok" or accion in GRAVES),
-    )
+    # El aviso se arma en el idioma de la INSTALACIÓN, no en el de quien esté
+    # mirando el panel: el correo lo va a leer quien administre el servidor, y
+    # ese lee en el idioma del servidor. El texto ya construido no se vuelve a
+    # tocar: se entrega después, en el hilo de la cola.
+    with idiomas.usar(idiomas.por_defecto()):
+        estado = t("FALLÓ") if resultado != "ok" else t("correcto")
+        asunto = "[%s] %s%s" % (cfg.servidor.host_bind, accion,
+                                "" if resultado == "ok" else " (%s)" % t("falló"))
+        cuerpo = "\n".join([
+            _linea(t("Acción:"), accion),
+            _linea(t("Objetivo:"), objetivo or "—"),
+            _linea(t("Usuario:"), usuario or "—"),
+            _linea(t("Desde:"), ip or "—"),
+            _linea(t("Resultado:"), estado),
+        ] + ([_linea(t("Detalle:"), detalle)] if detalle else []))
+
+    avisar(cfg, categoria, asunto, cuerpo,
+           grave=(resultado != "ok" or accion in GRAVES))
 
 
 def auditar_sistema(cfg, accion, objetivo=None, resultado="ok", detalle=None):
@@ -246,7 +320,7 @@ def _entregar(cfg, canales, asunto, cuerpo, grave, ruta_db):
             notificaciones.enviar_correo(cfg.notificaciones.correo, asunto, cuerpo)
             enviados.append("correo")
         except notificaciones.ErrorNotificacion as e:
-            fallos.append("correo: %s" % e)
+            fallos.append(("correo", e))
 
     if canales.get("discord"):
         try:
@@ -256,14 +330,18 @@ def _entregar(cfg, canales, asunto, cuerpo, grave, ruta_db):
             )
             enviados.append("discord")
         except notificaciones.ErrorNotificacion as e:
-            fallos.append("discord: %s" % e)
+            fallos.append(("discord", e))
 
     # Solo se audita lo que falla, y los envíos correctos no: si no, cada aviso
     # generaría una entrada de auditoría, y avisar de una revocación acabaría
     # duplicando el historial que se quiere vigilar.
+    #
+    # En la auditoría el motivo va en español: es un dato, y el texto del
+    # error es el que tuvo el servidor. En la pantalla lo enseña traducido
+    # quien lo va a leer (fallos_texto(..., traducir=True)).
     if fallos and ruta_db:
         db.registrar(ruta_db, usuario=None, accion="notificar", objetivo=asunto,
-                     resultado="error", detalle="; ".join(fallos))
+                     resultado="error", detalle=fallos_texto(fallos))
 
     return enviados, fallos
 
@@ -312,30 +390,61 @@ def avisar_ahora(cfg, canales, asunto, cuerpo, grave=False):
 
 def aviso_de_apagado(cfg, usuario, ip, antes, ahora):
     """
-    Texto del aviso previo a recortar la vigilancia.
+    El aviso previo a recortar la vigilancia: el asunto y el cuerpo.
 
     Se manda por los canales que estaban activos ANTES del cambio, no por los
     que quedan: si se apagan los dos, este mensaje es el último que sale.
+
+    Va en el idioma de la INSTALACIÓN, no en el de quien esté recortando la
+    vigilancia: si alguien con el panel en inglés apaga el correo de avisos,
+    el correo tiene que seguir llegando en el idioma de quien lo lee.
     """
-    lineas = [
-        "Alguien acaba de reducir las notificaciones de este panel.",
-        "",
-        "Usuario: %s" % (usuario or "?"),
-        "Desde:   %s" % (ip or "?"),
-        "",
-    ]
+    with idiomas.usar(idiomas.por_defecto()):
+        asunto = "[%s] %s" % (cfg.servidor.host_bind,
+                              t("Se están reduciendo las notificaciones"))
+        lineas = [
+            t("Alguien acaba de reducir las notificaciones de este panel."),
+            "",
+            _linea(t("Usuario:"), usuario or "?"),
+            _linea(t("Desde:"), ip or "?"),
+            "",
+        ]
 
-    apagados = [c for c in ("correo", "discord") if antes.get(c) and not ahora.get(c)]
-    if apagados:
-        lineas.append("Canales apagados: %s" % ", ".join(apagados))
+        apagados = [c for c in ("correo", "discord")
+                    if antes.get(c) and not ahora.get(c)]
+        if apagados:
+            lineas.append(t("Canales apagados: %(canales)s",
+                            canales=", ".join(texto_canal(c) for c in apagados)))
 
-    quitadas = sorted(antes.get("eventos", set()) - ahora.get("eventos", set()))
-    if quitadas:
-        lineas.append("Categorías que dejan de avisar: %s"
-                      % ", ".join(CATEGORIAS.get(c, c) for c in quitadas))
+        quitadas = sorted(antes.get("eventos", set()) - ahora.get("eventos", set()))
+        if quitadas:
+            lineas.append(t("Categorías que dejan de avisar: %(categorias)s",
+                            categorias=", ".join(texto_categoria(c) for c in quitadas)))
 
-    lineas += [
-        "",
-        "Si no has sido tú, este es el último aviso que vas a recibir por esta vía.",
-    ]
-    return "\n".join(lineas)
+        lineas += [
+            "",
+            t("Si no has sido tú, este es el último aviso que vas a recibir por esta vía."),
+        ]
+
+    return asunto, "\n".join(lineas)
+
+
+def aviso_de_prueba(cfg, usuario, ip):
+    """
+    El aviso de prueba que se manda desde la página de configuración.
+
+    También en el idioma de la instalación: lo lee quien administre el
+    servidor, no quien ha pulsado el botón.
+    """
+    with idiomas.usar(idiomas.por_defecto()):
+        asunto = "[%s] %s" % (cfg.servidor.host_bind, t("Aviso de prueba"))
+        cuerpo = "\n".join([
+            t("Esto es una prueba lanzada desde el panel. No ha pasado nada."),
+            "",
+            _linea(t("Usuario:"), usuario or "?"),
+            _linea(t("Desde:"), ip or "?"),
+            "",
+            t("Si lo estás leyendo, este canal funciona."),
+        ])
+
+    return asunto, cuerpo

@@ -142,7 +142,9 @@ def pagina_configuracion(request: Request, sesion=Depends(solo_admin)):
     try:
         servicio = estado_servicio(c)
     except ErrorHelper as e:
-        servicio = {"activo": False, "estado": str(e), "servicio": c.openvpn.servicio}
+        # El estado se enseña traducido; str(e) es el texto del servidor, que
+        # es un dato y va en español.
+        servicio = {"activo": False, "estado": mensaje(e), "servicio": c.openvpn.servicio}
 
     return render(request, "configuracion.html", {
         "openvpn": c.openvpn,
@@ -153,9 +155,9 @@ def pagina_configuracion(request: Request, sesion=Depends(solo_admin)):
         "tamano_log": core_logs.tamano_log(c.openvpn.log_path),
         "notif": _estado_notificaciones(c),
         "respaldo": respaldar.ajustes(c.seguridad.db_path),
-        "frecuencias": respaldar.FRECUENCIAS,
+        "frecuencias": respaldar.frecuencias_traducidas(),
         "dir_respaldos": respaldar.directorio(c),
-        "opciones_limpieza": OPCIONES_LIMPIEZA,
+        "opciones_limpieza": _opciones_limpieza_traducidas(),
     })
 
 
@@ -172,7 +174,7 @@ def _estado_notificaciones(c):
     return {
         "canales": notificar.canales_activos(ruta),
         "eventos": notificar.eventos_activos(ruta),
-        "categorias": notificar.CATEGORIAS,
+        "categorias": notificar.categorias_traducidas(),
         "configurado": {
             "correo": notificar.configurado(c, "correo"),
             "discord": notificar.configurado(c, "discord"),
@@ -207,8 +209,8 @@ def rotar_tls_crypt(
     c = cfg(request)
 
     if confirmacion.strip() != CONFIRMA_ROTAR:
-        return error_htmx(request, "Escribe %s para confirmar. No se ha tocado nada."
-                          % CONFIRMA_ROTAR)
+        return error_htmx(request, t("Escribe %(palabra)s para confirmar. No se ha tocado nada.",
+                                     palabra=CONFIRMA_ROTAR))
 
     # Se pregunta antes de rotar: después, los certificados siguen siendo los
     # mismos, pero conviene tener la lista para el aviso de reparto aunque la
@@ -216,13 +218,15 @@ def rotar_tls_crypt(
     try:
         validos = listar_certificados(c)["validos"]
     except ErrorHelper as e:
-        return error_htmx(request, "No se pudo consultar la PKI: %s" % e)
+        return error_htmx(request, t("No se pudo consultar la PKI: %(error)s",
+                                     error=mensaje(e)))
 
     try:
         resultado = easyrsa.rotar_tls_crypt(c)
     except ErrorHelper as e:
         auditar(request, sesion, "rotar_tls_crypt", None, "error", str(e))
-        return error_htmx(request, "No se pudo rotar la clave: %s" % e)
+        return error_htmx(request, t("No se pudo rotar la clave: %(error)s",
+                                     error=mensaje(e)))
 
     auditar(request, sesion, "rotar_tls_crypt", None,
             detalle="huella=%s respaldo=%s afectados=%d"
@@ -235,15 +239,19 @@ def rotar_tls_crypt(
             detalle="Clave tls-crypt rotada. Los .ovpn anteriores ya no sirven.",
         )
 
-    mensaje = ("Clave tls-crypt rotada (huella %s) y %s reiniciado. "
-               % (resultado.get("huella", "?"), resultado.get("servicio", "OpenVPN")))
+    # 'texto' y no 'mensaje': el nombre de la función idiomas.mensaje() está
+    # importado en este módulo, y una variable local con el mismo nombre
+    # taparía la función en toda la función.
+    texto = [t("Clave tls-crypt rotada (huella %(huella)s) y %(servicio)s reiniciado.",
+               huella=resultado.get("huella", "?"),
+               servicio=resultado.get("servicio", "OpenVPN"))]
     if validos:
-        mensaje += ("Los %d clientes necesitan un perfil nuevo: tienes la lista en "
-                    "Clientes VPN." % len(validos))
+        texto.append(t("Los %(n)s clientes necesitan un perfil nuevo: tienes la lista en "
+                       "Clientes VPN.", n=len(validos)))
     else:
-        mensaje += "No hay clientes a los que repartir."
+        texto.append(t("No hay clientes a los que repartir."))
 
-    return aviso(request, mensaje, tipo="aviso")
+    return aviso(request, " ".join(texto), tipo="aviso")
 
 
 @router.post("/configuracion/notificaciones/probar")
@@ -267,36 +275,33 @@ def probar_notificaciones(
 
     if not any(canales.values()):
         return aviso(request, tipo="error", status_code=400, mensaje=(
-            "No hay ningún canal con destino configurado. Rellena "
-            "'notificaciones' en /etc/ovpn-web/config.yaml y reinicia el panel."
+            t("No hay ningún canal con destino configurado. Rellena "
+              "'notificaciones' en /etc/ovpn-web/config.yaml y reinicia el panel.")
         ))
 
-    enviados, fallos = notificar.avisar_ahora(
-        c, canales,
-        "[%s] Aviso de prueba" % c.servidor.host_bind,
-        "\n".join([
-            "Esto es una prueba lanzada desde el panel. No ha pasado nada.",
-            "",
-            "Usuario: %s" % sesion["usuario"],
-            "Desde:   %s" % (ip_cliente(request) or "?"),
-            "",
-            "Si lo estás leyendo, este canal funciona.",
-        ]),
-    )
+    # El aviso sale en el idioma de la instalación, no en el del panel: lo lee
+    # quien administre el servidor, no quien ha pulsado el botón.
+    asunto, cuerpo = notificar.aviso_de_prueba(c, sesion["usuario"], ip_cliente(request))
+
+    enviados, fallos = notificar.avisar_ahora(c, canales, asunto, cuerpo)
 
     auditar(request, sesion, "probar_notificaciones", None,
             resultado="ok" if enviados and not fallos else "error",
             detalle="ok=%s fallos=%s" % (",".join(enviados) or "ninguno",
-                                         "; ".join(fallos) or "ninguno"))
+                                         notificar.fallos_texto(fallos) or "ninguno"))
 
     if enviados and not fallos:
-        return aviso(request, "Enviado por %s. Si no llega, el problema está en "
-                              "el destino, no en el panel." % " y ".join(enviados))
+        return aviso(request, t("Enviado por %(canales)s. Si no llega, el problema está en "
+                                "el destino, no en el panel.",
+                                canales=notificar.texto_canales(enviados)))
     if enviados:
         return aviso(request, tipo="aviso", mensaje=(
-            "Enviado por %s, pero falló %s." % (" y ".join(enviados), "; ".join(fallos))))
+            t("Enviado por %(canales)s, pero falló %(fallos)s.",
+              canales=notificar.texto_canales(enviados),
+              fallos=notificar.fallos_texto(fallos, traducir=True))))
     return aviso(request, tipo="error", status_code=400,
-                 mensaje="No salió por ningún canal: %s" % "; ".join(fallos))
+                 mensaje=t("No salió por ningún canal: %(fallos)s",
+                           fallos=notificar.fallos_texto(fallos, traducir=True)))
 
 
 @router.post("/configuracion/notificaciones")
@@ -337,12 +342,10 @@ def guardar_notificaciones(
         canales_previos = {c_: antes[c_] and notificar.configurado(c, c_)
                            for c_ in ("correo", "discord")}
         if any(canales_previos.values()):
+            asunto, cuerpo = notificar.aviso_de_apagado(
+                c, sesion["usuario"], ip_cliente(request), antes, ahora)
             _, fallos_aviso = notificar.avisar_ahora(
-                c, canales_previos,
-                "[%s] Se están reduciendo las notificaciones" % c.servidor.host_bind,
-                notificar.aviso_de_apagado(c, sesion["usuario"], ip_cliente(request),
-                                           antes, ahora),
-                grave=True,
+                c, canales_previos, asunto, cuerpo, grave=True,
             )
 
     notificar.guardar_ajustes(ruta, ahora["correo"], ahora["discord"], ahora["eventos"])
@@ -351,16 +354,17 @@ def guardar_notificaciones(
                 ",".join(sorted(k for k in ("correo", "discord") if ahora[k])) or "ninguno",
                 ",".join(sorted(ahora["eventos"])) or "ninguno"))
 
-    mensaje = "Notificaciones guardadas."
+    texto = t("Notificaciones guardadas.")
     if apaga_canal or quita_evento:
         if fallos_aviso:
-            mensaje = ("Guardado, pero el aviso previo de la desactivación no pudo "
-                       "entregarse: %s" % "; ".join(fallos_aviso))
+            texto = t("Guardado, pero el aviso previo de la desactivación no pudo "
+                      "entregarse: %(fallos)s",
+                      fallos=notificar.fallos_texto(fallos_aviso, traducir=True))
         else:
-            mensaje = ("Guardado. Se envió antes el aviso de que se reduce la "
-                       "vigilancia, por los canales que seguían activos.")
+            texto = t("Guardado. Se envió antes el aviso de que se reduce la "
+                      "vigilancia, por los canales que seguían activos.")
 
-    return aviso(request, mensaje,
+    return aviso(request, texto,
                  tipo="aviso" if fallos_aviso else "ok")
 
 
@@ -382,13 +386,24 @@ TODO_EL_HISTORIAL = 0
 CORTE_POR_DEFECTO = 30
 
 OPCIONES_LIMPIEZA = (
-    (30, "más de 30 días"),
-    (90, "más de 90 días"),
-    (180, "más de 180 días"),
-    (365, "más de un año"),
-    (TODO_EL_HISTORIAL, "todo, desde el primer registro"),
+    (30, N_("más de 30 días")),
+    (90, N_("más de 90 días")),
+    (180, N_("más de 180 días")),
+    (365, N_("más de un año")),
+    (TODO_EL_HISTORIAL, N_("todo, desde el primer registro")),
 )
 DIAS_LIMPIEZA = tuple(d for d, _ in OPCIONES_LIMPIEZA)
+
+
+def _opciones_limpieza_traducidas():
+    """
+    Los cortes de la limpieza, con su texto ya traducido.
+
+    Los NÚMEROS son los que van en el value del <option> y en la base: no se
+    tocan. Solo el texto se traduce, y una clave que no esté en el diccionario
+    sale tal cual: no puede reventar con un KeyError.
+    """
+    return tuple((valor, t(texto)) for valor, texto in OPCIONES_LIMPIEZA)
 
 
 def _contexto_respaldos(request, errores=None):
@@ -400,7 +415,9 @@ def _contexto_respaldos(request, errores=None):
     try:
         copias = respaldos.listar(directorio)
     except respaldos.ErrorRespaldo as e:
-        errores.append(str(e))
+        # El error se enseña traducido: str(e) es el texto del servidor, que es
+        # un dato, y lo que ve quien está en la página lo lee en su idioma.
+        errores.append(mensaje(e))
 
     return {
         "copias": copias,
@@ -442,14 +459,16 @@ def guardar_respaldos(
                     % (puesto["frecuencia"], puesto["hora"], puesto["conservar"]))
 
     if puesto["frecuencia"] == respaldar.DESACTIVADO:
-        mensaje = ("Respaldo automático desactivado. No se hará ninguna copia "
-                   "nueva hasta que lo vuelvas a programar.")
+        texto = t("Respaldo automático desactivado. No se hará ninguna copia "
+                  "nueva hasta que lo vuelvas a programar.")
     else:
-        mensaje = ("Respaldo %s a las %s, conservando %d copias en %s."
-                   % (respaldar.FRECUENCIAS[puesto["frecuencia"]].lower(),
-                      puesto["hora"], puesto["conservar"], respaldar.directorio(c)))
+        texto = t("Respaldo %(frecuencia)s a las %(hora)s, conservando %(copias)s "
+                  "copias en %(ruta)s.",
+                  frecuencia=respaldar.texto_frecuencia(puesto["frecuencia"]).lower(),
+                  hora=puesto["hora"], copias=puesto["conservar"],
+                  ruta=respaldar.directorio(c))
 
-    return aviso(request, mensaje, refrescar=EVENTO_RESPALDOS)
+    return aviso(request, texto, refrescar=EVENTO_RESPALDOS)
 
 
 @router.post("/configuracion/respaldos/ahora")
@@ -465,18 +484,22 @@ def respaldar_ahora(
         nombre, borrados = respaldar.ejecutar(c)
     except respaldos.ErrorRespaldo as e:
         auditar(request, sesion, "crear_respaldo", None, "error", str(e))
-        return error_htmx(request, "No se pudo respaldar: %s" % e,
+        return error_htmx(request, t("No se pudo respaldar: %(error)s", error=mensaje(e)),
                           refrescar=EVENTO_RESPALDOS)
 
     auditar(request, sesion, "crear_respaldo", nombre,
             detalle="rotados=%s" % (",".join(borrados) or "ninguno"))
 
-    mensaje = "Respaldo creado: %s (en %s)." % (nombre, respaldar.directorio(c))
+    # 'texto' y no 'mensaje': el nombre de la función idiomas.mensaje() está
+    # importado en este módulo, y una variable local con el mismo nombre
+    # taparía la función en toda la función.
+    texto = t("Respaldo creado: %(nombre)s (en %(ruta)s).",
+              nombre=nombre, ruta=respaldar.directorio(c))
     if borrados:
-        mensaje += (" Se han rotado %d copia(s) antigua(s)." % len(borrados))
-    mensaje += " No se descarga desde aquí: lleva los hashes y los secretos TOTP."
+        texto += t(" Se han rotado %(n)s copia(s) antigua(s).", n=len(borrados))
+    texto += t(" No se descarga desde aquí: lleva los hashes y los secretos TOTP.")
 
-    return aviso(request, mensaje, refrescar=EVENTO_RESPALDOS)
+    return aviso(request, texto, refrescar=EVENTO_RESPALDOS)
 
 
 @router.post("/configuracion/respaldos/borrar")
@@ -499,15 +522,16 @@ def borrar_respaldo(
         habia = respaldos.borrar(respaldar.directorio(c), nombre)
     except respaldos.ErrorRespaldo as e:
         auditar(request, sesion, "borrar_respaldo", nombre, "error", str(e))
-        return error_htmx(request, str(e), refrescar=EVENTO_RESPALDOS)
+        return error_htmx(request, mensaje(e), refrescar=EVENTO_RESPALDOS)
 
     if not habia:
         auditar(request, sesion, "borrar_respaldo", nombre, "error", "no existía")
-        return error_htmx(request, "Ese respaldo ya no estaba: %s" % nombre,
+        return error_htmx(request, t("Ese respaldo ya no estaba: %(nombre)s", nombre=nombre),
                           refrescar=EVENTO_RESPALDOS)
 
     auditar(request, sesion, "borrar_respaldo", nombre)
-    return aviso(request, "Respaldo borrado: %s" % nombre, refrescar=EVENTO_RESPALDOS)
+    return aviso(request, t("Respaldo borrado: %(nombre)s", nombre=nombre),
+                 refrescar=EVENTO_RESPALDOS)
 
 
 @router.get("/configuracion/exportar")
@@ -575,8 +599,8 @@ def limpiar_base(
     ruta = c.seguridad.db_path
 
     if confirmacion.strip() != CONFIRMA_LIMPIAR:
-        return error_htmx(request, "Escribe %s para confirmar. No se ha tocado "
-                                   "nada." % CONFIRMA_LIMPIAR)
+        return error_htmx(request, t("Escribe %(palabra)s para confirmar. No se ha tocado "
+                                    "nada.", palabra=CONFIRMA_LIMPIAR))
 
     if dias not in DIAS_LIMPIEZA:
         dias = CORTE_POR_DEFECTO
@@ -585,7 +609,7 @@ def limpiar_base(
         dias_eventos = CORTE_POR_DEFECTO
 
     if not (auditoria or eventos or sesiones or compactar):
-        return error_htmx(request, "No has marcado nada que limpiar.")
+        return error_htmx(request, t("No has marcado nada que limpiar."))
 
     hecho = []
     detalle = []
@@ -593,19 +617,20 @@ def limpiar_base(
     if auditoria:
         filas = db.purgar_auditoria(ruta, dias)
         if dias == TODO_EL_HISTORIAL:
-            hecho.append("%d entrada(s) de auditoría, el historial entero" % filas)
+            hecho.append(t("%(n)s entrada(s) de auditoría, el historial entero", n=filas))
         else:
-            hecho.append("%d entrada(s) de auditoría de más de %d días" % (filas, dias))
+            hecho.append(t("%(n)s entrada(s) de auditoría de más de %(dias)s días",
+                           n=filas, dias=dias))
         detalle.append("auditoria=%d corte=%s"
                        % (filas, "todo" if dias == TODO_EL_HISTORIAL else "%dd" % dias))
 
     if eventos:
         filas = db.purgar_eventos_vpn(ruta, dias_eventos)
         if dias_eventos == TODO_EL_HISTORIAL:
-            hecho.append("%d suceso(s) de la VPN, el historial entero" % filas)
+            hecho.append(t("%(n)s suceso(s) de la VPN, el historial entero", n=filas))
         else:
-            hecho.append("%d suceso(s) de la VPN de más de %d días"
-                         % (filas, dias_eventos))
+            hecho.append(t("%(n)s suceso(s) de la VPN de más de %(dias)s días",
+                           n=filas, dias=dias_eventos))
         detalle.append("eventos_vpn=%d corte=%s"
                        % (filas, "todo" if dias_eventos == TODO_EL_HISTORIAL
                           else "%dd" % dias_eventos))
@@ -614,16 +639,17 @@ def limpiar_base(
         caducadas = db.purgar_sesiones(ruta)
         pendientes = db.purgar_logins_pendientes(ruta)
         intentos = db.purgar_intentos(ruta)
-        hecho.append("%d sesión(es) caducadas, %d login(s) a medias y %d contador(es) "
-                     "de intentos" % (caducadas, pendientes, intentos))
+        hecho.append(t("%(caducadas)s sesión(es) caducadas, %(pendientes)s login(s) a medias "
+                       "y %(intentos)s contador(es) de intentos",
+                       caducadas=caducadas, pendientes=pendientes, intentos=intentos))
         detalle.append("sesiones=%s pendientes=%s intentos=%s"
                        % (caducadas, pendientes, intentos))
 
     if compactar:
         liberado = db.compactar(ruta)
-        hecho.append("y se han devuelto %s al disco" % format_bytes(liberado))
+        hecho.append(t("y se han devuelto %(bytes)s al disco", bytes=format_bytes(liberado)))
         detalle.append("vacuum=%d" % liberado)
 
     auditar(request, sesion, "limpiar_base", None, detalle=" ".join(detalle))
 
-    return aviso(request, "Limpieza hecha: %s." % "; ".join(hecho))
+    return aviso(request, t("Limpieza hecha: %(detalle)s.", detalle="; ".join(hecho)))

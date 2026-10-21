@@ -356,6 +356,7 @@ PAGINAS = {
     "/admin/usuarios": ("admin", "todo"),
     "/admin/auditoria": ("admin", "todo"),
     "/seguridad": ("admin", "todo"),
+    "/configuracion": ("admin", "todo"),
 }
 
 
@@ -392,6 +393,7 @@ FRAGMENTOS = {
     "/admin/usuarios/tabla": "admin",
     "/admin/politica/totp-supervisor": "admin",
     "/seguridad/bloqueos/tabla": "admin",
+    "/configuracion/respaldos/tabla": "admin",
 }
 
 
@@ -472,6 +474,57 @@ def test_el_motivo_del_gancho_se_enseña_traducido(cliente, usuarios, monkeypatc
     # th() escapa el valor, así que las comillas van como &#39;
     assert "the server.conf has no" in r.text
     assert restos_en_espanol(r.text) == []
+
+
+def test_el_aviso_va_en_el_idioma_de_la_instalacion(cfg, monkeypatch):
+    """
+    Los avisos por correo y Discord van en el idioma de la INSTALACIÓN, no en
+    el de quien esté usando el panel. El aviso lo lee quien administre el
+    servidor, y ese lee en el idioma del servidor.
+
+    Aquí la instalación está en español y quien actúa usa el panel en inglés:
+    el aviso tiene que salir en español.
+    """
+    from app import idiomas, notificar
+
+    enviados = []
+    monkeypatch.setattr(
+        notificar, "avisar",
+        lambda cfg, categoria, asunto, cuerpo, grave=False, **kw: enviados.append((asunto, cuerpo)),
+    )
+
+    idiomas.fijar_por_defecto("es")
+    with idiomas.usar("en"):
+        notificar.notificar_accion(cfg, "revocar", "ana", "jefa", "10.0.0.1", "ok", "detalle")
+
+    assert enviados, "no se ha construido ningún aviso"
+    asunto, cuerpo = enviados[0]
+    assert "Acción:" in cuerpo and "Resultado:" in cuerpo
+    assert "Action:" not in cuerpo and "Result:" not in cuerpo
+    assert "correcto" in cuerpo
+
+
+def test_el_aviso_va_en_el_idioma_de_la_instalacion_tambien_en_ingles(cfg, monkeypatch):
+    """Y al revés: instalación en inglés, panel en español, aviso en inglés."""
+    from app import idiomas, notificar
+
+    enviados = []
+    monkeypatch.setattr(
+        notificar, "avisar",
+        lambda cfg, categoria, asunto, cuerpo, grave=False, **kw: enviados.append((asunto, cuerpo)),
+    )
+
+    idiomas.fijar_por_defecto("en")
+    try:
+        with idiomas.usar("es"):
+            notificar.notificar_accion(cfg, "revocar", "ana", "jefa", "10.0.0.1", "ok", "detalle")
+    finally:
+        idiomas.fijar_por_defecto("es")
+
+    assert enviados, "no se ha construido ningún aviso"
+    asunto, cuerpo = enviados[0]
+    assert "Action:" in cuerpo and "Result:" in cuerpo
+    assert "Acción:" not in cuerpo
 
 
 def test_el_informe_de_seguridad_en_ingles(cliente, usuarios, monkeypatch):

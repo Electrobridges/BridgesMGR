@@ -13,8 +13,9 @@ cada 30 segundos. Se refrescan cada pocas horas y tras cada cambio en la PKI.
 import json
 from datetime import datetime, timedelta, timezone
 
-from . import db, notificar
+from . import db, idiomas, notificar
 from .core import easyrsa, salud
+from .idiomas import N_, t
 
 AJUSTE_CACHE = "caducidades_cache"
 AJUSTE_AVISOS = "caducidades_avisos"
@@ -83,14 +84,19 @@ def por_cliente(ruta, ahora=None):
 
 
 def _elementos(datos):
-    """(clave, descripción, iso, afecta_a_todos) de todo lo que caduca."""
+    """
+    (clave, descripción, valores, iso, afecta_a_todos) de todo lo que caduca.
+
+    La descripción es una plantilla con huecos: el nombre del certificado es un
+    dato —el CN de alguien— y no se traduce, pero lo que lo rodea sí.
+    """
     if datos.get("ca"):
-        yield "ca", "La CA", datos["ca"], True
+        yield "ca", N_("La CA"), {}, datos["ca"], True
     if datos.get("servidor"):
-        yield "servidor", "El certificado del servidor (%s)" % datos.get("servidor_cn"), \
-            datos["servidor"], True
+        yield "servidor", N_("El certificado del servidor (%(cn)s)"), \
+            {"cn": datos.get("servidor_cn")}, datos["servidor"], True
     for cn, iso in sorted((datos.get("clientes") or {}).items()):
-        yield "cliente:%s" % cn, "El certificado de '%s'" % cn, iso, False
+        yield "cliente:%s" % cn, N_("El certificado de '%(cn)s'"), {"cn": cn}, iso, False
 
 
 def revisar(cfg, ahora=None):
@@ -110,7 +116,7 @@ def revisar(cfg, ahora=None):
         avisados = {}
 
     vigentes = {}
-    for clave, que, iso, todos in _elementos(datos):
+    for clave, descripcion, valores, iso, todos in _elementos(datos):
         dias = dias_restantes(iso, ahora)
         if dias is None:
             continue
@@ -123,24 +129,32 @@ def revisar(cfg, ahora=None):
             continue
 
         fecha = _a_fecha(iso).strftime("%d/%m/%Y")
-        if dias < 0:
-            asunto = "[%s] %s HA CADUCADO" % (cfg.servidor.host_bind, que)
-            estado = "caducó el %s." % fecha
-        else:
-            asunto = "[%s] %s caduca en %d día(s)" % (cfg.servidor.host_bind, que, dias)
-            estado = "caduca el %s." % fecha
 
-        if todos:
-            consecuencia = ("Cuando caduque, NADIE podrá conectar a la VPN, y el error que "
-                            "ve el cliente no lo dice. Hay que renovarlo en el servidor.")
-        else:
-            consecuencia = ("Cuando caduque, ese cliente no podrá conectar. Se renueva "
-                            "reemitiendo su certificado: revocar y restaurar desde el panel, "
-                            "y repartirle el .ovpn nuevo.")
+        # El aviso va en el idioma de la INSTALACIÓN: lo lee quien administre
+        # el servidor. Lo que se guarda en `ajustes` —el escalón, la fecha— es
+        # un dato y no se toca.
+        with idiomas.usar(idiomas.por_defecto()):
+            que = t(descripcion, **valores)
+            if dias < 0:
+                asunto = "[%s] %s %s" % (cfg.servidor.host_bind, que, t("HA CADUCADO"))
+                estado = t("caducó el %(fecha)s.", fecha=fecha)
+            else:
+                asunto = "[%s] %s %s" % (cfg.servidor.host_bind, que,
+                                         t("caduca en %(dias)s día(s)", dias=dias))
+                estado = t("caduca el %(fecha)s.", fecha=fecha)
+
+            if todos:
+                consecuencia = t("Cuando caduque, NADIE podrá conectar a la VPN, y el error que "
+                                 "ve el cliente no lo dice. Hay que renovarlo en el servidor.")
+            else:
+                consecuencia = t("Cuando caduque, ese cliente no podrá conectar. Se renueva "
+                                 "reemitiendo su certificado: revocar y restaurar desde el panel, "
+                                 "y repartirle el .ovpn nuevo.")
+
+            cuerpo = "%s %s\n\n%s" % (que, estado, consecuencia)
 
         notificar.avisar(cfg, notificar.CERTIFICADOS, asunto,
-                         "%s %s\n\n%s" % (que, estado, consecuencia),
-                         grave=todos or dias < 7)
+                         cuerpo, grave=todos or dias < 7)
 
     # Lo que ya no está en ningún escalón —renovado, o revocado y fuera de la
     # lista— se olvida, para poder volver a avisar si hace falta.
