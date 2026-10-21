@@ -2,17 +2,17 @@
 <div class="aviso aviso-aviso">{{ error }}</div>
 {% endif %}
 
-<h3>Bloqueadas ahora</h3>
+<h3>{{ t('Bloqueadas ahora') }}</h3>
 {% if activos %}
 <div class="tabla-scroll">
 <table class="tabla">
-  <thead><tr><th>IP</th><th>Desde</th><th>Hasta</th><th>Motivo</th><th>Por</th><th></th></tr></thead>
+  <thead><tr><th>{{ t('IP') }}</th><th>{{ t('Desde') }}</th><th>{{ t('Hasta') }}</th><th>{{ t('Motivo') }}</th><th>{{ t('Por') }}</th><th></th></tr></thead>
   <tbody>
     {% for b in activos %}
     <tr>
       <td class="destacado">{{ b.ip }}
         {% if en_cortafuegos is not none and b.ip not in en_cortafuegos %}
-        <span class="etiqueta etiqueta-aviso" title="El registro dice que sigue bloqueada, pero no está en el cortafuegos: probablemente se reinició la máquina">no está en el cortafuegos</span>
+        <span class="etiqueta etiqueta-aviso" title="{{ t('El registro dice que sigue bloqueada, pero no está en el cortafuegos: probablemente se reinició la máquina') }}">{{ t('no está en el cortafuegos') }}</span>
         {% endif %}
       </td>
       <td class="tenue">{{ b.desde[:16].replace('T', ' ') }} UTC</td>
@@ -25,7 +25,7 @@
                 hx-post="/seguridad/bloqueos/{{ b.ip }}/levantar"
                 hx-target="#avisos"
                 hx-swap="innerHTML"
-                hx-confirm="¿Desbloquear {{ b.ip }}?">Desbloquear</button>
+                hx-confirm="{{ t('¿Desbloquear %(ip)s?', ip=b.ip) }}">{{ t('Desbloquear') }}</button>
       </td>
     </tr>
     {% endfor %}
@@ -33,15 +33,15 @@
 </table>
 </div>
 {% else %}
-<p class="tenue">Ninguna IP bloqueada.</p>
+<p class="tenue">{{ t('Ninguna IP bloqueada.') }}</p>
 {% endif %}
 
 {% if historial %}
 <details class="archivados">
-  <summary>Últimos bloqueos ({{ historial | length }})</summary>
+  <summary>{{ t('Últimos bloqueos') }} ({{ historial | length }})</summary>
   <div class="tabla-scroll">
   <table class="tabla">
-    <thead><tr><th>IP</th><th>Desde</th><th>Motivo</th><th>Por</th><th>Levantado</th></tr></thead>
+    <thead><tr><th>{{ t('IP') }}</th><th>{{ t('Desde') }}</th><th>{{ t('Motivo') }}</th><th>{{ t('Por') }}</th><th>{{ t('Levantado') }}</th></tr></thead>
     <tbody>
       {% for b in historial %}
       <tr>

@@ -368,6 +368,101 @@ VISTA_SESIONES = "sesiones"
 VISTAS_VPN = set(db.FILTROS_EVENTOS_VPN) | {VISTA_SESIONES}
 
 
+# El nombre de la acción y el del resultado son DATOS: se guardan, se filtran
+# con ellos y hay consultas que dependen de ellos. No se traducen ni se
+# cambian nunca.
+#
+# Lo que se traduce es CÓMO SE ENSEÑAN, y para eso está este diccionario: la
+# clave es el valor guardado —'crear_cliente'— y el valor es la frase que sale
+# en pantalla —'Crear cliente'—, marcada con N_() porque es un texto fijo. La
+# clave del catálogo es la frase, no el código.
+ACCIONES_AUDITORIA = {
+    # Sesión del panel
+    "login": N_("Iniciar sesión"),
+    "logout": N_("Cerrar sesión"),
+
+    # Cuentas del panel
+    "crear_usuario_panel": N_("Crear cuenta del panel"),
+    "cambiar_password_panel": N_("Cambiar contraseña"),
+    "cambiar_rol_panel": N_("Cambiar rol"),
+    "activar_usuario_panel": N_("Activar cuenta"),
+    "borrar_usuario_panel": N_("Borrar cuenta"),
+    "totp_restablecer": N_("Restablecer segundo factor"),
+    "totp_alta": N_("Alta del segundo factor"),
+    "totp_baja": N_("Baja del segundo factor"),
+    "politica_totp_supervisor": N_("Política del segundo factor"),
+    "designar_superusuario": N_("Designar superusuario"),
+
+    # Certificados
+    "crear_cliente": N_("Crear cliente"),
+    "revocar": N_("Revocar"),
+    "restaurar": N_("Restaurar"),
+    "archivar": N_("Archivar"),
+    "desarchivar": N_("Desarchivar"),
+    "descargar_ovpn": N_("Descargar perfil"),
+    "dos_pasos_vpn": N_("Segundo factor de un cliente"),
+    "politica_cliente": N_("Política del cliente"),
+    "politica_global": N_("Política global"),
+    "cerrar_reparto": N_("Cerrar reparto"),
+
+    # Lo que hace el panel por su cuenta, sin nadie detrás
+    "caducar_cliente": N_("Caducar cliente"),
+    "expulsar_politica": N_("Expulsar por política"),
+    "fin_sesion": N_("Fin de sesión"),
+    "perfil_compartido": N_("Perfil compartido"),
+    "cuota_agotada": N_("Cuota agotada"),
+    "cuota_restablecida": N_("Cuota restablecida"),
+
+    # Datos y respaldos
+    "rotar_tls_crypt": N_("Rotar la clave tls-crypt"),
+    "exportar_datos": N_("Exportar datos"),
+    "limpiar_base": N_("Limpiar la base"),
+    "crear_respaldo": N_("Crear respaldo"),
+    "borrar_respaldo": N_("Borrar respaldo"),
+    "ajustar_respaldos": N_("Ajustar respaldos"),
+    "ajustar_notificaciones": N_("Ajustar notificaciones"),
+    "probar_notificaciones": N_("Probar notificaciones"),
+    "notificar": N_("Enviar aviso"),
+
+    # Bloqueo de IPs
+    "bloquear_ip": N_("Bloquear IP"),
+    "desbloquear_ip": N_("Desbloquear IP"),
+    "ajustar_bloqueo": N_("Ajustar el bloqueo automático"),
+}
+
+
+# Lo mismo con el resultado. Los cinco primeros son los que se escriben hoy;
+# los tres últimos ya no se escriben, pero las instalaciones de antes los
+# conservan —la auditoría no se reescribe— y saldrían en la tabla.
+RESULTADOS_AUDITORIA = {
+    "ok": N_("Correcto"),
+    "fallo": N_("Fallo"),
+    "error": N_("Error"),
+    "denegada": N_("Denegada"),
+    "bloqueado": N_("Bloqueado"),
+    "2fa_pendiente": N_("2FA pendiente"),
+    "iniciada": N_("Iniciada"),
+    "descartada": N_("Descartada"),
+}
+
+
+def _texto_accion(accion):
+    """
+    El nombre de la acción como se enseña: traducido, o el valor crudo.
+
+    Una acción que no esté en el diccionario no puede reventar la tabla: se
+    enseña tal cual, que para eso está el valor guardado.
+    """
+    marca = ACCIONES_AUDITORIA.get(accion)
+    return t(marca) if marca else accion
+
+
+def _texto_resultado(resultado):
+    """El resultado de la acción como se enseña: traducido, o el valor crudo."""
+    marca = RESULTADOS_AUDITORIA.get(resultado)
+    return t(marca) if marca else resultado
+
+
 @router.get("/auditoria")
 def pagina_auditoria(
     request: Request,
@@ -434,10 +529,19 @@ def pagina_auditoria(
     else:
         total = db.contar_auditoria(ruta, filtro)
         pg = paginar(total, pagina, por_pagina, base)
+        entradas = db.listar_auditoria(
+            ruta, pg["por_pagina"], pg["desplazamiento"], filtro
+        )
+        # Cada fila lleva su acción y su resultado ya traducidos, en dos
+        # campos aparte: 'accion' y 'resultado' se quedan como están, porque
+        # son los valores guardados y hay consultas que dependen de ellos.
+        # Quien decide si una fila va en rojo sigue siendo db.es_fallo, que
+        # mira el valor guardado y no el texto.
+        for e in entradas:
+            e["accion_texto"] = _texto_accion(e.get("accion") or "")
+            e["resultado_texto"] = _texto_resultado(e.get("resultado") or "")
         contexto.update({
-            "entradas": db.listar_auditoria(
-                ruta, pg["por_pagina"], pg["desplazamiento"], filtro
-            ),
+            "entradas": entradas,
             "pg": pg,
         })
 

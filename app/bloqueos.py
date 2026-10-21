@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import db, notificar
 from .core import easyrsa, eventos_vpn
+from .idiomas import MensajeError, N_
 
 AJUSTE_ACTIVO = "bloqueo_auto"
 AJUSTE_UMBRAL = "bloqueo_umbral"
@@ -42,8 +43,13 @@ TIPOS_QUE_CUENTAN = {eventos_vpn.RECHAZO_CLAVE, eventos_vpn.RECHAZO_TLS,
 MAX_DURACION_MIN = 30 * 24 * 60
 
 
-class AjusteInvalido(ValueError):
-    pass
+class AjusteInvalido(MensajeError):
+    """
+    Un ajuste del bloqueo automático que no vale. El mensaje va a la pantalla.
+
+    Es un MensajeError: str(e) deja el texto en español —que es un dato— y
+    mensaje(e) lo enseña en el idioma de quien lo va a leer.
+    """
 
 
 def ajustes(ruta):
@@ -57,13 +63,21 @@ def ajustes(ruta):
     }
 
 
-def _entero(texto, nombre, minimo, maximo):
+def _entero(texto, sin_numero, fuera_de_rango, minimo, maximo):
+    """
+    Un número del formulario de bloqueos, o el error que lo explica.
+
+    Los dos mensajes los pasa quien llama, ya marcados con N_(): cada campo
+    tiene los suyos, con su nombre dentro. El nombre del campo se enseña, así
+    que no puede ir en un hueco —un '%(campo)s' se quedaría en español dentro
+    del texto en inglés—, y por eso son dos mensajes y no uno con un hueco.
+    """
     try:
         valor = int(str(texto).strip())
     except ValueError:
-        raise AjusteInvalido("%s tiene que ser un número" % nombre)
+        raise AjusteInvalido(sin_numero)
     if not minimo <= valor <= maximo:
-        raise AjusteInvalido("%s tiene que estar entre %d y %d" % (nombre, minimo, maximo))
+        raise AjusteInvalido(fuera_de_rango, minimo=minimo, maximo=maximo)
     return valor
 
 
@@ -76,14 +90,21 @@ def lista_blanca(texto):
         try:
             redes.append(str(ipaddress.IPv4Network(linea, strict=False)))
         except ValueError:
-            raise AjusteInvalido("Red no válida en la lista blanca: '%s'" % linea)
+            raise AjusteInvalido(N_("Red no válida en la lista blanca: '%(red)s'"),
+                                 red=linea)
     return redes
 
 
 def guardar_ajustes(ruta, activo, umbral, ventana_min, duracion_min, blanca):
-    umbral = _entero(umbral, "El umbral", 3, 10000)
-    ventana = _entero(ventana_min, "La ventana", 5, 1440)
-    duracion = _entero(duracion_min, "La duración", 1, MAX_DURACION_MIN)
+    umbral = _entero(umbral, N_("El umbral tiene que ser un número"),
+                     N_("El umbral tiene que estar entre %(minimo)s y %(maximo)s"),
+                     3, 10000)
+    ventana = _entero(ventana_min, N_("La ventana tiene que ser un número"),
+                       N_("La ventana tiene que estar entre %(minimo)s y %(maximo)s"),
+                       5, 1440)
+    duracion = _entero(duracion_min, N_("La duración tiene que ser un número"),
+                        N_("La duración tiene que estar entre %(minimo)s y %(maximo)s"),
+                        1, MAX_DURACION_MIN)
     redes = lista_blanca(blanca)
 
     db.guardar_ajuste(ruta, AJUSTE_ACTIVO, "1" if activo else "0")

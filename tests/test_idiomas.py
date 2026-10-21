@@ -354,6 +354,8 @@ PAGINAS = {
     "/clientes/ana/politica": ("admin", "todo"),
     "/perfil": ("admin", "todo"),
     "/admin/usuarios": ("admin", "todo"),
+    "/admin/auditoria": ("admin", "todo"),
+    "/seguridad": ("admin", "todo"),
 }
 
 
@@ -389,6 +391,7 @@ FRAGMENTOS = {
     "/clientes/archivados": "admin",
     "/admin/usuarios/tabla": "admin",
     "/admin/politica/totp-supervisor": "admin",
+    "/seguridad/bloqueos/tabla": "admin",
 }
 
 
@@ -468,6 +471,40 @@ def test_el_motivo_del_gancho_se_enseña_traducido(cliente, usuarios, monkeypatc
     assert "The policies are not applied on connect" in r.text
     # th() escapa el valor, así que las comillas van como &#39;
     assert "the server.conf has no" in r.text
+    assert restos_en_espanol(r.text) == []
+
+
+def test_el_informe_de_seguridad_en_ingles(cliente, usuarios, monkeypatch):
+    """
+    La revisión del server.conf, con sus hallazgos y el arreglo que propone.
+
+    Sin un server.conf la página solo enseña el error de que no se pudo leer,
+    y los hallazgos —que es donde está todo el texto de la fase— no se ven.
+    """
+    from app.core import easyrsa
+
+    monkeypatch.setattr(easyrsa, "server_conf", lambda c: {
+        "ruta": "/etc/openvpn/server/server.conf",
+        "version": "OpenVPN 2.6.3 x86_64-pc-linux-gnu",
+        "directivas": [
+            ["server", "10.8.0.0", "255.255.255.0", "nopool"],
+            ["port", "1194"],
+            ["data-ciphers", "AES-256-GCM:AES-128-GCM:BF-CBC"],
+            ["tls-auth", "/etc/openvpn/server/ta.key", "0"],
+            ["script-security", "1"],
+            ["duplicate-cn"],
+            ["compression"],
+            ["client-to-client"],
+            ["push", "redirect-gateway"],
+        ],
+    })
+
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    r = cliente.get("/seguridad")
+
+    assert r.status_code == 200
+    assert "server.conf audit" in r.text
     assert restos_en_espanol(r.text) == []
 
 
