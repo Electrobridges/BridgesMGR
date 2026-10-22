@@ -67,11 +67,15 @@ def enviar_correo(cfg_correo, asunto, cuerpo):
     if not cfg_correo.servidor:
         raise ErrorNotificacion(N_("No hay servidor SMTP configurado"))
 
-    mensaje = EmailMessage()
-    mensaje["Subject"] = asunto
-    mensaje["From"] = cfg_correo.desde or (cfg_correo.usuario or "ovpn-web@localhost")
-    mensaje["To"] = ", ".join(destinatarios)
-    mensaje.set_content(cuerpo)
+    # 'correo' y no 'mensaje': este módulo define ErrorNotificacion, que es un
+    # MensajeError, y un día necesita el helper mensaje() del mismo sitio. Un
+    # nombre de variable que se parece al de una función importada es una
+    # trampa.
+    correo = EmailMessage()
+    correo["Subject"] = asunto
+    correo["From"] = cfg_correo.desde or (cfg_correo.usuario or "ovpn-web@localhost")
+    correo["To"] = ", ".join(destinatarios)
+    correo.set_content(cuerpo)
 
     try:
         if int(cfg_correo.puerto) == 465:
@@ -80,7 +84,7 @@ def enviar_correo(cfg_correo, asunto, cuerpo):
                                   timeout=TIMEOUT, context=contexto) as s:
                 if cfg_correo.usuario:
                     s.login(cfg_correo.usuario, cfg_correo.password or "")
-                s.send_message(mensaje)
+                s.send_message(correo)
         else:
             with smtplib.SMTP(cfg_correo.servidor, int(cfg_correo.puerto),
                               timeout=TIMEOUT) as s:
@@ -88,7 +92,7 @@ def enviar_correo(cfg_correo, asunto, cuerpo):
                     s.starttls(context=ssl.create_default_context())
                 if cfg_correo.usuario:
                     s.login(cfg_correo.usuario, cfg_correo.password or "")
-                s.send_message(mensaje)
+                s.send_message(correo)
     except (smtplib.SMTPException, OSError, ssl.SSLError) as e:
         raise ErrorNotificacion(N_("SMTP: %(error)s"), error=e)
 

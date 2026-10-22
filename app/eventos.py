@@ -95,6 +95,9 @@ AVISOS = (
        "OpenVPN que empaqueta Debian arranca el servidor; no se quita desde el "
        "server.conf, hace falta un añadido a la unidad: 'systemctl edit "
        "openvpn-server@server' y repetir su ExecStart sin esa bandera."),
+    # El que guarda el ingestor cuando no puede leer el log. Se termina en
+    # punto, como se guarda, para que el patrón case con él.
+    N_("No se pudo leer %(ruta)s: %(error)s."),
 )
 
 # Los motivos por los que falta un tramo. Van dentro del aviso, así que se
@@ -114,11 +117,22 @@ def _traducir_con(plantillas, texto):
     """
     Traduce un texto que casa con una de las plantillas, con sus huecos.
 
+    Un texto que no casa con ninguna se devuelve tal cual: puede ser un aviso
+    de una versión anterior, y eso no es motivo para romper la página.
+    """
+    plantilla, valores = _casar(plantillas, texto)
+    if plantilla is None:
+        return texto
+    return t(plantilla, **valores)
+
+
+def _casar(plantillas, texto):
+    """
+    (plantilla, valores) si el texto casa con alguna plantilla, o (None, None).
+
     Los avisos guardados vienen con los huecos ya rellenos (la ruta, la
     fecha), así que para encontrar su plantilla se construye una expresión
-    regular a partir de ella. Un texto que no casa con ninguna se devuelve
-    tal cual: puede ser un aviso de una versión anterior, y eso no es motivo
-    para romper la página.
+    regular a partir de ella.
     """
     for plantilla in plantillas:
         # Se trocea ANTES de escapar: re.escape() escape los paréntesis del
@@ -129,11 +143,10 @@ def _traducir_con(plantillas, texto):
             patron += "(.+?)" + re.escape(trozo)
 
         m = re.fullmatch(patron, texto or "", re.S)
-        if not m:
-            continue
-        valores = dict(zip(re.findall(r"%\((\w+)\)s", plantilla), m.groups()))
-        return t(plantilla, **valores)
-    return texto
+        if m:
+            valores = dict(zip(re.findall(r"%\((\w+)\)s", plantilla), m.groups()))
+            return plantilla, valores
+    return None, None
 
 
 def traducir_aviso(texto):
@@ -143,7 +156,15 @@ def traducir_aviso(texto):
 
 def traducir_motivo(motivo):
     """El motivo de un tramo que falta, por separado: va dentro del aviso."""
-    return _traducir_con(MOTIVOS, motivo)
+    plantilla, valores = _casar(MOTIVOS, motivo)
+    if plantilla is None:
+        # Un motivo que no se reconoce —de una versión vieja— no se cuela en
+        # el texto en otro idioma: se dice lo mismo que dicen los de
+        # rotación, que es lo que pasó. Ojo: comparar el texto traducido con
+        # el original NO vale para saber si se ha reconocido: en español son
+        # lo mismo.
+        return t("hubo una rotación")
+    return t(plantilla, **valores)
 
 
 def _cursor(ruta_db):

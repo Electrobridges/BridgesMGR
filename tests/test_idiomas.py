@@ -584,6 +584,28 @@ def test_el_diccionario_de_avisos_sigue_casando():
                     "alguien cambió uno de los dos textos." % aviso
                 )
 
+        # Y los de app/eventos.py, que también están duplicados en el
+        # diccionario (o son los mismos).
+        for aviso in (eventos.AVISO_VERB, eventos.AVISO_SIN_FECHAS,
+                      "El panel todavía no ha leído el log de OpenVPN. Lo hace el "
+                      "vigilante cada cinco minutos, y este arranca con el "
+                      "servicio del panel; si esto no cambia, mira que el "
+                      "servicio esté en marcha."):
+            assert eventos.traducir_aviso(aviso) != aviso, aviso
+
+
+def test_los_motivos_de_un_tramo_que_falta_se_traducen():
+    """Los motivos van dentro del aviso, así que se traducen por separado"""
+    from app import eventos
+
+    with idiomas.usar("en"):
+        assert eventos.traducir_motivo(
+            "el log rotó más de una vez mientras el panel no miraba"
+        ) == "the log was rotated more than once while the panel was not looking"
+        # Un motivo que no se reconoce no se cuela en el texto: se dice lo
+        # mismo que dicen los de rotación.
+        assert eventos.traducir_motivo("un motivo de una versión vieja") == "there was a rotation"
+
 
 def test_el_informe_de_seguridad_en_ingles(cliente, usuarios, monkeypatch):
     """
@@ -617,6 +639,75 @@ def test_el_informe_de_seguridad_en_ingles(cliente, usuarios, monkeypatch):
     assert r.status_code == 200
     assert "server.conf audit" in r.text
     assert restos_en_espanol(r.text) == []
+
+
+def test_el_arreglo_del_informe_se_traduce():
+    """
+    El arreglo de un hallazgo se enseña dentro de un <code>, y la heurística no
+    mira dentro de los <code>: ahí solo hay literales, como órdenes y
+    directivas del server.conf. El problema es que el arreglo mezcla las dos
+    cosas, y la prosa se traducía a medias. Esta prueba mira el dato, no el
+    HTML, que es donde el fallo se cuela.
+
+    Para distinguir una cosa de la otra se usa el catálogo: si el texto en
+    español sale de alguna clave, es prosa y se tiene que traducir; si no sale
+    de ninguna, es una directiva del server.conf y tiene que salir igual.
+    """
+    from app.core import auditor
+    from app.idiomas import catalogo
+
+    directivas = [
+        ["server", "10.8.0.0", "255.255.255.0", "nopool"],
+        ["port", "1194"],
+        ["duplicate-cn"],
+        ["compression"],
+        ["client-to-client"],
+    ]
+    version = "OpenVPN 2.6.3 x86_64-pc-linux-gnu"
+    textos = catalogo("en")["textos"]
+
+    with idiomas.usar("es"):
+        en_es = auditor.auditar(directivas, version)["hallazgos"]
+    with idiomas.usar("en"):
+        en_en = auditor.auditar(directivas, version)["hallazgos"]
+
+    prosa = directivas_ = 0
+    for h_es, h_en in zip(en_es, en_en):
+        if not h_es["arreglo"]:
+            continue
+        if _sale_del_catalogo(h_es["arreglo"], textos):
+            prosa += 1
+            assert h_en["arreglo"] != h_es["arreglo"], (
+                "El arreglo %r es prosa y no se ha traducido." % h_es["arreglo"]
+            )
+        else:
+            directivas_ += 1
+            assert h_en["arreglo"] == h_es["arreglo"], (
+                "El arreglo %r es una directiva y no debe cambiar." % h_es["arreglo"]
+            )
+
+    assert prosa, "ningún arreglo del informe es prosa: la prueba no vigila nada"
+    assert directivas_, "ningún arreglo del informe es una directiva: la prueba no vigila nada"
+
+
+_PATRONES = {}
+
+
+def _sale_del_catalogo(texto, textos):
+    """Si el texto sale de alguna clave del catálogo, aunque sea con huecos"""
+    for clave in textos:
+        if clave not in _PATRONES:
+            if "%(" in clave:
+                trozos = re.split(r"%\(\w+\)s", clave)
+                patron = re.escape(trozos[0])
+                for trozo in trozos[1:]:
+                    patron += "(.+?)" + re.escape(trozo)
+            else:
+                patron = re.escape(clave)
+            _PATRONES[clave] = re.compile(patron, re.S)
+        if _PATRONES[clave].fullmatch(texto or ""):
+            return True
+    return False
 
 
 @pytest.mark.parametrize("dias, es, en", [
@@ -658,19 +749,21 @@ def test_la_verificacion_en_dos_pasos_en_ingles(app):
 @pytest.mark.parametrize("estado", ["secreto", "pendiente", "activado", "desactivado"])
 def test_el_panel_del_segundo_factor_en_ingles(app, estado):
     """
-    Los tres estados del panel de segundo factor solo salen en la respuesta de
-    un POST: la página del perfil enseña el cuarto. Sin esto, el alta con QR, el
-    alta a medias y el ya activado no los vigila nadie.
+    Los estados del panel de segundo factor, en inglés.
+
+    Tres de ellos solo salen en la respuesta de un POST y el cuarto, en la
+    página del perfil. La rama de «obligatorio» y el QR también entran aquí: son
+    las partes donde el texto se escapa.
     """
     pedido = Request({"type": "http", "method": "GET", "path": "/perfil/totp",
                       "query_string": b"", "headers": [], "app": app})
     contexto = {
         "activado": estado == "activado",
-        "obligatorio": False,
+        "obligatorio": estado in ("activado", "desactivado"),
         "pendiente": estado == "pendiente",
         "secreto": "JBSWY3DPEHPK3PXP" if estado == "secreto" else None,
         "secreto_legible": "JBSW Y3DP EHPK 3PXP" if estado == "secreto" else None,
-        "qr": None,
+        "qr": "data:image/svg+xml;base64,PHN2Zy8+" if estado == "secreto" else None,
         "fallo_qr": None,
         "mensaje": None,
         "error": None,
@@ -679,6 +772,23 @@ def test_el_panel_del_segundo_factor_en_ingles(app, estado):
         html = app.state.plantillas.get_template("partials/totp_panel.html").render(
             request=pedido, sesion={"usuario": "ana"}, manda=True, **contexto)
     assert restos_en_espanol(html) == []
+    # El segundo factor se llama siempre igual, en las cuatro ramas.
+    assert "second factor" not in html
+
+
+def test_el_error_de_csrf_se_enseña_en_ingles(cliente, usuarios):
+    """
+    El error de CSRF sale desde todos los POST del panel cuando la sesión
+    caduca, así que se enseña en el idioma de quien lo recibe.
+    """
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+
+    r = cliente.post("/clientes", data={"cn": "ana", "password": "contrasena-larga"})
+
+    assert r.status_code == 403
+    assert "Invalid CSRF token" in r.text
+    assert "Token CSRF no válido" not in r.text
 
 
 def test_la_heuristica_detecta_lo_que_tiene_que_detectar():
@@ -695,10 +805,10 @@ def test_la_heuristica_detecta_lo_que_tiene_que_detectar():
 # Lo que no devuelve HTML: el selector de idioma (cambia una cookie y
 # redirige), las métricas de Prometheus (no son HTML) y las dos descargas.
 FUERA_DE_LAS_PAGINAS = (
-    "/idioma/{codigo}",
+    "/idioma/en",
     "/metrics",
     "/configuracion/exportar",
-    "/clientes/{cn}/ovpn",
+    "/clientes/ana/ovpn",
 )
 
 
@@ -720,8 +830,13 @@ def _rutas_html(app):
 
     for path, r in todas(app.routes):
         metodos = getattr(r, "methods", None) or set()
-        if "GET" in metodos and "{" not in path:
-            yield path
+        if "GET" in metodos:
+            # Los parámetros se cambian por un valor concreto: una ruta con
+            # {cn} es una página igual que su hermana sin él, y sin esto se
+            # colarían sin que nadie lo viera.
+            yield (path.replace("{cn}", "ana")
+                       .replace("{codigo}", "en")
+                       .replace("{usuario}", "jefa"))
 
 
 def test_ninguna_pagina_del_panel_queda_sin_vigilar(app):

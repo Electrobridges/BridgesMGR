@@ -426,14 +426,16 @@ def auditar(directivas, version="", crl_dias=None):
     #
     # Ojo con dar los valores a t(): t() formatea con % siempre que le pase
     # algo, y una directiva con un % literal (una ruta con un % en el nombre)
-    # reventaría con ValueError. Por eso solo se formatea lo que tiene hueco.
+    # reventaría con ValueError. Por eso se traduce SIEMPRE y se formatea solo
+    # lo que tiene hueco: la rama sin hueco es la de la prosa, que es la que
+    # hay que traducir.
     for h in hallazgos:
         valores = h.pop("valores")
         h["titulo"] = t(h["titulo"], **valores)
         h["porque"] = t(h["porque"], **valores)
         if h["arreglo"]:
             h["arreglo"] = t(h["arreglo"], **valores) if _tiene_hueco(h["arreglo"]) \
-                else h["arreglo"]
+                else t(h["arreglo"])
 
     orden = {n: i for i, n in enumerate(NIVELES)}
     hallazgos.sort(key=lambda h: orden[h["nivel"]])

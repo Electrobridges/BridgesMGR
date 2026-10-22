@@ -64,17 +64,10 @@ MOTIVO_CADUCADO = "caducado"
 MOTIVO_HORARIO = "fuera_de_horario"
 MOTIVO_DURACION = "duracion_maxima"
 
-# Los nombres de los días, en su orden. El ÍNDICE es lo que se guarda (0 =
-# lunes) y no cambia nunca; el nombre es solo para enseñarlo, y se traduce
-# como cualquier otro texto. Ni el helper ni el script de conexión tienen
-# nombres de días: usan el índice, y el rango 0..6 no se toca.
-DIAS = (N_("lunes"), N_("martes"), N_("miércoles"), N_("jueves"), N_("viernes"),
-        N_("sábado"), N_("domingo"))
-
 # Los nombres cortos, para las etiquetas de la tabla. En inglés no valen las
-# iniciales españolas, así que también se traducen.
+# iniciales españolas, así que también se traducen. El orden es el del índice
+# que se guarda: 0 = lunes.
 DIAS_CORTOS = (N_("L"), N_("M"), N_("X"), N_("J"), N_("V"), N_("S"), N_("D"))
-
 # Los nombres cortos de las casillas del formulario. Son tres letras, como los
 # que salían de cortar el nombre, y tienen su propia lista porque se traducen:
 # en inglés hace falta "Mon", no "lun". En español no cambia nada.
@@ -461,7 +454,7 @@ def resumen_traducido(politica):
         partes.append(describir_horario(p["horario"], dias_cortos_traducidos()))
     if p.get("max_sesion_min"):
         partes.append(t("sesión máx. %(minutos)s",
-                        minutos=describir_minutos(p["max_sesion_min"])))
+                        minutos=describir_minutos_traducido(p["max_sesion_min"])))
     if p.get("cuota_mb_mes"):
         partes.append(t("cuota %(cuota)s/mes", cuota=describir_mb(p["cuota_mb_mes"])))
     if p.get("ip_fija"):
@@ -474,6 +467,26 @@ def resumen_traducido(politica):
 def describir_minutos(minutos):
     if minutos % 1440 == 0:
         return "%d d" % (minutos // 1440)
+    if minutos % 60 == 0:
+        return "%d h" % (minutos // 60)
+    if minutos > 60:
+        return "%d h %d min" % divmod(minutos, 60)
+    return "%d min" % minutos
+
+
+def describir_minutos_traducido(minutos):
+    """
+    Lo mismo que describir_minutos(), pero en inglés.
+
+    Las abreviaturas no valen igual en los dos idiomas: «d» no es la de día en
+    inglés, que se dice «day». Las de hora y minuto sí coinciden.
+
+    Esta es la que va a la pantalla; la de arriba, la que va a la auditoría,
+    que es un dato y no cambia de idioma.
+    """
+    if minutos % 1440 == 0:
+        dias = minutos // 1440
+        return "%d day" % dias if dias == 1 else "%d days" % dias
     if minutos % 60 == 0:
         return "%d h" % (minutos // 60)
     if minutos > 60:

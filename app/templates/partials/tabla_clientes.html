@@ -34,7 +34,7 @@
         <div class="acceso">
         {% if f.cert_caduca is not none %}
         <span class="etiqueta etiqueta-{{ 'mal' if f.cert_caduca < 7 else 'aviso' }}">
-          {{- t('certificado caducado') if f.cert_caduca < 0 else t('certificado caduca en %(dias)s d', dias=f.cert_caduca) }}</span>
+          {{- t('certificado caducado') if f.cert_caduca < 0 else tn('certificado caduca en %(n)s d', 'certificado caduca en %(n)s d', f.cert_caduca) }}</span>
         {% endif %}
         {% if f.rechazo and f.estado == 'valido' %}
         <span class="etiqueta etiqueta-aviso">{{ f.rechazo }}</span>

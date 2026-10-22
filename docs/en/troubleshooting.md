@@ -18,7 +18,7 @@ Nine times out of ten it is one of three:
   there, run `sudo bash deploy/install.sh` again.
 - **A path that does not exist.** Check `easyrsa_path` and `db_path`.
 
-## "Management interface no disponible"
+## "Management interface not available"
 
 The panel ("management interface not available") falls back to the status file
 and says so on screen; it keeps working but with less detail and without being
@@ -33,7 +33,7 @@ If nobody is listening, `management 127.0.0.1 7505` is missing from your
 `mgmt_host` is literally `127.0.0.1`: `localhost` may resolve to IPv6 and
 OpenVPN's management only listens on IPv4.
 
-## "No se pudo consultar la PKI"
+## "The PKI could not be read"
 
 Try the helper by hand, exactly as the panel calls it:
 
@@ -48,7 +48,7 @@ sudo -u ovpnweb sudo -n /usr/local/sbin/ovpn-web-helper listar
 | `Falta python3-yaml` | `sudo apt install python3-yaml` — the helper runs with the system Python, not the venv |
 | An easyrsa error | `easyrsa_path` points at the wrong place, or the PKI is not initialised |
 
-## "Sin permisos para leer el log"
+## "No permission to read the log"
 
 The user has to be in the `adm` group, which on Debian owns `/var/log`:
 

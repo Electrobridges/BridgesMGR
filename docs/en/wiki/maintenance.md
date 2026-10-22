@@ -75,7 +75,7 @@ The commands are run from `/opt/ovpn-web`, on the server itself.
 
 | Symptom | Where to look |
 |---|---|
-| *Management interface no disponible* | [Troubleshooting](../troubleshooting.md#management-interface-no-disponible) |
+| *Management interface not available* | [Troubleshooting](../troubleshooting.md#management-interface-not-available) |
 | I revoked a client and it still gets in | [Troubleshooting](../troubleshooting.md#i-revoked-a-client-and-it-still-connects) |
 | The downloaded `.ovpn` does not connect | [Troubleshooting](../troubleshooting.md#the-downloaded-ovpn-does-not-connect) |
 | The policies do not kick anyone out | The client's policies page warns if the script is missing from the `server.conf`; see [Policies](policies.md#how-they-are-applied) |

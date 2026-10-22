@@ -12,7 +12,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import Response
 
-from .. import caducidades, db, estadisticas, trafico
+from .. import caducidades, db, estadisticas, eventos, trafico
 from .. import politicas as aplicar_politicas
 from ..auth import solo_admin, usuario_actual, verificar_csrf
 from ..core import easyrsa, serverconf
@@ -82,6 +82,20 @@ def _estado_clientes(request):
     filas.sort(key=lambda f: (f["estado"] != "valido", f["cn"].lower()))
     return filas, errores
 
+
+def _reparto_traducido(reparto):
+    """
+    El reparto pendiente, con su detalle en el idioma de quien lo mira.
+
+    El detalle se guarda en español, que es como lo escribió el panel cuando
+    rotó la clave, y es un dato. Pero se enseña, así que se traduce aquí.
+    """
+    if not reparto:
+        return reparto
+    return dict(reparto, detalle=eventos.traducir_aviso(reparto["detalle"])
+                if reparto.get("detalle") else reparto.get("detalle"))
+
+
 @router.get("")
 def pagina_clientes(request: Request, sesion=Depends(usuario_actual)):
     # Sin 'es_admin': render() ya inyecta 'manda' desde db.ROLES_MANDO. Aquí se
@@ -89,7 +103,7 @@ def pagina_clientes(request: Request, sesion=Depends(usuario_actual)):
     # formulario de crear y los botones de la tabla.
     ruta = cfg(request).seguridad.db_path
     return render(request, "clientes.html", {
-        "reparto": db.reparto_abierto(ruta),
+        "reparto": _reparto_traducido(db.reparto_abierto(ruta)),
         "max_sesion_global": db.max_sesion_global(ruta),
     })
 
@@ -595,7 +609,7 @@ def pagina_politica(request: Request, cn: str, sesion=Depends(usuario_actual)):
         "gancho": gancho,
         "error_servidor": error,
         "max_sesion_global": db.max_sesion_global(c.seguridad.db_path),
-        "describir_minutos": pol.describir_minutos,
+        "describir_minutos": pol.describir_minutos_traducido,
         "rechazo": t(pol.TEXTO_MOTIVO[motivo]) if motivo and motivo in pol.TEXTO_MOTIVO else None,
         "dos_pasos": _estado_dos_pasos(c, cn, directivas),
         "uso_mes": trafico.uso_mes(c.seguridad.db_path).get(cn, 0),
@@ -786,5 +800,6 @@ def guardar_politica_global(
     auditar(request, sesion, "politica_global", None, detalle="sesión máx. %s" % texto)
     # El hueco no se llama %(texto)s: t() ya tiene un parámetro con ese nombre.
     return aviso(request, t("Duración máxima de sesión para todos: %(limite)s.",
-                             limite=t("sin límite") if not maximo else texto),
+                             limite=t("sin límite") if not maximo
+                             else pol.describir_minutos_traducido(maximo)),
                  refrescar=EVENTO_REFRESCO)

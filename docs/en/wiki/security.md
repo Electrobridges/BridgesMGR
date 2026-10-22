@@ -20,10 +20,10 @@ line that fixes it**:
 
 | Level | What it means | How much it costs |
 |---|---|---|
-| `CRÍTICO` | A flaw that can be exploited today, or that breaks a panel feature | A lot |
-| `AVISO` | It weakens the server without opening it up entirely | Something |
-| `SUGERENCIA` | A recommended improvement, no urgency | Little |
-| `BIEN` | Correct, so you can see what has been reviewed | Nothing |
+| `Critical` | A flaw that can be exploited today, or that breaks a panel feature | A lot |
+| `Warning` | It weakens the server without opening it up entirely | Something |
+| `Suggestion` | A recommended improvement, no urgency | Little |
+| `OK` | Correct, so you can see what has been reviewed | Nothing |
 
 > [!IMPORTANT]
 > **The panel only reads the `server.conf`, it does not write it.** Whoever

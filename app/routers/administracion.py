@@ -436,10 +436,13 @@ ACCIONES_AUDITORIA = {
 # los tres últimos ya no se escriben, pero las instalaciones de antes los
 # conservan —la auditoría no se reescribe— y saldrían en la tabla.
 RESULTADOS_AUDITORIA = {
+    # Los resultados que se escriben hoy. El código guardado no cambia: lo
+    # que se traduce es el texto que se enseña.
     "ok": N_("Correcto"),
     "fallo": N_("Fallo"),
     "error": N_("Error"),
     "denegada": N_("Denegada"),
+    "2fa_fallo": N_("Fallo del segundo factor"),
     "bloqueado": N_("Bloqueado"),
     "2fa_pendiente": N_("2FA pendiente"),
     "iniciada": N_("Iniciada"),
