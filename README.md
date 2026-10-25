@@ -14,7 +14,7 @@ Clients, access policies, two-step verification and hardening,<br>
 without handing root over to a web page.
 
 [![Tests](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml/badge.svg)](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml)
-![Version](https://img.shields.io/badge/version-0.5.0-10c4d8.svg)
+![Version](https://img.shields.io/badge/version-0.6.0-10c4d8.svg)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![OpenVPN](https://img.shields.io/badge/OpenVPN-2.5%20%7C%202.6-orange.svg)
