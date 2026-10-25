@@ -144,7 +144,10 @@
            cliente llegue a presentar certificado, así que no hay CN. #}
         <td class="destacado">{{ e.cn or '—' }}</td>
         <td class="tenue">{{ e.ip or '—' }}{% if e.puerto %}:{{ e.puerto }}{% endif %}</td>
-        <td class="tenue">{{ e.detalle or '' }}</td>
+        {# El detalle se guarda en español. t() traduce los textos fijos que
+           están en el catálogo y deja el resto como está (una línea del log,
+           "rol=admin"…). #}
+        <td class="tenue">{{ t(e.detalle) if e.detalle else '' }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -196,7 +199,10 @@
           <span class="etiqueta etiqueta-{{ 'mal' if es_fallo(e.resultado) else 'ok' }}">{{ e.resultado_texto }}</span>
         </td>
         <td class="tenue">{{ e.ip or '—' }}</td>
-        <td class="tenue">{{ e.detalle or '' }}</td>
+        {# El detalle se guarda en español. t() traduce los textos fijos que
+           están en el catálogo y deja el resto como está (una línea del log,
+           "rol=admin"…). #}
+        <td class="tenue">{{ t(e.detalle) if e.detalle else '' }}</td>
       </tr>
       {% endfor %}
     </tbody>

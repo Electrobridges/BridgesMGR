@@ -113,6 +113,35 @@ MOTIVOS = (
 )
 
 
+
+# Los detalles fijos que app/core/eventos_vpn.py guarda con cada suceso. Se
+# guardan en español —son datos, y ese módulo no traduce— y la plantilla los
+# pasa por t() al enseñarlos: lo que está en el catálogo sale traducido, y lo
+# que no (una línea literal del log, como la de la CRL) sale tal cual.
+# tests/test_idiomas.py comprueba que esta lista sigue teniendo todos los
+# textos fijos que eventos_vpn.py puede devolver.
+DETALLES = (
+    N_("se cerró la sesión anterior de este perfil"),
+    N_("certificado revocado"),
+    N_("certificado caducado"),
+    N_("no superó la verificación"),
+    N_("autenticación rechazada"),
+    N_("paquete sin la clave tls-crypt/tls-auth"),
+    N_("la clave tls-crypt/tls-auth del cliente no coincide"),
+    N_("el handshake TLS no llegó a completarse"),
+    N_("el servidor OpenVPN quedó operativo"),
+    # Los motivos de los scripts de OpenVPN (MOTIVOS_2FA y MOTIVOS_POLITICA)
+    N_("no envió el código de verificación"),
+    N_("código de verificación incorrecto"),
+    N_("código de verificación ya usado"),
+    N_("OpenVPN no puede leer los secretos (¿falta 'group ovpnweb-vpn'?)"),
+    N_("nombre de certificado no válido"),
+    N_("bloqueado por el panel"),
+    N_("acceso caducado"),
+    N_("fuera de su horario"),
+    N_("no se pudo leer el archivo de políticas"),
+)
+
 def _traducir_con(plantillas, texto):
     """
     Traduce un texto que casa con una de las plantillas, con sus huecos.

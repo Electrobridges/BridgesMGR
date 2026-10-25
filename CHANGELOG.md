@@ -18,6 +18,20 @@ el versionado es [SemVer](https://semver.org/lang/es/).
   `servidor.idioma` en `config.yaml`, que es el idioma de la instalación y el
   que usan los avisos por correo.
 
+  Lo que se guarda no cambia de idioma: la auditoría, los sucesos de la VPN y
+  los valores de rol siguen en español en la base, y se traducen al
+  enseñarlos. Los mensajes de error que llegan del helper privilegiado siguen
+  en español.
+
+### Cambiado
+
+- La auditoría del panel enseña cada acción con un nombre legible
+  («Iniciar sesión», «Expulsar por política») en vez de su código interno
+  (`login`, `expulsar_politica`), también en español. La base y la
+  exportación CSV siguen guardando los códigos.
+- Los recuentos con «(s)» («2 conexión(es)», «caduca en 3 día(s)») pasan a
+  plurales de verdad.
+
 ## [0.5.0] — 2026-10-15
 
 ### Añadido

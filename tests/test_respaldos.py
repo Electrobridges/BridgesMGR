@@ -551,7 +551,7 @@ def test_los_sucesos_de_la_vpn_se_purgan_con_su_propio_corte(como_admin,
     )
 
     assert respuesta.status_code == 200
-    assert "1 suceso(s) de la VPN" in respuesta.text
+    assert "1 suceso de la VPN" in respuesta.text
     assert db.contar_eventos_vpn(ruta) == 0
     # La auditoría no se toca: no se marcó su casilla
     assert "muy_vieja" in [e["accion"] for e in db.listar_auditoria(ruta)]

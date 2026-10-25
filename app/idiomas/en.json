@@ -2,18 +2,12 @@
   "textos": {
     " Ahora mismo no puede entrar (%(motivo)s): si está conectado, se le desconectará en menos de un minuto.": " They cannot get in right now (%(motivo)s): if they are connected, they will be disconnected in under a minute.",
     " No se descarga desde aquí: lleva los hashes y los secretos TOTP.": " It cannot be downloaded from here: it holds the password hashes and the TOTP secrets.",
-    " Se han rotado %(n)s copia(s) antigua(s).": " %(n)s old copies have been rotated out.",
-    "%(caducadas)s sesión(es) caducadas, %(pendientes)s login(s) a medias y %(intentos)s contador(es) de intentos": "%(caducadas)s expired session(s), %(pendientes)s half-finished sign-in(s) and %(intentos)s attempt counter(s)",
     "%(cn)s pasará a los perfiles eliminados. Su certificado seguirá revocado y en la CRL: se oculta de la lista, no se borra de la PKI. ¿Continuar?": "%(cn)s will move to the deleted profiles. Its certificate stays revoked and in the CRL: it is hidden from the list, not removed from the PKI. Continue?",
     "%(directiva)s %(valor)s mantiene CBC para clientes antiguos": "%(directiva)s %(valor)s keeps CBC for old clients",
     "%(directivas)s  y  auth-gen-token 0": "%(directivas)s  and  auth-gen-token 0",
     "%(ip)s bloqueada %(minutos)s minutos.": "%(ip)s blocked for %(minutos)s minutes.",
     "%(ip)s desbloqueada.": "%(ip)s unblocked.",
     "%(lista)s incluye algoritmos de bloque de 64 bits o retirados (SWEET32).": "%(lista)s includes 64-bit block algorithms or retired ones (SWEET32).",
-    "%(n)s entrada(s) de auditoría de más de %(dias)s días": "%(n)s audit log entries older than %(dias)s days",
-    "%(n)s entrada(s) de auditoría, el historial entero": "%(n)s audit log entries, the whole history",
-    "%(n)s suceso(s) de la VPN de más de %(dias)s días": "%(n)s VPN events older than %(dias)s days",
-    "%(n)s suceso(s) de la VPN, el historial entero": "%(n)s VPN events, the whole history",
     "%(ruta)s es de una rotación anterior": "%(ruta)s is from an earlier rotation",
     "%(ruta)s no contiene el tramo que faltaba": "%(ruta)s does not contain the missing stretch",
     "'%(cn)s' desconectado.": "'%(cn)s' disconnected.",
@@ -698,7 +692,6 @@
     "bloqueado por el panel": "blocked by the panel",
     "caduca %(fecha)s": "expires %(fecha)s",
     "caduca el %(fecha)s.": "expires on %(fecha)s.",
-    "caduca en %(dias)s día(s)": "expires in %(dias)s day(s)",
     "caducó el %(fecha)s.": "expired on %(fecha)s.",
     "caído": "down",
     "certificado caducado": "certificate expired",
@@ -828,7 +821,22 @@
     "Último respaldo automático anotado: <code>%(fecha)s</code> UTC.": "Last automatic backup recorded: <code>%(fecha)s</code> UTC.",
     "Últimos 30 días": "Last 30 days",
     "Últimos bloqueos": "Recent blocks",
-    "… (recortado)": "… (truncated)"
+    "… (recortado)": "… (truncated)",
+    "%(sesiones)s, %(pendientes)s y %(intentos)s": "%(sesiones)s, %(pendientes)s and %(intentos)s",
+    "autenticación rechazada": "authentication rejected",
+    "certificado revocado": "certificate revoked",
+    "código de verificación incorrecto": "incorrect verification code",
+    "código de verificación ya usado": "verification code already used",
+    "el handshake TLS no llegó a completarse": "the TLS handshake did not complete",
+    "el servidor OpenVPN quedó operativo": "the OpenVPN server is up and running",
+    "la clave tls-crypt/tls-auth del cliente no coincide": "the client's tls-crypt/tls-auth key does not match",
+    "no envió el código de verificación": "did not send the verification code",
+    "no se pudo leer el archivo de políticas": "could not read the policies file",
+    "no superó la verificación": "failed verification",
+    "nombre de certificado no válido": "invalid certificate name",
+    "OpenVPN no puede leer los secretos (¿falta 'group ovpnweb-vpn'?)": "OpenVPN cannot read the secrets (is 'group ovpnweb-vpn' missing?)",
+    "paquete sin la clave tls-crypt/tls-auth": "packet without the tls-crypt/tls-auth key",
+    "se cerró la sesión anterior de este perfil": "the previous session of this profile was closed"
   },
   "plurales": {
     "%(n)s conexión": [
@@ -858,6 +866,42 @@
     "certificado caduca en %(n)s d": [
       "certificate expires in %(n)s day",
       "certificate expires in %(n)s days"
+    ],
+    " Se ha rotado %(n)s copia antigua.": [
+      " %(n)s old copy has been rotated out.",
+      " %(n)s old copies have been rotated out."
+    ],
+    "%(n)s contador de intentos": [
+      "%(n)s attempt counter",
+      "%(n)s attempt counters"
+    ],
+    "%(n)s entrada de auditoría de más de %(dias)s días": [
+      "%(n)s audit log entry older than %(dias)s days",
+      "%(n)s audit log entries older than %(dias)s days"
+    ],
+    "%(n)s entrada de auditoría, el historial entero": [
+      "%(n)s audit log entry, the whole history",
+      "%(n)s audit log entries, the whole history"
+    ],
+    "%(n)s login a medias": [
+      "%(n)s half-finished sign-in",
+      "%(n)s half-finished sign-ins"
+    ],
+    "%(n)s sesión caducada": [
+      "%(n)s expired session",
+      "%(n)s expired sessions"
+    ],
+    "%(n)s suceso de la VPN de más de %(dias)s días": [
+      "%(n)s VPN event older than %(dias)s days",
+      "%(n)s VPN events older than %(dias)s days"
+    ],
+    "%(n)s suceso de la VPN, el historial entero": [
+      "%(n)s VPN event, the whole history",
+      "%(n)s VPN events, the whole history"
+    ],
+    "caduca en %(n)s día": [
+      "expires in %(n)s day",
+      "expires in %(n)s days"
     ]
   }
 }

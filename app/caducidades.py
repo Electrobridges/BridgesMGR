@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import db, idiomas, notificar
 from .core import easyrsa, salud
-from .idiomas import N_, t
+from .idiomas import N_, t, tn
 
 AJUSTE_CACHE = "caducidades_cache"
 AJUSTE_AVISOS = "caducidades_avisos"
@@ -140,7 +140,7 @@ def revisar(cfg, ahora=None):
                 estado = t("caducó el %(fecha)s.", fecha=fecha)
             else:
                 asunto = "[%s] %s %s" % (cfg.servidor.host_bind, que,
-                                         t("caduca en %(dias)s día(s)", dias=dias))
+                                         tn("caduca en %(n)s día", "caduca en %(n)s días", dias))
                 estado = t("caduca el %(fecha)s.", fecha=fecha)
 
             if todos:

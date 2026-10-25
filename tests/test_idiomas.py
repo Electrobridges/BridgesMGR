@@ -927,3 +927,67 @@ def test_las_etiquetas_de_la_politica_se_traducen():
     # Y en español siguen igual, porque es lo que va a la auditoría.
     assert "bloqueado (cuota)" in pol.resumen(p)
     assert "L–V 08:00–19:00" in " ".join(pol.resumen(p))
+
+
+# --------------------------------------- los datos guardados, al enseñarlos
+
+def _detalles_de_eventos_vpn():
+    """
+    Todos los textos fijos que app/core/eventos_vpn.py guarda como detalle: los
+    que devuelve _clasificar() como segundo elemento y los valores de los
+    diccionarios de motivos de los scripts de OpenVPN.
+    """
+    arbol = ast.parse((APP / "core" / "eventos_vpn.py").read_text(encoding="utf-8"))
+    textos = set()
+    for nodo in ast.walk(arbol):
+        if isinstance(nodo, ast.FunctionDef) and nodo.name == "_clasificar":
+            for r in ast.walk(nodo):
+                if (isinstance(r, ast.Return) and isinstance(r.value, ast.Tuple)
+                        and isinstance(r.value.elts[1], ast.Constant)
+                        and isinstance(r.value.elts[1].value, str)):
+                    textos.add(r.value.elts[1].value)
+        if (isinstance(nodo, ast.Assign) and isinstance(nodo.value, ast.Dict)
+                and any(isinstance(d, ast.Name) and d.id.startswith("MOTIVOS")
+                        for d in nodo.targets)):
+            textos.update(v.value for v in nodo.value.values if isinstance(v, ast.Constant))
+    return textos
+
+
+def test_todos_los_detalles_de_la_vpn_tienen_traduccion():
+    """
+    eventos_vpn.py no puede importar idiomas, así que sus textos se registran en
+    eventos.DETALLES. Si alguien añade un caso allí y no aquí, el detalle se
+    enseñaría en español en el panel en inglés.
+    """
+    from app import eventos
+    detalles = _detalles_de_eventos_vpn()
+    assert len(detalles) >= 10, "la búsqueda en eventos_vpn.py ya no encuentra nada"
+    assert detalles - set(eventos.DETALLES) == set()
+
+
+def test_la_auditoria_con_datos_sale_en_ingles(cliente, usuarios, cfg):
+    """
+    La prueba de PAGINAS pinta la auditoría vacía, y así no veía los detalles
+    que se guardan en español. Esta la llena: un suceso por cada detalle fijo
+    de la VPN, y una expulsión por política en la auditoría del panel.
+    """
+    from app import db
+    from app.core import eventos_vpn
+
+    ruta = cfg.seguridad.db_path
+    filas = [{"ts": "2026-10-20 09:%02d:00" % i, "tipo": eventos_vpn.RECHAZO_CLAVE,
+              "cn": "", "ip": "203.0.113.%d" % (i + 1), "puerto": "1194", "detalle": d}
+             for i, d in enumerate(sorted(_detalles_de_eventos_vpn()))]
+    db.guardar_eventos_vpn(ruta, filas)
+    db.registrar(ruta, "(sistema)", "expulsar_politica", "ana", "ok", "fuera de su horario")
+
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    for pagina in ("/admin/auditoria?fuente=vpn&por_pagina=200", "/admin/auditoria"):
+        r = cliente.get(pagina)
+        assert r.status_code == 200
+        assert restos_en_espanol(r.text) == [], pagina
+
+    # Y en español, el detalle sigue saliendo tal como se guardó
+    cliente.cookies.set(COOKIE, "es")
+    assert "fuera de su horario" in cliente.get("/admin/auditoria").text

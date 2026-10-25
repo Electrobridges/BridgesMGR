@@ -14,7 +14,7 @@ from .. import db, estadisticas, exportacion, notificar, respaldar
 from ..core import easyrsa, respaldos
 from ..core.easyrsa import ErrorHelper, estado_servicio, listar_certificados
 from ..core.parsers import format_bytes
-from ..idiomas import N_, t, mensaje
+from ..idiomas import N_, mensaje, t, tn
 from .comun import auditar, aviso, cfg, error_htmx, render
 
 router = APIRouter()
@@ -496,7 +496,8 @@ def respaldar_ahora(
     texto = t("Respaldo creado: %(nombre)s (en %(ruta)s).",
               nombre=nombre, ruta=respaldar.directorio(c))
     if borrados:
-        texto += t(" Se han rotado %(n)s copia(s) antigua(s).", n=len(borrados))
+        texto += tn(" Se ha rotado %(n)s copia antigua.", " Se han rotado %(n)s copias antiguas.",
+                    len(borrados))
     texto += t(" No se descarga desde aquí: lleva los hashes y los secretos TOTP.")
 
     return aviso(request, texto, refrescar=EVENTO_RESPALDOS)
@@ -617,20 +618,24 @@ def limpiar_base(
     if auditoria:
         filas = db.purgar_auditoria(ruta, dias)
         if dias == TODO_EL_HISTORIAL:
-            hecho.append(t("%(n)s entrada(s) de auditoría, el historial entero", n=filas))
+            hecho.append(tn("%(n)s entrada de auditoría, el historial entero",
+                             "%(n)s entradas de auditoría, el historial entero", filas))
         else:
-            hecho.append(t("%(n)s entrada(s) de auditoría de más de %(dias)s días",
-                           n=filas, dias=dias))
+            hecho.append(tn("%(n)s entrada de auditoría de más de %(dias)s días",
+                            "%(n)s entradas de auditoría de más de %(dias)s días",
+                            filas, dias=dias))
         detalle.append("auditoria=%d corte=%s"
                        % (filas, "todo" if dias == TODO_EL_HISTORIAL else "%dd" % dias))
 
     if eventos:
         filas = db.purgar_eventos_vpn(ruta, dias_eventos)
         if dias_eventos == TODO_EL_HISTORIAL:
-            hecho.append(t("%(n)s suceso(s) de la VPN, el historial entero", n=filas))
+            hecho.append(tn("%(n)s suceso de la VPN, el historial entero",
+                             "%(n)s sucesos de la VPN, el historial entero", filas))
         else:
-            hecho.append(t("%(n)s suceso(s) de la VPN de más de %(dias)s días",
-                           n=filas, dias=dias_eventos))
+            hecho.append(tn("%(n)s suceso de la VPN de más de %(dias)s días",
+                            "%(n)s sucesos de la VPN de más de %(dias)s días",
+                            filas, dias=dias_eventos))
         detalle.append("eventos_vpn=%d corte=%s"
                        % (filas, "todo" if dias_eventos == TODO_EL_HISTORIAL
                           else "%dd" % dias_eventos))
@@ -639,9 +644,14 @@ def limpiar_base(
         caducadas = db.purgar_sesiones(ruta)
         pendientes = db.purgar_logins_pendientes(ruta)
         intentos = db.purgar_intentos(ruta)
-        hecho.append(t("%(caducadas)s sesión(es) caducadas, %(pendientes)s login(s) a medias "
-                       "y %(intentos)s contador(es) de intentos",
-                       caducadas=caducadas, pendientes=pendientes, intentos=intentos))
+        # Tres recuentos, tres plurales: una sola frase con tres "(s)" no se
+        # puede traducir bien a ningún idioma.
+        hecho.append(t(
+            "%(sesiones)s, %(pendientes)s y %(intentos)s",
+            sesiones=tn("%(n)s sesión caducada", "%(n)s sesiones caducadas", caducadas),
+            pendientes=tn("%(n)s login a medias", "%(n)s logins a medias", pendientes),
+            intentos=tn("%(n)s contador de intentos", "%(n)s contadores de intentos", intentos),
+        ))
         detalle.append("sesiones=%s pendientes=%s intentos=%s"
                        % (caducadas, pendientes, intentos))
 
