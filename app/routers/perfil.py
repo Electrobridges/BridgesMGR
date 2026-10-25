@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from .. import db, qr
 from ..auth import usuario_actual, verificar_csrf
 from ..core import totp
+from ..idiomas import mensaje, t
 from .comun import cfg, render
 
 router = APIRouter(prefix="/perfil")
@@ -22,8 +23,15 @@ router = APIRouter(prefix="/perfil")
 EMISOR = "OpenVPN Manager"
 
 
-def _estado(request, sesion, secreto_pendiente=None, mensaje=None, error=None):
-    """Contexto del panel de segundo factor para la plantilla"""
+def _estado(request, sesion, secreto_pendiente=None, mensaje_texto=None, error=None):
+    """
+    Contexto del panel de segundo factor para la plantilla.
+
+    El parámetro del texto que sale bien se llama 'mensaje_texto' y no
+    'mensaje' porque 'mensaje' es la función que traduce un error: aquí los dos
+    nombres se pisarían y la llamada a mensaje(e) acabaría intentando llamar al
+    texto.
+    """
     ruta = cfg(request).seguridad.db_path
     registro = db.obtener_usuario(ruta, sesion["usuario"])
 
@@ -39,8 +47,10 @@ def _estado(request, sesion, secreto_pendiente=None, mensaje=None, error=None):
             imagen_qr = qr.data_uri(uri)
         except qr.QRNoDisponible as e:
             # Nada de huecos mudos: si no hay QR se dice por qué, y el alta
-            # sigue siendo posible tecleando la clave.
-            fallo_qr = str(e)
+            # sigue siendo posible tecleando la clave. El motivo va con
+            # mensaje(): es un MensajeError, así que se enseña en el idioma de
+            # quien lo lee (aquí solo va a pantalla, no a la auditoría).
+            fallo_qr = mensaje(e)
 
     return {
         "activado": bool(registro["totp_activado"]),
@@ -56,7 +66,7 @@ def _estado(request, sesion, secreto_pendiente=None, mensaje=None, error=None):
         "uri": uri,
         "qr": imagen_qr,
         "fallo_qr": fallo_qr,
-        "mensaje": mensaje,
+        "mensaje": mensaje_texto,
         "error": error,
     }
 
@@ -82,14 +92,14 @@ def iniciar_alta(request: Request, sesion=Depends(verificar_csrf)):
 
     if registro["totp_activado"]:
         return _panel(request, sesion,
-                      error="El segundo factor ya está activo en esta cuenta.")
+                      error=t("El segundo factor ya está activo en esta cuenta."))
 
     # Un alta en curso NO se pisa. Antes se generaba un secreto nuevo cada vez
     # que se pulsaba, así que recargar la página y volver a darle dejaba muerta
     # la cuenta que el usuario ya había añadido en el móvil, sin decir por qué.
     # Empezar de cero es ahora un acto explícito: /totp/descartar.
     if registro["totp_secret"]:
-        return _panel(request, sesion, error=(
+        return _panel(request, sesion, error=t(
             "Ya tienes un alta en curso. Escribe el código de la aplicación para "
             "terminarla. Si perdiste la clave, descarta el alta y empieza otra."
         ))
@@ -119,7 +129,7 @@ def confirmar_alta(
 
     if not registro["totp_secret"]:
         return _panel(request, sesion,
-                      error="No hay ningún alta en curso. Empieza de nuevo.")
+                      error=t("No hay ningún alta en curso. Empieza de nuevo."))
 
     paso = totp.verificar(
         registro["totp_secret"], codigo, paso_minimo=registro["totp_ultimo_paso"]
@@ -133,7 +143,7 @@ def confirmar_alta(
         return _panel(
             request, sesion,
             secreto_pendiente=registro["totp_secret"],
-            error="Código incorrecto. Comprueba la hora del móvil e inténtalo otra vez.",
+            error=t("Código incorrecto. Comprueba la hora del móvil e inténtalo otra vez."),
         )
 
     db.activar_totp(ruta, sesion["usuario"], paso)
@@ -141,7 +151,8 @@ def confirmar_alta(
 
     return _panel(
         request, sesion,
-        mensaje="Segundo factor activado. A partir de ahora se te pedirá el código al entrar.",
+        mensaje_texto=t("Segundo factor activado. A partir de ahora se te pedirá "
+                        "el código al entrar."),
     )
 
 
@@ -160,16 +171,17 @@ def descartar_alta(request: Request, sesion=Depends(verificar_csrf)):
 
     if registro["totp_activado"]:
         return _panel(request, sesion,
-                      error="El segundo factor ya está activo: aquí no hay nada que descartar.")
+                      error=t("El segundo factor ya está activo: aquí no hay nada "
+                              "que descartar."))
     if not registro["totp_secret"]:
-        return _panel(request, sesion, error="No hay ningún alta en curso.")
+        return _panel(request, sesion, error=t("No hay ningún alta en curso."))
 
     # Reutiliza la baja: deja el secreto a nulo, que es justo lo que hace falta.
     db.desactivar_totp(ruta, sesion["usuario"])
     db.registrar(ruta, sesion["usuario"], "totp_alta", sesion["usuario"], "ok",
                  detalle="alta descartada antes de confirmar", ip=ip)
 
-    return _panel(request, sesion, mensaje=(
+    return _panel(request, sesion, mensaje_texto=t(
         "Alta descartada. Borra la cuenta antigua de tu aplicación antes de "
         "empezar otra: la clave anterior ya no vale."
     ))
@@ -185,11 +197,11 @@ def desactivar(request: Request, sesion=Depends(verificar_csrf)):
                      detalle="la política lo exige para este rol", ip=ip)
         return _panel(
             request, sesion,
-            error="Un administrador ha impuesto el segundo factor para tu rol: "
-                  "no puedes desactivarlo.",
+            error=t("Un administrador ha impuesto el segundo factor para tu rol: "
+                    "no puedes desactivarlo."),
         )
 
     db.desactivar_totp(ruta, sesion["usuario"])
     db.registrar(ruta, sesion["usuario"], "totp_baja", sesion["usuario"], "ok", ip=ip)
 
-    return _panel(request, sesion, mensaje="Segundo factor desactivado.")
+    return _panel(request, sesion, mensaje_texto=t("Segundo factor desactivado."))

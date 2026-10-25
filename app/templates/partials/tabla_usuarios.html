@@ -5,7 +5,7 @@
 <div class="tabla-scroll">
 <table class="tabla">
   <thead>
-    <tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>2FA</th><th>Creado</th><th>Acciones</th></tr>
+    <tr><th>{{ t('Usuario') }}</th><th>{{ t('Rol') }}</th><th>{{ t('Estado') }}</th><th>2FA</th><th>{{ t('Creado') }}</th><th>{{ t('Acciones') }}</th></tr>
   </thead>
   <tbody>
     {% for u in usuarios %}
@@ -16,20 +16,20 @@
     {% set blindado = es_super and not soy_yo %}
     <tr>
       <td class="destacado">
-        {{ u.usuario }}{% if soy_yo %} <span class="tenue">(tú)</span>{% endif %}
+        {{ u.usuario }}{% if soy_yo %} <span class="tenue">{{ t('(tú)') }}</span>{% endif %}
       </td>
-      <td><span class="rol rol-{{ u.rol }}">{{ u.rol }}</span></td>
+      <td><span class="rol rol-{{ u.rol }}">{{ nombre_rol(u.rol) }}</span></td>
       <td>
         <span class="etiqueta etiqueta-{{ 'ok' if u.activo else 'mal' }}">
-          {{ 'activo' if u.activo else 'desactivado' }}
+          {{ t('activo') if u.activo else t('desactivado') }}
         </span>
       </td>
       <td>
         {% if u.totp_activado %}
-        <span class="etiqueta etiqueta-ok">activo</span>
+        <span class="etiqueta etiqueta-ok">{{ t('activo') }}</span>
         {% elif u.rol == 'supervisor' and exigir_totp_supervisor %}
         {# Obligado por la política y sin activar: no puede usar el panel #}
-        <span class="etiqueta etiqueta-mal">pendiente</span>
+        <span class="etiqueta etiqueta-mal">{{ t('pendiente') }}</span>
         {% else %}
         <span class="tenue">—</span>
         {% endif %}
@@ -38,14 +38,14 @@
       <td class="acciones">
         {% if blindado %}
         <span class="tenue">
-          Cuenta blindada: al superusuario solo lo administra él mismo.
+          {{ t('Cuenta blindada: al superusuario solo lo administra él mismo.') }}
         </span>
         {% else %}
 
         {% if es_super %}
-        <span class="tenue">Tu rol de superusuario no se cambia.</span>
+        <span class="tenue">{{ t('Tu rol de superusuario no se cambia.') }}</span>
         {% elif soy_yo %}
-        <span class="tenue">Tu propio rol lo cambia otra cuenta.</span>
+        <span class="tenue">{{ t('Tu propio rol lo cambia otra cuenta.') }}</span>
         {% else %}
         {# El botón sale del flujo hasta que el desplegable deja de mostrar el
            rol vigente; lo hace el CSS con :has(), sin nada de JavaScript. #}
@@ -53,13 +53,13 @@
               hx-disabled-elt="find button"
               hx-post="/admin/usuarios/{{ u.usuario }}/rol"
               hx-target="#avisos" hx-swap="innerHTML">
-          <select name="rol" aria-label="Rol de {{ u.usuario }}">
+          <select name="rol" aria-label="{{ t('Rol de %(usuario)s', usuario=u.usuario) }}">
             <option value="supervisor"
-                    {% if u.rol == 'supervisor' %}data-actual selected{% endif %}>supervisor</option>
+                    {% if u.rol == 'supervisor' %}data-actual selected{% endif %}>{{ nombre_rol('supervisor') }}</option>
             <option value="admin"
-                    {% if u.rol == 'admin' %}data-actual selected{% endif %}>admin</option>
+                    {% if u.rol == 'admin' %}data-actual selected{% endif %}>{{ nombre_rol('admin') }}</option>
           </select>
-          <button type="submit" class="boton pequeno">Cambiar rol</button>
+          <button type="submit" class="boton pequeno">{{ t('Cambiar rol') }}</button>
         </form>
         {% endif %}
 
@@ -67,9 +67,9 @@
           hx-post="/admin/usuarios/{{ u.usuario }}/password"
               hx-target="#avisos" hx-swap="innerHTML">
           <input type="password" name="password" required minlength="12"
-                 placeholder="nueva contraseña" autocomplete="new-password"
-                 aria-label="Nueva contraseña de {{ u.usuario }}">
-          <button type="submit" class="boton pequeno">Cambiar</button>
+                 placeholder="{{ t('nueva contraseña') }}" autocomplete="new-password"
+                 aria-label="{{ t('Nueva contraseña de %(usuario)s', usuario=u.usuario) }}">
+          <button type="submit" class="boton pequeno">{{ t('Cambiar') }}</button>
         </form>
 
         {% if not soy_yo %}
@@ -78,7 +78,7 @@
                 hx-post="/admin/usuarios/{{ u.usuario }}/activo"
                 hx-vals='{"activo": {{ 0 if u.activo else 1 }}}'
                 hx-target="#avisos" hx-swap="innerHTML">
-          {{ 'Desactivar' if u.activo else 'Activar' }}
+          {{ t('Desactivar') if u.activo else t('Activar') }}
         </button>
         {% endif %}
 
@@ -87,8 +87,8 @@
                 hx-disabled-elt="this"
                 hx-post="/admin/usuarios/{{ u.usuario }}/totp/restablecer"
                 hx-target="#avisos" hx-swap="innerHTML"
-                hx-confirm="¿Quitarle el segundo factor a {{ u.usuario }}? Se cerrarán sus sesiones y tendrá que volver a darlo de alta.">
-          Restablecer 2FA
+                hx-confirm="{{ t('¿Quitarle el segundo factor a %(usuario)s? Se cerrarán sus sesiones y tendrá que volver a darlo de alta.', usuario=u.usuario) }}">
+          {{ t('Restablecer 2FA') }}
         </button>
         {% endif %}
 
@@ -97,8 +97,8 @@
                 hx-disabled-elt="this"
                 hx-post="/admin/usuarios/{{ u.usuario }}/borrar"
                 hx-target="#avisos" hx-swap="innerHTML"
-                hx-confirm="¿Borrar la cuenta de panel de {{ u.usuario }}?">
-          Borrar
+                hx-confirm="{{ t('¿Borrar la cuenta de panel de %(usuario)s?', usuario=u.usuario) }}">
+          {{ t('Borrar') }}
         </button>
         {% endif %}
 

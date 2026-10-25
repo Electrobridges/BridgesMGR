@@ -4,9 +4,9 @@
 
 <p class="tenue">
   {% if respaldo.ultimo %}
-  Último respaldo automático anotado: <code>{{ respaldo.ultimo[:19] | replace('T', ' ') }}</code> UTC.
+  {{ th('Último respaldo automático anotado: <code>%(fecha)s</code> UTC.', fecha=respaldo.ultimo[:19] | replace('T', ' ')) }}
   {% else %}
-  Todavía no se ha anotado ningún respaldo automático.
+  {{ t('Todavía no se ha anotado ningún respaldo automático.') }}
   {% endif %}
 </p>
 
@@ -15,10 +15,10 @@
 <table class="tabla">
   <thead>
     <tr>
-      <th>Archivo</th>
-      <th>Tamaño</th>
-      <th>Creado</th>
-      <th>Acciones</th>
+      <th>{{ t('Archivo') }}</th>
+      <th>{{ t('Tamaño') }}</th>
+      <th>{{ t('Creado') }}</th>
+      <th>{{ t('Acciones') }}</th>
     </tr>
   </thead>
   <tbody>
@@ -37,8 +37,8 @@
                 hx-vals='{"nombre": {{ r.nombre | tojson }}}'
                 hx-target="#avisos"
                 hx-swap="innerHTML"
-                hx-confirm="¿Borrar {{ r.nombre }}? No se puede deshacer.">
-          Borrar
+                hx-confirm="{{ t('¿Borrar %(nombre)s? No se puede deshacer.', nombre=r.nombre) }}">
+          {{ t('Borrar') }}
         </button>
       </td>
     </tr>
@@ -47,5 +47,5 @@
 </table>
 </div>
 {% elif not errores_respaldo %}
-<p class="tenue">No hay ninguna copia todavía.</p>
+<p class="tenue">{{ t('No hay ninguna copia todavía.') }}</p>
 {% endif %}

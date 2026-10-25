@@ -7,6 +7,7 @@ no devolver una lista vacía que parece "no hay nadie conectado".
 
 import time
 
+from ..idiomas import mensaje, t
 from .mgmt import ErrorManagement, obtener_conexiones as _mgmt_conexiones
 from .parsers import parse_status_text
 
@@ -67,12 +68,14 @@ def obtener_conexiones(cfg):
         conexiones = _mgmt_conexiones(ovpn.mgmt_host, ovpn.mgmt_port)
         return anotar_duraciones(conexiones), "management", errores
     except ErrorManagement as e:
-        errores.append(str(e))
+        # La lista de errores se pinta tal cual: sus textos van ya traducidos.
+        errores.append(mensaje(e))
 
     try:
         return anotar_duraciones(leer_status(ovpn.status_path)), "status", errores
     except OSError as e:
-        errores.append("No se pudo leer el archivo de status (%s): %s" % (ovpn.status_path, e))
+        errores.append(t("No se pudo leer el archivo de status (%(ruta)s): %(error)s",
+                         ruta=ovpn.status_path, error=e))
 
     return [], None, errores
 

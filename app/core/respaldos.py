@@ -24,6 +24,8 @@ import shutil
 import sqlite3
 from datetime import datetime
 
+from ..idiomas import MensajeError, N_
+
 # Los respaldos se llaman así y solo así. El nombre lleva la fecha para que
 # ordenen solos y para saber qué se borra al rotar sin abrir nada.
 PREFIJO = "ovpn-web-"
@@ -44,8 +46,13 @@ NOMBRE = re.compile(r"^ovpn-web-(\d{8}-\d{6})(?:-(\d+))?\.db\.gz$")
 CONSERVAR_POR_DEFECTO = 7
 
 
-class ErrorRespaldo(Exception):
-    """No se pudo crear, listar o borrar un respaldo"""
+class ErrorRespaldo(MensajeError):
+    """
+    No se pudo crear, listar o borrar un respaldo.
+
+    MensajeError: str(e) deja el texto en español (lo que va a los logs y a la
+    auditoría) y mensaje(e) lo enseña en el idioma de quien lo lee.
+    """
 
 
 def preparar_directorio(directorio):
@@ -61,8 +68,9 @@ def preparar_directorio(directorio):
         os.chmod(directorio, 0o700)
     except OSError as e:
         raise ErrorRespaldo(
-            "No se pudo preparar %s: %s. El panel corre como 'ovpnweb' y solo "
-            "escribe dentro de /var/lib/ovpn-web." % (directorio, e)
+            N_("No se pudo preparar %(directorio)s: %(error)s. El panel corre como "
+               "'ovpnweb' y solo escribe dentro de /var/lib/ovpn-web."),
+            directorio=directorio, error=e,
         )
 
 
@@ -91,7 +99,7 @@ def crear(ruta_db, directorio, ahora=None):
         # Un respaldo a medias es peor que ninguno: parece que hay copia.
         for sobra in (temporal, destino):
             _borrar_sin_ruido(sobra)
-        raise ErrorRespaldo("No se pudo crear el respaldo: %s" % e)
+        raise ErrorRespaldo(N_("No se pudo crear el respaldo: %(error)s"), error=e)
     finally:
         _borrar_sin_ruido(temporal)
 
@@ -169,7 +177,8 @@ def listar(directorio):
     except FileNotFoundError:
         return []
     except OSError as e:
-        raise ErrorRespaldo("No se pudo leer %s: %s" % (directorio, e))
+        raise ErrorRespaldo(N_("No se pudo leer %(directorio)s: %(error)s"),
+                            directorio=directorio, error=e)
 
     encontrados = []
 
@@ -200,7 +209,8 @@ def ruta_de(directorio, nombre):
     nombre llega desde el panel, así que se comprueba antes de tocar el disco.
     """
     if not NOMBRE.match(nombre or ""):
-        raise ErrorRespaldo("Nombre de respaldo no válido: %s" % (nombre or "(vacío)"))
+        raise ErrorRespaldo(N_("Nombre de respaldo no válido: %(nombre)s"),
+                            nombre=nombre or "(vacío)")
 
     return os.path.join(directorio, nombre)
 
@@ -214,7 +224,8 @@ def borrar(directorio, nombre):
     except FileNotFoundError:
         return False
     except OSError as e:
-        raise ErrorRespaldo("No se pudo borrar %s: %s" % (nombre, e))
+        raise ErrorRespaldo(N_("No se pudo borrar %(nombre)s: %(error)s"),
+                            nombre=nombre, error=e)
 
     return True
 

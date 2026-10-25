@@ -21,6 +21,7 @@ import hmac
 from fastapi import Depends, Request
 
 from . import db
+from .idiomas import MensajeError, N_
 
 COOKIE_NOMBRE = "ovpnweb_sesion"
 COOKIE_PENDIENTE = "ovpnweb_2fa"
@@ -37,12 +38,16 @@ class NoAutenticado(Exception):
     """No hay sesión válida: hay que mandar al login"""
 
 
-class SinPermiso(Exception):
-    """Hay sesión pero el rol no alcanza"""
+class SinPermiso(MensajeError):
+    """
+    Hay sesión pero el rol no alcanza.
 
-    def __init__(self, mensaje="Tu rol no permite esta acción"):
-        self.mensaje = mensaje
-        super().__init__(mensaje)
+    Hereda de MensajeError para que str() deje el texto en español —que es un
+    dato— y mensaje() lo enseñe en el idioma de quien lo lee.
+    """
+
+    def __init__(self, texto=None):
+        super().__init__(texto or N_("Tu rol no permite esta acción"))
 
 
 class CSRFInvalido(Exception):

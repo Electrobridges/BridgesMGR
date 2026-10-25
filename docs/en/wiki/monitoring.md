@@ -13,26 +13,26 @@ traffic of the open sessions. Below, **the last 30 days**:
 
 | Chart | What it is for |
 |---|---|
-| **Tráfico por día** (Traffic per day) | Download and upload stacked. An odd upload spike is worth a look |
-| **Quién más tráfico lleva este mes** (Who is using the most traffic this month) | The ranking worth seeing before you set [quotas](policies.md#monthly-traffic-quota) |
-| **Conexiones por día** (Connections per day) | The normal rhythm of the week |
-| **Conexiones rechazadas por día** (Rejected connections per day) | A spike is usually a scan, or a revoked `.ovpn` that keeps retrying |
+| **Traffic per day** | Download and upload stacked. An odd upload spike is worth a look |
+| **Who has used the most traffic this month** | The ranking worth seeing before you set [quotas](policies.md#monthly-traffic-quota) |
+| **Connections per day** | The normal rhythm of the week |
+| **Rejected connections per day** | A spike is usually a scan, or a revoked `.ovpn` that keeps retrying |
 
-Hover over a column to see its values; **Ver los datos** (View the data) expands
-the same information as a table.
+Hover over a column to see its values; **View the data** expands the same
+information as a table.
 
 ## Live connections
 
 <img src="../../capturas/conexiones.png" alt="Active connections: luis and ana connected, with their real IP, their virtual IP, the download and upload traffic and the time connected" width="900">
 
-It refreshes itself every 10 seconds. From **Clientes VPN** (VPN clients) you
-can disconnect anyone who appears here.
+It refreshes itself every 10 seconds. From **VPN clients** you can disconnect
+anyone who appears here.
 
 ## History
 
-**Auditoría** (Audit) has two tabs:
+**Audit log** has two tabs:
 
-- **Panel web**: who did what in the panel, when and from which IP, including
+- **Web panel**: who did what in the panel, when and from which IP, including
   failed sign-ins.
 - **VPN**: who got in, when they left, how long the session lasted, who was
   rejected and why, and the sessions displaced by another connection from the
@@ -46,8 +46,8 @@ can disconnect anyone who appears here.
 
 ## Alerts
 
-In **Configuración → Notificaciones** (Settings → Notifications) you choose the
-channel and what to be alerted about:
+In **Settings → Notifications** you choose the channel and what to be
+alerted about:
 
 | Category | Examples |
 |---|---|

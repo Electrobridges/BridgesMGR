@@ -38,6 +38,10 @@ def leer_log(ruta, lineas=200, filtro=None):
     filtro = (filtro or "").strip().lower()
 
     if not os.path.exists(ruta):
+        # El texto va en español y con el %s de siempre: este error es un
+        # dato, no lo que se enseña. Quien lo enseña lo traduce, en panel.py.
+        # El tipo de excepción no cambia: panel.py lo distingue con
+        # 'except FileNotFoundError'.
         raise FileNotFoundError("No se encontró el archivo de log: %s" % ruta)
 
     ultimas = deque(maxlen=lineas)

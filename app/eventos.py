@@ -27,10 +27,12 @@ equivocado—, que es como ya se comporta un rechazo temprano.
 """
 
 import os
+import re
 from datetime import datetime, timezone
 
 from . import db
 from .core import eventos_vpn
+from .idiomas import N_, t
 
 # Cuántas pasadas seguidas como mucho en una misma vuelta. En marcha normal
 # basta una —lo escrito en cinco minutos son unos kilobytes—; varias son para la
@@ -59,6 +61,139 @@ AVISO_SIN_FECHAS = (
     "server.conf, hace falta un añadido a la unidad: 'systemctl edit "
     "openvpn-server@server' y repetir su ExecStart sin esa bandera."
 )
+
+
+# ------------------------------------------------------- los avisos en pantalla
+
+# Los avisos que se enseñan en la pestaña de VPN. Viven en dos sitios: los que
+# comprueba el ingestor en el momento, y los que dejó anotados la última vez
+# que leyó el log. Los del ingestor se guardan en la base y se leen tal cual;
+# los que devuelve revisar_archivo() vienen ya con la ruta puesta.
+#
+# El diccionario vive aquí y no en app/core/eventos_vpn.py porque ese módulo no
+# se toca: sus expresiones regulares leen el log de OpenVPN, y esto es lo que
+# se enseña en la pantalla. Hay una prueba que comprueba que los textos de
+# aquí siguen casando con los de allí.
+AVISOS = (
+    N_("No hay 'openvpn.log_path' configurado: no se puede leer nada."),
+    N_("No existe %(ruta)s. Si tu server.conf no tiene 'log-append', OpenVPN "
+       "escribe al journal y aquí no hay nada que leer."),
+    N_("No se puede leer %(ruta)s. El panel corre como 'ovpnweb'; el archivo "
+       "debe ser legible por el grupo 'adm'."),
+    N_("Algunas sesiones empiezan antes del tramo que se empareja (los "
+       "%(n)s sucesos más recientes), así que de ellas solo consta la salida."),
+    N_("El panel todavía no ha leído el log de OpenVPN. Lo hace el vigilante "
+       "cada cinco minutos, y este arranca con el servicio del panel; si esto "
+       "no cambia, mira que el servicio esté en marcha."),
+    N_("Faltan sucesos: el %(cuando)s %(motivo)s. Los que se escribieron en ese "
+       "tramo no están guardados y no se pueden recuperar."),
+    N_("Hay log pero ningún suceso reconocible. Suele ser un 'verb' demasiado "
+       "bajo en el server.conf: con 'verb 3' se registran las conexiones y los "
+       "rechazos."),
+    N_("El log no fecha sus líneas, así que no se puede decir cuánto duró cada "
+       "sesión. Lo causa el '--suppress-timestamps' con el que la unidad de "
+       "OpenVPN que empaqueta Debian arranca el servidor; no se quita desde el "
+       "server.conf, hace falta un añadido a la unidad: 'systemctl edit "
+       "openvpn-server@server' y repetir su ExecStart sin esa bandera."),
+    # El que guarda el ingestor cuando no puede leer el log. Se termina en
+    # punto, como se guarda, para que el patrón case con él.
+    N_("No se pudo leer %(ruta)s: %(error)s."),
+)
+
+# Los motivos por los que falta un tramo. Van dentro del aviso, así que se
+# traducen por separado. Cada uno es una plantilla con sus huecos, como los
+# avisos de arriba.
+MOTIVOS = (
+    N_("el log rotó más de una vez mientras el panel no miraba"),
+    N_("el log se vació y no quedó copia en %(ruta)s"),
+    N_("%(ruta)s no contiene el tramo que faltaba"),
+    N_("%(ruta)s es de una rotación anterior"),
+    N_("no se pudo leer %(ruta)s: %(error)s"),
+    N_("hubo una rotación"),
+)
+
+
+
+# Los detalles fijos que app/core/eventos_vpn.py guarda con cada suceso. Se
+# guardan en español —son datos, y ese módulo no traduce— y la plantilla los
+# pasa por t() al enseñarlos: lo que está en el catálogo sale traducido, y lo
+# que no (una línea literal del log, como la de la CRL) sale tal cual.
+# tests/test_idiomas.py comprueba que esta lista sigue teniendo todos los
+# textos fijos que eventos_vpn.py puede devolver.
+DETALLES = (
+    N_("se cerró la sesión anterior de este perfil"),
+    N_("certificado revocado"),
+    N_("certificado caducado"),
+    N_("no superó la verificación"),
+    N_("autenticación rechazada"),
+    N_("paquete sin la clave tls-crypt/tls-auth"),
+    N_("la clave tls-crypt/tls-auth del cliente no coincide"),
+    N_("el handshake TLS no llegó a completarse"),
+    N_("el servidor OpenVPN quedó operativo"),
+    # Los motivos de los scripts de OpenVPN (MOTIVOS_2FA y MOTIVOS_POLITICA)
+    N_("no envió el código de verificación"),
+    N_("código de verificación incorrecto"),
+    N_("código de verificación ya usado"),
+    N_("OpenVPN no puede leer los secretos (¿falta 'group ovpnweb-vpn'?)"),
+    N_("nombre de certificado no válido"),
+    N_("bloqueado por el panel"),
+    N_("acceso caducado"),
+    N_("fuera de su horario"),
+    N_("no se pudo leer el archivo de políticas"),
+)
+
+def _traducir_con(plantillas, texto):
+    """
+    Traduce un texto que casa con una de las plantillas, con sus huecos.
+
+    Un texto que no casa con ninguna se devuelve tal cual: puede ser un aviso
+    de una versión anterior, y eso no es motivo para romper la página.
+    """
+    plantilla, valores = _casar(plantillas, texto)
+    if plantilla is None:
+        return texto
+    return t(plantilla, **valores)
+
+
+def _casar(plantillas, texto):
+    """
+    (plantilla, valores) si el texto casa con alguna plantilla, o (None, None).
+
+    Los avisos guardados vienen con los huecos ya rellenos (la ruta, la
+    fecha), así que para encontrar su plantilla se construye una expresión
+    regular a partir de ella.
+    """
+    for plantilla in plantillas:
+        # Se trocea ANTES de escapar: re.escape() escape los paréntesis del
+        # hueco, y entonces el patrón ya no se parece al texto.
+        trozos = re.split(r"%\(\w+\)s", plantilla)
+        patron = re.escape(trozos[0])
+        for trozo in trozos[1:]:
+            patron += "(.+?)" + re.escape(trozo)
+
+        m = re.fullmatch(patron, texto or "", re.S)
+        if m:
+            valores = dict(zip(re.findall(r"%\((\w+)\)s", plantilla), m.groups()))
+            return plantilla, valores
+    return None, None
+
+
+def traducir_aviso(texto):
+    """Un aviso de la pestaña de VPN en el idioma de quien lo lee."""
+    return _traducir_con(AVISOS, texto)
+
+
+def traducir_motivo(motivo):
+    """El motivo de un tramo que falta, por separado: va dentro del aviso."""
+    plantilla, valores = _casar(MOTIVOS, motivo)
+    if plantilla is None:
+        # Un motivo que no se reconoce —de una versión vieja— no se cuela en
+        # el texto en otro idioma: se dice lo mismo que dicen los de
+        # rotación, que es lo que pasó. Ojo: comparar el texto traducido con
+        # el original NO vale para saber si se ha reconocido: en español son
+        # lo mismo.
+        return t("hubo una rotación")
+    return t(plantilla, **valores)
 
 
 def _cursor(ruta_db):
@@ -408,7 +543,11 @@ def avisos(cfg):
         mensajes.append(
             "Faltan sucesos: el %s %s. Los que se escribieron en ese tramo no "
             "están guardados y no se pueden recuperar."
-            % (cuando[:19].replace("T", " "), motivo or "hubo una rotación")
+            % (cuando[:19].replace("T", " "),
+               traducir_motivo(motivo) if motivo else traducir_motivo("hubo una rotación"))
         )
 
-    return mensajes
+    # Los avisos se guardan en español, que es como los escribió el ingestor,
+    # y se traducen aquí, al enseñarlos: quien los lee puede estar usando el
+    # panel en otro idioma.
+    return [traducir_aviso(m) for m in mensajes]

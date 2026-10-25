@@ -4,8 +4,7 @@
 
 [← Wiki](README.md)
 
-The **Seguridad** (Security) page has two tabs: the `server.conf` review and IP
-blocking.
+The **Security** page has two tabs: the `server.conf` review and IP blocking.
 
 <img src="../../capturas/seguridad.png" alt="Security page: score 96 out of 100, zero critical, zero warnings, two suggestions and nine good points; the first suggestion proposes moving to tls-crypt-v2 with the command that does it" width="900">
 
@@ -21,10 +20,10 @@ line that fixes it**:
 
 | Level | What it means | How much it costs |
 |---|---|---|
-| `CRÍTICO` | A flaw that can be exploited today, or that breaks a panel feature | A lot |
-| `AVISO` | It weakens the server without opening it up entirely | Something |
-| `SUGERENCIA` | A recommended improvement, no urgency | Little |
-| `BIEN` | Correct, so you can see what has been reviewed | Nothing |
+| `Critical` | A flaw that can be exploited today, or that breaks a panel feature | A lot |
+| `Warning` | It weakens the server without opening it up entirely | Something |
+| `Suggestion` | A recommended improvement, no urgency | Little |
+| `OK` | Correct, so you can see what has been reviewed | Nothing |
 
 > [!IMPORTANT]
 > **The panel only reads the `server.conf`, it does not write it.** Whoever
@@ -49,7 +48,7 @@ sudo bash deploy/migrar-tls-crypt-v2.sh
 > [!CAUTION]
 > After migrating, **nobody gets in until they receive a new `.ovpn`**, and
 > OpenVPN clients 2.6 or later are required. Plan for it: tell people, migrate,
-> and hand out the new profiles from **Clientes VPN** (VPN clients). The script refuses to
+> and hand out the new profiles from **VPN clients**. The script refuses to
 > enable it with an OpenVPN older than 2.6.14, because of a known flaw
 > (CVE-2025-2704).
 
@@ -73,9 +72,9 @@ Revoked certificates and policy rejections **do not count**: they are legitimate
 clients retrying on their own, and if they share an office's public IP, blocking
 it would lock the whole office out.
 
-Below are **Bloquear a mano** (Block by hand), the list of IPs currently blocked
-(with a button to unblock) and the block history. The block is lifted by the
-kernel itself when it expires, even if the panel is stopped.
+Below are **Block by hand**, the list of IPs currently blocked (with a button to
+unblock) and the block history. The block is lifted by the kernel itself when
+it expires, even if the panel is stopped.
 
 ---
 

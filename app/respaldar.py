@@ -21,17 +21,21 @@ from datetime import datetime, timedelta, timezone
 
 from . import db
 from .core import respaldos
+from .idiomas import N_, t
 
 # Cada cuánto. Cadenas fijas: se guardan en `ajustes` y se comparan con lo que
 # llega del formulario, así que no pueden ser texto libre.
+#
+# Las CLAVES son esos códigos y no se tocan; el texto que se enseña en la
+# página de configuración sí se traduce (ver frecuencias_traducidas).
 DESACTIVADO = "desactivado"
 DIARIO = "diario"
 SEMANAL = "semanal"
 
 FRECUENCIAS = {
-    DESACTIVADO: "Desactivado",
-    DIARIO: "Cada día",
-    SEMANAL: "Cada semana",
+    DESACTIVADO: N_("Desactivado"),
+    DIARIO: N_("Cada día"),
+    SEMANAL: N_("Cada semana"),
 }
 
 AJUSTE_FRECUENCIA = "respaldo_frecuencia"
@@ -64,6 +68,22 @@ def directorio(cfg):
 
     return os.path.join(os.path.dirname(os.path.abspath(cfg.seguridad.db_path)),
                         "respaldos")
+
+
+def frecuencias_traducidas():
+    """
+    Las frecuencias con su texto ya traducido, para la página de configuración.
+
+    Las CLAVES son códigos (van en el value del <option> y en la base) y no se
+    tocan; solo el texto se traduce. Una clave que no esté en el diccionario
+    sale tal cual: no puede reventar con un KeyError.
+    """
+    return {clave: t(FRECUENCIAS.get(clave, clave)) for clave in FRECUENCIAS}
+
+
+def texto_frecuencia(clave):
+    """El texto de una frecuencia, en el idioma de quien lo va a leer."""
+    return t(FRECUENCIAS.get(clave, clave))
 
 
 def ajustes(ruta_db):

@@ -1,41 +1,40 @@
 {% extends "base.html" %}
 {% set activo = 'configuracion' %}
-{% block titulo %}Configuración — BridgesMGR{% endblock %}
+{% block titulo %}{{ t('Configuración') }} — BridgesMGR{% endblock %}
 
 {% block contenido %}
-<h1>Configuración</h1>
+<h1>{{ t('Configuración') }}</h1>
 <p class="tenue">
-  Solo lectura. Para cambiarla edita <code>/etc/ovpn-web/config.yaml</code> y reinicia
-  <code>ovpn-web</code>.
+  {{ th('Solo lectura. Para cambiarla edita <code>/etc/ovpn-web/config.yaml</code> y reinicia <code>ovpn-web</code>.') }}
 </p>
 
-<h2>Servidor OpenVPN</h2>
+<h2>{{ t('Servidor OpenVPN') }}</h2>
 <div class="tabla-scroll">
 <table class="tabla tabla-clave-valor">
   <tbody>
-    <tr><th>Servicio</th>
+    <tr><th>{{ t('Servicio') }}</th>
         <td><code>{{ servicio.servicio }}</code>
             <span class="etiqueta etiqueta-{{ 'ok' if servicio.activo else 'mal' }}">{{ servicio.estado }}</span>
         </td></tr>
-    <tr><th>Log</th><td><code>{{ openvpn.log_path }}</code>
+    <tr><th>{{ t('Log') }}</th><td><code>{{ openvpn.log_path }}</code>
         {% if tamano_log is not none %}<span class="tenue">({{ format_bytes(tamano_log) }})</span>{% endif %}
         </td></tr>
-    <tr><th>Status</th><td><code>{{ openvpn.status_path }}</code></td></tr>
-    <tr><th>Management</th><td><code>{{ openvpn.mgmt_host }}:{{ openvpn.mgmt_port }}</code></td></tr>
-    <tr><th>EasyRSA</th><td><code>{{ openvpn.easyrsa_path }}</code></td></tr>
+    <tr><th>{{ t('Status') }}</th><td><code>{{ openvpn.status_path }}</code></td></tr>
+    <tr><th>{{ t('Management') }}</th><td><code>{{ openvpn.mgmt_host }}:{{ openvpn.mgmt_port }}</code></td></tr>
+    <tr><th>{{ t('EasyRSA') }}</th><td><code>{{ openvpn.easyrsa_path }}</code></td></tr>
   </tbody>
 </table>
 </div>
 
-<h2>Perfiles .ovpn generados</h2>
+<h2>{{ t('Perfiles .ovpn generados') }}</h2>
 <div class="tabla-scroll">
 <table class="tabla tabla-clave-valor">
   <tbody>
-    <tr><th>Remote</th><td><code>{{ cliente.remote_host }}:{{ cliente.remote_puerto }}</code> ({{ cliente.proto }})</td></tr>
-    <tr><th>Cipher</th><td><code>{{ cliente.cipher }}</code></td></tr>
+    <tr><th>{{ t('Remote') }}</th><td><code>{{ cliente.remote_host }}:{{ cliente.remote_puerto }}</code> ({{ cliente.proto }})</td></tr>
+    <tr><th>{{ t('Cipher') }}</th><td><code>{{ cliente.cipher }}</code></td></tr>
     {% if cliente.tls_crypt_v2 %}
     <tr><th>tls-crypt-v2</th><td><code>{{ cliente.tls_crypt_v2 }}</code>
-        <span class="etiqueta etiqueta-ok">clave propia en cada perfil</span></td></tr>
+        <span class="etiqueta etiqueta-ok">{{ t('clave propia en cada perfil') }}</span></td></tr>
     {% else %}
     <tr><th>tls-crypt</th><td><code>{{ cliente.tls_crypt }}</code></td></tr>
     {% endif %}
@@ -43,43 +42,40 @@
 </table>
 </div>
 
+{# Aquí 'Panel' no se traduce con t(): en el catálogo, 'Panel' es la página
+   principal, que en inglés es 'Dashboard'. Pero esta sección habla de la
+   configuración del programa, no de esa página, y en inglés 'Panel' es
+   justo lo que es. #}
 <h2>Panel</h2>
 <div class="tabla-scroll">
 <table class="tabla tabla-clave-valor">
   <tbody>
-    <tr><th>Escucha en</th><td><code>{{ servidor.host_bind }}:{{ servidor.puerto }}</code></td></tr>
-    <tr><th>Certificado TLS</th><td><code>{{ servidor.tls_cert }}</code></td></tr>
-    <tr><th>Helper privilegiado</th><td><code>{{ seguridad.helper }}</code></td></tr>
-    <tr><th>Duración de sesión</th><td>{{ seguridad.duracion_sesion_min }} minutos</td></tr>
-    <tr><th>Bloqueo de login</th><td>{{ seguridad.max_intentos_login }} intentos → {{ seguridad.bloqueo_login_min }} min</td></tr>
+    <tr><th>{{ t('Escucha en') }}</th><td><code>{{ servidor.host_bind }}:{{ servidor.puerto }}</code></td></tr>
+    <tr><th>{{ t('Certificado TLS') }}</th><td><code>{{ servidor.tls_cert }}</code></td></tr>
+    <tr><th>{{ t('Helper privilegiado') }}</th><td><code>{{ seguridad.helper }}</code></td></tr>
+    <tr><th>{{ t('Duración de sesión') }}</th><td>{{ seguridad.duracion_sesion_min }} {{ t('minutos') }}</td></tr>
+    <tr><th>{{ t('Bloqueo de login') }}</th><td>{{ seguridad.max_intentos_login }} {{ t('intentos') }} → {{ seguridad.bloqueo_login_min }} min</td></tr>
   </tbody>
 </table>
 </div>
 
 {% if cliente.tls_crypt_v2 %}
-<h2>Clave <code>tls-crypt-v2</code></h2>
+<h2>{{ th('Clave <code>tls-crypt-v2</code>') }}</h2>
 <p class="tenue">
-  Cada <code>.ovpn</code> lleva su propia clave, generada al descargarlo. No hay
-  una clave compartida que rotar: si se filtra un perfil, basta con revocar ese
-  cliente.
+  {{ th('Cada <code>.ovpn</code> lleva su propia clave, generada al descargarlo. No hay una clave compartida que rotar: si se filtra un perfil, basta con revocar ese cliente.') }}
 </p>
 {% else %}
-<h2>Clave <code>tls-crypt</code></h2>
+<h2>{{ th('Clave <code>tls-crypt</code>') }}</h2>
 
 {# Aquí y no en Clientes VPN: esto deja fuera a TODOS de golpe, y no puede estar
    al lado de las acciones del día a día. La confirmación es escribir una
    palabra y no un hx-confirm, por el mismo motivo. #}
 <section class="panel-accion">
   <p>
-    Protege el canal de control de la VPN y va <strong>embebida en cada
-    <code>.ovpn</code></strong>. Rotarla es lo que toca si se filtra un perfil
-    completo: invalida de golpe todos los repartidos.
+    {{ th('Protege el canal de control de la VPN y va <strong>embebida en cada <code>.ovpn</code></strong>. Rotarla es lo que toca si se filtra un perfil completo: invalida de golpe todos los repartidos.') }}
   </p>
   <p class="tenue">
-    Se hace copia de la anterior, se comprueba el formato de la nueva antes de
-    sustituirla, y si OpenVPN no vuelve a levantar se restaura sola.
-    <strong>Ningún cliente podrá conectar hasta que reciba un perfil nuevo</strong>:
-    al terminar aparecerá la lista en Clientes VPN.
+    {{ th('Se hace copia de la anterior, se comprueba el formato de la nueva antes de sustituirla, y si OpenVPN no vuelve a levantar se restaura sola. <strong>Ningún cliente podrá conectar hasta que reciba un perfil nuevo</strong>: al terminar aparecerá la lista en Clientes VPN.') }}
   </p>
 
   <form class="formulario en-fila"
@@ -87,35 +83,25 @@
         hx-post="/configuracion/tls-crypt/rotar"
         hx-target="#avisos"
         hx-swap="innerHTML">
-    <label for="confirmar-rotar">Escribe <code>ROTAR</code> para confirmar</label>
+    <label for="confirmar-rotar">{{ th('Escribe <code>ROTAR</code> para confirmar') }}</label>
     <input type="text" id="confirmar-rotar" name="confirmacion" required
            autocomplete="off" placeholder="ROTAR" pattern="ROTAR"
-           title="Escribe ROTAR en mayúsculas">
-    <button type="submit" class="boton boton-peligro">Rotar la clave tls-crypt</button>
+           title="{{ t('Escribe ROTAR en mayúsculas') }}">
+    <button type="submit" class="boton boton-peligro">{{ t('Rotar la clave tls-crypt') }}</button>
   </form>
 </section>
 <p class="tenue">
-  Para que cada perfil lleve su propia clave, migra a <code>tls-crypt-v2</code>
-  desde el servidor con <code>sudo bash deploy/migrar-tls-crypt-v2.sh</code>
-  (exige OpenVPN 2.6.14 o posterior, también en los clientes).
+  {{ th('Para que cada perfil lleve su propia clave, migra a <code>tls-crypt-v2</code> desde el servidor con <code>sudo bash deploy/migrar-tls-crypt-v2.sh</code> (exige OpenVPN 2.6.14 o posterior, también en los clientes).') }}
 </p>
 {% endif %}
 
-<h2>Respaldos de la base</h2>
+<h2>{{ t('Respaldos de la base') }}</h2>
 
 <p class="tenue">
-  Copia de <code>{{ seguridad.db_path }}</code> con la API de respaldo de
-  SQLite —consistente aunque el panel esté en uso— comprimida en
-  <code>{{ dir_respaldos }}</code>. Ese directorio se configura en
-  <code>config.yaml</code>, que el panel no puede escribir: si se pudiera
-  elegir desde aquí, quien entrara podría mandar copias enteras de la base a
-  una ruta suya.
+  {{ th('Copia de <code>%(db_path)s</code> con la API de respaldo de SQLite —consistente aunque el panel esté en uso— comprimida en <code>%(dir)s</code>. Ese directorio se configura en <code>config.yaml</code>, que el panel no puede escribir: si se pudiera elegir desde aquí, quien entrara podría mandar copias enteras de la base a una ruta suya.', db_path=seguridad.db_path, dir=dir_respaldos) }}
 </p>
 <p class="tenue">
-  <strong>No se descargan desde el panel.</strong> Un respaldo lleva los hashes
-  de todas las contraseñas y los secretos de segundo factor: vale tanto como la
-  base. Se recogen por SSH. Para mirar la auditoría fuera del servidor está la
-  exportación de más abajo.
+  {{ th('<strong>No se descargan desde el panel.</strong> Un respaldo lleva los hashes de todas las contraseñas y los secretos de segundo factor: vale tanto como la base. Se recogen por SSH. Para mirar la auditoría fuera del servidor está la exportación de más abajo.') }}
 </p>
 
 <section class="panel-accion">
@@ -124,26 +110,24 @@
         hx-post="/configuracion/respaldos"
         hx-target="#avisos"
         hx-swap="innerHTML">
-    <label for="respaldo-frecuencia">Cada cuánto</label>
+    <label for="respaldo-frecuencia">{{ t('Cada cuánto') }}</label>
     <select id="respaldo-frecuencia" name="frecuencia">
       {% for clave, texto in frecuencias.items() %}
       <option value="{{ clave }}" {{ 'selected' if respaldo.frecuencia == clave }}>{{ texto }}</option>
       {% endfor %}
     </select>
-    <label for="respaldo-hora">A qué hora</label>
+    <label for="respaldo-hora">{{ t('A qué hora') }}</label>
     <input type="time" id="respaldo-hora" name="hora" value="{{ respaldo.hora }}">
-    <label for="respaldo-conservar">Copias a conservar</label>
+    <label for="respaldo-conservar">{{ t('Copias a conservar') }}</label>
     <input type="number" id="respaldo-conservar" name="conservar" min="1" max="90"
            value="{{ respaldo.conservar }}">
-    <button type="submit" class="boton boton-principal">Guardar programación</button>
+    <button type="submit" class="boton boton-principal">{{ t('Guardar programación') }}</button>
   </form>
 
   {# La hora es la del reloj del servidor. El vigilante mira cada cinco minutos,
      así que el respaldo cae dentro de ese rato, no al segundo. #}
   <p class="tenue">
-    Hora del servidor. Lo comprueba el vigilante cada cinco minutos; si el panel
-    estuvo parado a esa hora, respalda en cuanto vuelve. Las copias que sobren
-    de las que se conservan se borran solas, empezando por la más antigua.
+    {{ t('Hora del servidor. Lo comprueba el vigilante cada cinco minutos; si el panel estuvo parado a esa hora, respalda en cuanto vuelve. Las copias que sobren de las que se conservan se borran solas, empezando por la más antigua.') }}
   </p>
 
   <button class="boton"
@@ -151,7 +135,7 @@
           hx-post="/configuracion/respaldos/ahora"
           hx-target="#avisos"
           hx-swap="innerHTML">
-    Respaldar ahora
+    {{ t('Respaldar ahora') }}
   </button>
 </section>
 
@@ -159,44 +143,32 @@
      hx-get="/configuracion/respaldos/tabla"
      hx-trigger="load, respaldos-actualizados from:body"
      hx-swap="innerHTML">
-  <p class="tenue">Cargando…</p>
+  <p class="tenue">{{ t('Cargando…') }}</p>
 </div>
 
-<h2>Exportar y limpiar</h2>
+<h2>{{ t('Exportar y limpiar') }}</h2>
 
 <section class="panel-accion">
   <p>
-    <strong>Exportación</strong>: un ZIP con la auditoría del panel y los
-    perfiles archivados, en CSV, para abrirlos en una hoja de cálculo.
+    {{ th('<strong>Exportación</strong>: un ZIP con la auditoría del panel y los perfiles archivados, en CSV, para abrirlos en una hoja de cálculo.') }}
   </p>
   <p class="tenue">
-    No lleva contraseñas ni sus hashes, ni secretos de segundo factor, ni
-    tokens, ni certificados: no es un respaldo y no sirve para restaurar. Qué
-    columnas salen está escrito una a una en el código, así que una columna
-    nueva no se cuela sola.
+    {{ t('No lleva contraseñas ni sus hashes, ni secretos de segundo factor, ni tokens, ni certificados: no es un respaldo y no sirve para restaurar. Qué columnas salen está escrito una a una en el código, así que una columna nueva no se cuela sola.') }}
   </p>
   {# Enlace normal y no hx-get: HTMX mete la respuesta en el DOM, y aquí lo que
      se quiere es que el navegador se descargue el archivo. #}
-  <p><a class="boton" href="/configuracion/exportar">Descargar exportación</a></p>
+  <p><a class="boton" href="/configuracion/exportar">{{ t('Descargar exportación') }}</a></p>
 </section>
 
 <section class="panel-accion">
   <p>
-    <strong>Limpieza</strong>: las dos tablas que crecen sin techo son la
-    auditoría del panel y los sucesos de la VPN. Borrarlas destruye el registro
-    de quién hizo qué, así que hay que escribir una palabra para confirmarlo,
-    como al rotar la clave.
+    {{ th('<strong>Limpieza</strong>: las dos tablas que crecen sin techo son la auditoría del panel y los sucesos de la VPN. Borrarlas destruye el registro de quién hizo qué, así que hay que escribir una palabra para confirmarlo, como al rotar la clave.') }}
   </p>
   <p class="tenue">
-    Nada se limpia solo: el panel guarda los sucesos de la VPN indefinidamente
-    hasta que alguien los tire desde aquí. Los del log original, en cambio, se
-    pierden igualmente cuando logrotate vacía el archivo, así que lo que se
-    borre en esta tabla no se puede volver a leer de ninguna parte.
+    {{ t('Nada se limpia solo: el panel guarda los sucesos de la VPN indefinidamente hasta que alguien los tire desde aquí. Los del log original, en cambio, se pierden igualmente cuando logrotate vacía el archivo, así que lo que se borre en esta tabla no se puede volver a leer de ninguna parte.') }}
   </p>
   <p class="tenue">
-    Los perfiles archivados no se tocan: son el historial de quién tuvo
-    certificado y ocupan tres columnas de texto. La propia limpieza queda
-    anotada en la auditoría que sobrevive, con cuántas filas se llevó.
+    {{ t('Los perfiles archivados no se tocan: son el historial de quién tuvo certificado y ocupan tres columnas de texto. La propia limpieza queda anotada en la auditoría que sobrevive, con cuántas filas se llevó.') }}
   </p>
 
   <form class="formulario"
@@ -206,7 +178,7 @@
         hx-swap="innerHTML">
     <label class="casilla">
       <input type="checkbox" name="auditoria" value="1">
-      Borrar auditoría de
+      {{ t('Borrar auditoría de') }}
       <select name="dias">
         {% for valor, texto in opciones_limpieza %}
         <option value="{{ valor }}">{{ texto }}</option>
@@ -215,44 +187,39 @@
     </label>
     <label class="casilla">
       <input type="checkbox" name="eventos" value="1">
-      Borrar sucesos de la VPN de
+      {{ t('Borrar sucesos de la VPN de') }}
       <select name="dias_eventos">
         {% for valor, texto in opciones_limpieza %}
         <option value="{{ valor }}">{{ texto }}</option>
         {% endfor %}
       </select>
-      <span class="tenue">conexiones, desconexiones y rechazos</span>
+      <span class="tenue">{{ t('conexiones, desconexiones y rechazos') }}</span>
     </label>
     <label class="casilla">
       <input type="checkbox" name="sesiones" value="1">
-      Sesiones caducadas, logins a medias y contadores de intentos
-      <span class="tenue">(los bloqueos en vigor se respetan)</span>
+      {{ t('Sesiones caducadas, logins a medias y contadores de intentos') }}
+      <span class="tenue">{{ t('(los bloqueos en vigor se respetan)') }}</span>
     </label>
     <label class="casilla">
       <input type="checkbox" name="compactar" value="1">
-      Compactar el archivo al terminar (<code>VACUUM</code>)
-      <span class="tenue">devuelve al disco el espacio de lo borrado</span>
+      {{ th('Compactar el archivo al terminar (<code>VACUUM</code>)') }}
+      <span class="tenue">{{ t('devuelve al disco el espacio de lo borrado') }}</span>
     </label>
 
     <div class="formulario en-fila">
-      <label for="confirmar-limpiar">Escribe <code>LIMPIAR</code> para confirmar</label>
+      <label for="confirmar-limpiar">{{ th('Escribe <code>LIMPIAR</code> para confirmar') }}</label>
       <input type="text" id="confirmar-limpiar" name="confirmacion" required
              autocomplete="off" placeholder="LIMPIAR" pattern="LIMPIAR"
-             title="Escribe LIMPIAR en mayúsculas">
-      <button type="submit" class="boton boton-peligro">Limpiar la base</button>
+             title="{{ t('Escribe LIMPIAR en mayúsculas') }}">
+      <button type="submit" class="boton boton-peligro">{{ t('Limpiar la base') }}</button>
     </div>
   </form>
 </section>
 
-<h2>Notificaciones</h2>
+<h2>{{ t('Notificaciones') }}</h2>
 
 <p class="tenue">
-  Avisos de sucesos importantes por correo y por Discord.
-  <strong>Es la única parte del panel que sale a internet</strong>: hasta aquí
-  solo habla con la propia máquina. Los destinatarios y las credenciales se
-  configuran en <code>/etc/ovpn-web/config.yaml</code>, que este panel puede
-  leer pero no escribir — así, quien lo comprometa no puede redirigir las
-  alertas a otro buzón.
+  {{ th('Avisos de sucesos importantes por correo y por Discord. <strong>Es la única parte del panel que sale a internet</strong>: hasta aquí solo habla con la propia máquina. Los destinatarios y las credenciales se configuran en <code>/etc/ovpn-web/config.yaml</code>, que este panel puede leer pero no escribir — así, quien lo comprometa no puede redirigir las alertas a otro buzón.') }}
 </p>
 
 <section class="panel-accion">
@@ -262,16 +229,16 @@
         hx-target="#avisos"
         hx-swap="innerHTML">
 
-    <h3>Canales</h3>
+    <h3>{{ t('Canales') }}</h3>
     <label class="casilla" for="notif-correo">
       <input type="checkbox" id="notif-correo" name="correo" value="1"
              {% if notif.canales.correo %}checked{% endif %}
              {% if not notif.configurado.correo %}disabled{% endif %}>
-      Correo
+      {{ t('Correo') }}
       {% if notif.configurado.correo %}
         <span class="tenue">→ {{ notif.destinatarios | join(', ') }}</span>
       {% else %}
-        <span class="tenue">sin servidor SMTP ni destinatarios en config.yaml</span>
+        <span class="tenue">{{ t('sin servidor SMTP ni destinatarios en config.yaml') }}</span>
       {% endif %}
     </label>
 
@@ -279,13 +246,13 @@
       <input type="checkbox" id="notif-discord" name="discord" value="1"
              {% if notif.canales.discord %}checked{% endif %}
              {% if not notif.configurado.discord %}disabled{% endif %}>
-      Discord
+      {{ t('Discord') }}
       {% if not notif.configurado.discord %}
-        <span class="tenue">sin webhook en config.yaml</span>
+        <span class="tenue">{{ t('sin webhook en config.yaml') }}</span>
       {% endif %}
     </label>
 
-    <h3>Qué avisar</h3>
+    <h3>{{ t('Qué avisar') }}</h3>
     {% for clave, texto in notif.categorias.items() %}
     <label class="casilla" for="ev-{{ clave }}">
       <input type="checkbox" id="ev-{{ clave }}" name="eventos" value="{{ clave }}"
@@ -305,7 +272,7 @@
        El aviso posterior a guardar sí se enseña, y no contradice esto: para
        entonces la alarma ya salió, y quien la desactiva de buena fe necesita
        saber si llegó a su destino. #}
-    <button type="submit" class="boton boton-principal">Guardar notificaciones</button>
+    <button type="submit" class="boton boton-principal">{{ t('Guardar notificaciones') }}</button>
   </form>
 
   {# Prueba los canales CONFIGURADOS, no los activados: lo normal es querer
@@ -313,15 +280,14 @@
      tener que esperar a un incidente real para descubrir que el servidor SMTP
      estaba mal escrito. #}
   <p class="tenue">
-    Comprueba que los destinos responden. Manda un mensaje de prueba por cada
-    canal que tenga destino en <code>config.yaml</code>, esté activado o no.
+    {{ th('Comprueba que los destinos responden. Manda un mensaje de prueba por cada canal que tenga destino en <code>config.yaml</code>, esté activado o no.') }}
   </p>
   <button class="boton"
           hx-disabled-elt="this"
           hx-post="/configuracion/notificaciones/probar"
           hx-target="#avisos"
           hx-swap="innerHTML">
-    Enviar aviso de prueba
+    {{ t('Enviar aviso de prueba') }}
   </button>
 </section>
 {% endblock %}

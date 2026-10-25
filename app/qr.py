@@ -19,6 +19,8 @@ dibuja en modo restringido, sin scripts ni referencias externas.
 import base64
 import io
 
+from .idiomas import MensajeError, N_
+
 try:
     import segno
 except ImportError:                                  # pragma: no cover
@@ -30,8 +32,12 @@ OSCURO = "#081731"
 CLARO = "#ffffff"
 
 
-class QRNoDisponible(RuntimeError):
-    """Falta 'segno'. Se avisa en pantalla en vez de dejar un hueco mudo."""
+class QRNoDisponible(MensajeError):
+    """
+    Falta 'segno'. Se avisa en pantalla en vez de dejar un hueco mudo.
+
+    MensajeError: el texto se guarda en español y se enseña traducido.
+    """
 
 
 def disponible():
@@ -47,9 +53,9 @@ def data_uri(texto, escala=5, borde=3):
     """
     if segno is None:
         raise QRNoDisponible(
-            "Falta el paquete 'segno'. Instálalo con "
-            "'pip install -r requirements.txt' para ver el QR; mientras tanto, "
-            "da de alta la cuenta escribiendo la clave a mano."
+            N_("Falta el paquete 'segno'. Instálalo con "
+               "'pip install -r requirements.txt' para ver el QR; mientras tanto, "
+               "da de alta la cuenta escribiendo la clave a mano.")
         )
 
     codigo = segno.make(texto, error="m")

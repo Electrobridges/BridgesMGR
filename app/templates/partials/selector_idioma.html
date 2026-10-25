@@ -1,0 +1,18 @@
+{# Cambio de idioma. Enlaces normales y no un formulario: cambiar de idioma no
+   toca nada del servidor, así que no necesita sesión ni token CSRF, y así
+   funciona también en la página de entrada.
+
+   Cada idioma se nombra en su propio idioma ("English", "Español"): quien no
+   entiende la página tiene que poder encontrar el suyo. 'volver' lleva a la
+   misma página; la ruta solo acepta destinos locales. #}
+{% set aqui = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
+<nav class="selector-idioma" aria-label="Language / Idioma">
+  {% for codigo, nombre in idiomas_disponibles.items() %}
+    {% if codigo == idioma_actual() %}
+    <span class="activo" aria-current="true" lang="{{ codigo }}">{{ nombre }}</span>
+    {% else %}
+    <a href="/idioma/{{ codigo }}?volver={{ aqui | urlencode }}" lang="{{ codigo }}"
+       hreflang="{{ codigo }}">{{ nombre }}</a>
+    {% endif %}
+  {% endfor %}
+</nav>

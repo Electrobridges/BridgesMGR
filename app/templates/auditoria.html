@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% set activo = 'auditoria' %}
-{% block titulo %}Auditoría — BridgesMGR{% endblock %}
+{% block titulo %}{{ t('Auditoría') }} — BridgesMGR{% endblock %}
 
 {% block contenido %}
-<h1>Auditoría</h1>
+<h1>{{ t('Auditoría') }}</h1>
 
 {# Dos fuentes distintas, no una tabla mezclada: el panel registra acciones de
    una cuenta del panel, y la VPN conexiones de un certificado. Enlaces normales
@@ -11,10 +11,10 @@
    el botón de atrás funciona. #}
 {# aria-current además de la clase: el subrayado cian solo lo ve quien ve. Sin
    él, un lector de pantalla lee dos enlaces indistinguibles. #}
-<nav class="pestanas" aria-label="Fuente de la auditoría">
+<nav class="pestanas" aria-label="{{ t('Fuente de la auditoría') }}">
   <a class="{{ 'activa' if fuente == 'panel' }}"
      {% if fuente == 'panel' %}aria-current="page"{% endif %}
-     href="/admin/auditoria?fuente=panel">Panel web</a>
+     href="/admin/auditoria?fuente=panel">{{ t('Panel web') }}</a>
   <a class="{{ 'activa' if fuente == 'vpn' }}"
      {% if fuente == 'vpn' %}aria-current="page"{% endif %}
      href="/admin/auditoria?fuente=vpn">VPN</a>
@@ -23,19 +23,15 @@
 {% if fuente == 'vpn' %}
 
   <p class="tenue">
-    Sucesos del log de OpenVPN, del más reciente al más antiguo. El panel los
-    lee cada pocos minutos y <strong>los guarda en su base</strong>, así que el
-    histórico ya no depende del archivo, que logrotate vacía cada semana.
-    Cuánto se conserva lo decides tú, borrándolos desde
-    <a href="/configuracion">Configuración</a>.
+    {{ th('Sucesos del log de OpenVPN, del más reciente al más antiguo. El panel los lee cada pocos minutos y <strong>los guarda en su base</strong>, así que el histórico ya no depende del archivo, que logrotate vacía cada semana. Cuánto se conserva lo decides tú, borrándolos desde <a href="/configuracion">Configuración</a>.') }}
   </p>
 
   {% for a in avisos %}
   <div class="aviso aviso-aviso">{{ a }}</div>
   {% endfor %}
 
-  <nav class="filtros" aria-label="Filtro de sucesos">
-    {% for clave, texto in [('todo', 'Todo'), ('conexiones', 'Conexiones'), ('fallos', 'Rechazos'), ('duplicadas', 'Sesiones desplazadas'), ('sesiones', 'Sesiones')] %}
+  <nav class="filtros" aria-label="{{ t('Filtro de sucesos') }}">
+    {% for clave, texto in [('todo', t('Todo')), ('conexiones', t('Conexiones')), ('fallos', t('Rechazos')), ('duplicadas', t('Sesiones desplazadas')), ('sesiones', t('Sesiones'))] %}
     <a class="{{ 'activa' if filtro == clave }}"
        {% if filtro == clave %}aria-current="true"{% endif %}
        href="/admin/auditoria?fuente=vpn&amp;filtro={{ clave }}">{{ texto }}</a>
@@ -47,18 +43,14 @@
   {% if filtro == 'sesiones' %}
 
   <p class="tenue">
-    Cada fila empareja una conexión con su desconexión. Lo que no consta
-    <strong>no se rellena</strong>: una sesión sin salida registrada se dice,
-    en vez de darle una duración que nadie ha medido. Se emparejan los sucesos
-    más recientes, no todo el historial: una entrada y su salida pueden estar a
-    días de distancia, así que hay que mirarlos en un tramo seguido.
+    {{ th('Cada fila empareja una conexión con su desconexión. Lo que no consta <strong>no se rellena</strong>: una sesión sin salida registrada se dice, en vez de darle una duración que nadie ha medido. Se emparejan los sucesos más recientes, no todo el historial: una entrada y su salida pueden estar a días de distancia, así que hay que mirarlos en un tramo seguido.') }}
   </p>
 
   {% if sesiones_vpn %}
   <div class="tabla-scroll">
   <table class="tabla">
     <thead>
-      <tr><th>Cliente</th><th>IP de origen</th><th>Entrada</th><th>Salida</th><th>Duración</th></tr>
+      <tr><th>{{ t('Cliente') }}</th><th>{{ t('IP de origen') }}</th><th>{{ t('Entrada') }}</th><th>{{ t('Salida') }}</th><th>{{ t('Duración') }}</th></tr>
     </thead>
     <tbody>
       {% for s in sesiones_vpn %}
@@ -70,9 +62,9 @@
         <td class="tenue">{{ s.inicio or '—' }}</td>
         <td class="tenue">
           {% if s.estado == 'abierta' %}
-            <span class="etiqueta etiqueta-ok">sigue conectado</span>
+            <span class="etiqueta etiqueta-ok">{{ t('sigue conectado') }}</span>
           {% elif s.estado == 'interrumpida' %}
-            <span class="etiqueta">sin registro</span>
+            <span class="etiqueta">{{ t('sin registro') }}</span>
           {% else %}
             {{ s.fin or '—' }}
           {% endif %}
@@ -81,22 +73,22 @@
           {% if s.segundos is not none %}
             {{ formatear_duracion(s.segundos) }}
           {% elif s.estado == 'cerrada' %}
-            <span class="tenue">sin fecha en el log</span>
+            <span class="tenue">{{ t('sin fecha en el log') }}</span>
           {% elif s.estado == 'abierta' %}
             {# 'lleva' y no una duración a secas: la sesión no ha terminado, así
                que esto es el tiempo desde que entró hasta ahora, no algo medido
                entre dos líneas del log. #}
             <span class="tenue">
               {%- if s.en_curso_segundos is not none -%}
-                lleva {{ formatear_duracion(s.en_curso_segundos) }}
+                {{ t('lleva %(duracion)s', duracion=formatear_duracion(s.en_curso_segundos)) }}
               {%- else -%}
-                en curso
+                {{ t('en curso') }}
               {%- endif -%}
             </span>
           {% elif s.estado == 'interrumpida' %}
-            <span class="tenue">el servidor arrancó sin que constara la salida</span>
+            <span class="tenue">{{ t('el servidor arrancó sin que constara la salida') }}</span>
           {% else %}
-            <span class="tenue">no consta su entrada</span>
+            <span class="tenue">{{ t('no consta su entrada') }}</span>
           {% endif %}
         </td>
       </tr>
@@ -108,7 +100,7 @@
   {% include "partials/paginacion.html" %}
 
   {% elif not avisos %}
-  <p class="tenue">No hay sesiones que mostrar.</p>
+  <p class="tenue">{{ t('No hay sesiones que mostrar.') }}</p>
   {% endif %}
 
   {% else %}
@@ -117,7 +109,7 @@
   <div class="tabla-scroll">
   <table class="tabla">
     <thead>
-      <tr><th>Fecha</th><th>Suceso</th><th>Cliente</th><th>IP de origen</th><th>Detalle</th></tr>
+      <tr><th>{{ t('Fecha') }}</th><th>{{ t('Suceso') }}</th><th>{{ t('Cliente') }}</th><th>{{ t('IP de origen') }}</th><th>{{ t('Detalle') }}</th></tr>
     </thead>
     <tbody>
       {% for e in eventos %}
@@ -125,34 +117,37 @@
         <td class="tenue">{{ e.ts }}</td>
         <td>
           {% if e.tipo == 'conexion' %}
-            <span class="etiqueta etiqueta-ok">conexión establecida</span>
+            <span class="etiqueta etiqueta-ok">{{ t('conexión establecida') }}</span>
           {% elif e.tipo == 'desconexion' %}
-            <span class="etiqueta">desconexión</span>
+            <span class="etiqueta">{{ t('desconexión') }}</span>
           {% elif e.tipo == 'rechazo_revocado' %}
-            <span class="etiqueta etiqueta-mal">rechazado: revocado</span>
+            <span class="etiqueta etiqueta-mal">{{ t('rechazado: revocado') }}</span>
           {% elif e.tipo == 'rechazo_certificado' %}
-            <span class="etiqueta etiqueta-mal">rechazado: certificado</span>
+            <span class="etiqueta etiqueta-mal">{{ t('rechazado: certificado') }}</span>
           {% elif e.tipo == 'rechazo_clave' %}
-            <span class="etiqueta etiqueta-mal">rechazado: clave</span>
+            <span class="etiqueta etiqueta-mal">{{ t('rechazado: clave') }}</span>
           {% elif e.tipo == 'rechazo_tls' %}
-            <span class="etiqueta etiqueta-mal">rechazado: TLS</span>
+            <span class="etiqueta etiqueta-mal">{{ t('rechazado: TLS') }}</span>
           {% elif e.tipo == 'arranque' %}
-            <span class="etiqueta">servidor arrancado</span>
+            <span class="etiqueta">{{ t('servidor arrancado') }}</span>
           {% elif e.tipo == 'crl' %}
-            <span class="etiqueta">CRL recargada</span>
+            <span class="etiqueta">{{ t('CRL recargada') }}</span>
           {% elif e.tipo == 'rechazo_2fa' %}
-            <span class="etiqueta etiqueta-mal">rechazado: 2.º factor</span>
+            <span class="etiqueta etiqueta-mal">{{ t('rechazado: 2.º factor') }}</span>
           {% elif e.tipo == 'rechazo_politica' %}
-            <span class="etiqueta etiqueta-mal">rechazado: política</span>
+            <span class="etiqueta etiqueta-mal">{{ t('rechazado: política') }}</span>
           {% elif e.tipo == 'sesion_duplicada' %}
-            <span class="etiqueta etiqueta-aviso">sesión desplazada</span>
+            <span class="etiqueta etiqueta-aviso">{{ t('sesión desplazada') }}</span>
           {% endif %}
         </td>
         {# Vacío y no inventado: un rechazo temprano muere antes de que el
            cliente llegue a presentar certificado, así que no hay CN. #}
         <td class="destacado">{{ e.cn or '—' }}</td>
         <td class="tenue">{{ e.ip or '—' }}{% if e.puerto %}:{{ e.puerto }}{% endif %}</td>
-        <td class="tenue">{{ e.detalle or '' }}</td>
+        {# El detalle se guarda en español. t() traduce los textos fijos que
+           están en el catálogo y deja el resto como está (una línea del log,
+           "rol=admin"…). #}
+        <td class="tenue">{{ t(e.detalle) if e.detalle else '' }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -162,7 +157,7 @@
   {% include "partials/paginacion.html" %}
 
   {% elif not avisos %}
-  <p class="tenue">No hay sucesos que mostrar con este filtro.</p>
+  <p class="tenue">{{ t('No hay sucesos que mostrar con este filtro.') }}</p>
   {% endif %}
 
   {% endif %}
@@ -170,13 +165,12 @@
 {% else %}
 
   <p class="tenue">
-    Acciones registradas en el panel, de la más reciente a la más antigua.
-    Incluye los intentos de login fallidos.
+    {{ t('Acciones registradas en el panel, de la más reciente a la más antigua. Incluye los intentos de login fallidos.') }}
   </p>
 
-  <nav class="filtros" aria-label="Filtro de acciones">
-    {% for clave, texto in [('todo', 'Todo'), ('fallos', 'Fallos'),
-                            ('certificados', 'Certificados'), ('sesiones', 'Sesiones')] %}
+  <nav class="filtros" aria-label="{{ t('Filtro de acciones') }}">
+    {% for clave, texto in [('todo', t('Todo')), ('fallos', t('Fallos')),
+                            ('certificados', t('Certificados')), ('sesiones', t('Sesiones'))] %}
     <a class="{{ 'activa' if filtro == clave }}"
        {% if filtro == clave %}aria-current="true"{% endif %}
        href="/admin/auditoria?fuente=panel&amp;filtro={{ clave }}">{{ texto }}</a>
@@ -189,23 +183,26 @@
   <div class="tabla-scroll">
   <table class="tabla">
     <thead>
-      <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Objetivo</th><th>Resultado</th><th>IP</th><th>Detalle</th></tr>
+      <tr><th>{{ t('Fecha') }}</th><th>{{ t('Usuario') }}</th><th>{{ t('Acción') }}</th><th>{{ t('Objetivo') }}</th><th>{{ t('Resultado') }}</th><th>{{ t('IP') }}</th><th>{{ t('Detalle') }}</th></tr>
     </thead>
     <tbody>
       {% for e in entradas %}
       <tr>
         <td class="tenue">{{ e.ts[:19] | replace('T', ' ') }}</td>
         <td class="destacado">{{ e.usuario or '—' }}</td>
-        <td>{{ e.accion }}</td>
+        <td>{{ e.accion_texto }}</td>
         <td>{{ e.objetivo or '—' }}</td>
         <td>
           {# Quién es un fallo lo decide db.es_fallo, el mismo criterio que usa el
              filtro: si la plantilla lo decidiera por su cuenta, los dos podrían
              discrepar y una fila saldría en rojo fuera de la pestaña de fallos. #}
-          <span class="etiqueta etiqueta-{{ 'mal' if es_fallo(e.resultado) else 'ok' }}">{{ e.resultado }}</span>
+          <span class="etiqueta etiqueta-{{ 'mal' if es_fallo(e.resultado) else 'ok' }}">{{ e.resultado_texto }}</span>
         </td>
         <td class="tenue">{{ e.ip or '—' }}</td>
-        <td class="tenue">{{ e.detalle or '' }}</td>
+        {# El detalle se guarda en español. t() traduce los textos fijos que
+           están en el catálogo y deja el resto como está (una línea del log,
+           "rol=admin"…). #}
+        <td class="tenue">{{ t(e.detalle) if e.detalle else '' }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -216,8 +213,8 @@
 
   {% else %}
   <p class="tenue">
-    {% if filtro == 'todo' %}Todavía no hay entradas.
-    {% else %}No hay acciones que encajen con este filtro.{% endif %}
+    {% if filtro == 'todo' %}{{ t('Todavía no hay entradas.') }}
+    {% else %}{{ t('No hay acciones que encajen con este filtro.') }}{% endif %}
   </p>
   {% endif %}
 

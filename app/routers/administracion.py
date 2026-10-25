@@ -18,13 +18,25 @@ from fastapi import APIRouter, Depends, Form, Request
 from .. import db, eventos
 from ..auth import solo_admin, usuario_actual, verificar_csrf
 from ..core import eventos_vpn
+from ..idiomas import N_, mensaje, nombre_rol, t
 from .comun import auditar, aviso, cfg, error_htmx, paginar, render
 
 router = APIRouter(prefix="/admin")
 
 EVENTO_REFRESCO = "usuarios-actualizados"
 
-SIN_MANDO = "No puedes dejar el panel sin ninguna cuenta capaz de administrarlo"
+# Los textos fijos de este módulo se marcan con N_() donde se definen y se
+# traducen con t() donde se enseñan: en una constante de módulo, t() se
+# evaluaría al importar, una sola vez y en el idioma por defecto.
+SIN_MANDO = N_("No puedes dejar el panel sin ninguna cuenta capaz de administrarlo")
+
+# El motivo por el que no se puede administrar la cuenta blindada. Va con un
+# hueco con nombre para poder enseñarlo traducido sin perder el nombre de
+# quien lo va a leer.
+VETO_SUPERUSUARIO = N_(
+    "'%(usuario)s' es el superusuario: solo esa cuenta puede administrarse a "
+    "sí misma. Desde el servidor queda la CLI."
+)
 
 
 def _ultimo_al_mando(ruta, registro):
@@ -55,10 +67,14 @@ def _veto(sesion, registro):
     El superusuario es la única cuenta blindada, y lo está contra todo: rol,
     contraseña, activación, borrado y segundo factor. Si un admin pudiera
     cambiarle la contraseña, sería superusuario en dos pasos.
+
+    Devuelve el texto del motivo con el hueco del nombre sin rellenar, para
+    que quien lo use lo rellene con su cuenta. En la pantalla se enseña
+    traducido, con t(motivo, usuario=...). A la auditoría NO va este texto: va
+    la etiqueta corta "cuenta blindada", que es un dato y se queda en español.
     """
     if registro["rol"] == db.ROL_SUPER and registro["usuario"] != sesion["usuario"]:
-        return ("'%s' es el superusuario: solo esa cuenta puede administrarse a "
-                "sí misma. Desde el servidor queda la CLI." % registro["usuario"])
+        return VETO_SUPERUSUARIO
     return None
 
 
@@ -73,15 +89,19 @@ def _objetivo(request, sesion, usuario, accion):
     registro = db.obtener_usuario(cfg(request).seguridad.db_path, usuario)
 
     if not registro:
-        return None, error_htmx(request, "No existe el usuario '%s'" % usuario)
+        return None, error_htmx(request, t("No existe el usuario '%(usuario)s'",
+                                           usuario=usuario))
 
     motivo = _veto(sesion, registro)
     if motivo:
         # Se audita porque es un intento de saltarse la jerarquía, no una
-        # errata de formulario.
+        # errata de formulario. El detalle es una etiqueta corta y es un dato:
+        # se queda en español, como todos los detalles de la auditoría.
         auditar(request, sesion, accion, usuario, resultado="denegada",
                 detalle="cuenta blindada")
-        return None, error_htmx(request, motivo)
+        # En pantalla, en cambio, sale el motivo, y sale en el idioma de quien
+        # lo lee: se enseña traducido desde el mismo texto.
+        return None, error_htmx(request, t(motivo, usuario=usuario))
 
     return registro, None
 
@@ -115,13 +135,16 @@ def crear_usuario(
     try:
         _, concedido = db.crear_usuario(cfg(request).seguridad.db_path, usuario, password, rol)
     except ValueError as e:
-        return error_htmx(request, str(e))
+        return error_htmx(request, mensaje(e))
 
     # Se informa del rol concedido, no del pedido: en una base vacía no son el
     # mismo. Por el panel no puede pasar —hace falta sesión— pero decir una
     # cosa distinta de la que quedó grabada es cómo se corrompe una auditoría.
     auditar(request, sesion, "crear_usuario_panel", usuario, detalle="rol=%s" % concedido)
-    return aviso(request, "Usuario '%s' creado con rol %s." % (usuario, concedido),
+    # El nombre del rol que se enseña es el traducido; en la auditoría queda el
+    # valor, que es un dato.
+    return aviso(request, t("Usuario '%(usuario)s' creado con rol %(rol)s.",
+                            usuario=usuario, rol=nombre_rol(concedido)),
                  refrescar=EVENTO_REFRESCO)
 
 
@@ -141,13 +164,14 @@ def cambiar_password(
     try:
         db.cambiar_password(ruta, usuario, password)
     except ValueError as e:
-        return error_htmx(request, str(e))
+        return error_htmx(request, mensaje(e))
 
     # Cambiar la contraseña invalida las sesiones abiertas de esa cuenta
     db.borrar_sesiones_de(ruta, registro["id"])
 
     auditar(request, sesion, "cambiar_password_panel", usuario)
-    return aviso(request, "Contraseña de '%s' actualizada. Sus sesiones se han cerrado." % usuario,
+    return aviso(request, t("Contraseña de '%(usuario)s' actualizada. Sus sesiones "
+                            "se han cerrado.", usuario=usuario),
                  refrescar=EVENTO_REFRESCO)
 
 
@@ -168,27 +192,31 @@ def cambiar_rol(
     # ascenderse no tendría jerarquía por encima, y quien se degrada por error
     # se queda fuera de la página donde arreglarlo.
     if usuario == sesion["usuario"]:
-        return error_htmx(request, "No puedes cambiar tu propio rol: que lo haga otra cuenta")
+        return error_htmx(request, t("No puedes cambiar tu propio rol: que lo haga "
+                                     "otra cuenta"))
 
     # Sin cambio no hay nada que hacer, y sobre todo no hay que cerrarle la
     # sesión a nadie. Pulsar el botón sin tocar el desplegable echaba al
     # usuario del panel.
     if rol == registro["rol"]:
-        return aviso(request, "'%s' ya tenía el rol %s: no se ha cambiado nada." % (usuario, rol),
+        return aviso(request, t("'%(usuario)s' ya tenía el rol %(rol)s: no se ha "
+                                "cambiado nada.",
+                                usuario=usuario, rol=nombre_rol(rol)),
                      refrescar=EVENTO_REFRESCO)
 
     if rol not in db.ROLES_MANDO and _ultimo_al_mando(ruta, registro):
-        return error_htmx(request, SIN_MANDO)
+        return error_htmx(request, t(SIN_MANDO))
 
     try:
         db.cambiar_rol(ruta, usuario, rol)
     except ValueError as e:
-        return error_htmx(request, str(e))
+        return error_htmx(request, mensaje(e))
 
     db.borrar_sesiones_de(ruta, registro["id"])
     auditar(request, sesion, "cambiar_rol_panel", usuario,
             detalle="%s -> %s" % (registro["rol"], rol))
-    return aviso(request, "'%s' ahora es %s. Deberá volver a entrar." % (usuario, rol),
+    return aviso(request, t("'%(usuario)s' ahora es %(rol)s. Deberá volver a entrar.",
+                            usuario=usuario, rol=nombre_rol(rol)),
                  refrescar=EVENTO_REFRESCO)
 
 
@@ -207,9 +235,9 @@ def activar(
 
     if not activo:
         if usuario == sesion["usuario"]:
-            return error_htmx(request, "No puedes desactivar tu propia cuenta")
+            return error_htmx(request, t("No puedes desactivar tu propia cuenta"))
         if _ultimo_al_mando(ruta, registro):
-            return error_htmx(request, SIN_MANDO)
+            return error_htmx(request, t(SIN_MANDO))
 
     db.activar_usuario(ruta, usuario, bool(activo))
 
@@ -218,7 +246,9 @@ def activar(
 
     auditar(request, sesion, "activar_usuario_panel", usuario,
             detalle="activo=%s" % bool(activo))
-    return aviso(request, "Usuario '%s' %s." % (usuario, "activado" if activo else "desactivado"),
+    return aviso(request, t("Usuario '%(usuario)s' %(estado)s.",
+                            usuario=usuario,
+                            estado=t("activado") if activo else t("desactivado")),
                  refrescar=EVENTO_REFRESCO)
 
 
@@ -235,14 +265,15 @@ def borrar(
         return fallo
 
     if usuario == sesion["usuario"]:
-        return error_htmx(request, "No puedes borrar tu propia cuenta")
+        return error_htmx(request, t("No puedes borrar tu propia cuenta"))
 
     if _ultimo_al_mando(ruta, registro):
-        return error_htmx(request, SIN_MANDO)
+        return error_htmx(request, t(SIN_MANDO))
 
     db.borrar_usuario(ruta, usuario)
     auditar(request, sesion, "borrar_usuario_panel", usuario)
-    return aviso(request, "Usuario '%s' eliminado." % usuario, refrescar=EVENTO_REFRESCO)
+    return aviso(request, t("Usuario '%(usuario)s' eliminado.", usuario=usuario),
+                 refrescar=EVENTO_REFRESCO)
 
 
 @router.post("/usuarios/{usuario}/totp/restablecer")
@@ -270,7 +301,8 @@ def restablecer_totp(
         return fallo
 
     if not registro["totp_activado"] and not registro["totp_secret"]:
-        return error_htmx(request, "'%s' no tiene segundo factor configurado" % usuario)
+        return error_htmx(request, t("'%(usuario)s' no tiene segundo factor "
+                                     "configurado", usuario=usuario))
 
     db.desactivar_totp(ruta, usuario)
     db.borrar_sesiones_de(ruta, registro["id"])
@@ -278,8 +310,8 @@ def restablecer_totp(
     auditar(request, sesion, "totp_restablecer", usuario)
     return aviso(
         request,
-        "Segundo factor de '%s' restablecido y sus sesiones cerradas. "
-        "Tendrá que volver a darlo de alta." % usuario,
+        t("Segundo factor de '%(usuario)s' restablecido y sus sesiones cerradas. "
+          "Tendrá que volver a darlo de alta.", usuario=usuario),
         refrescar=EVENTO_REFRESCO,
     )
 
@@ -317,12 +349,14 @@ def politica_totp_supervisor(
             detalle="exigido" if activar else "no exigido")
 
     if activar:
-        mensaje = ("Segundo factor exigido a las cuentas de rol supervisor. "
-                   "Las que no lo tengan solo podrán ir a su perfil hasta activarlo.")
+        texto = t("Segundo factor exigido a las cuentas de rol %(rol)s. Las que no "
+                  "lo tengan solo podrán ir a su perfil hasta activarlo.",
+                  rol=nombre_rol(db.ROL_SUPERVISOR))
     else:
-        mensaje = "El segundo factor deja de ser obligatorio para el rol supervisor."
+        texto = t("El segundo factor deja de ser obligatorio para el rol %(rol)s.",
+                  rol=nombre_rol(db.ROL_SUPERVISOR))
 
-    return aviso(request, mensaje, refrescar=EVENTO_REFRESCO)
+    return aviso(request, texto, refrescar=EVENTO_REFRESCO)
 
 
 # Las sesiones no son un filtro más sobre los sucesos: emparejan dos de ellos en
@@ -332,6 +366,105 @@ def politica_totp_supervisor(
 # mano no cuele.
 VISTA_SESIONES = "sesiones"
 VISTAS_VPN = set(db.FILTROS_EVENTOS_VPN) | {VISTA_SESIONES}
+
+
+# El nombre de la acción y el del resultado son DATOS: se guardan, se filtran
+# con ellos y hay consultas que dependen de ellos. No se traducen ni se
+# cambian nunca.
+#
+# Lo que se traduce es CÓMO SE ENSEÑAN, y para eso está este diccionario: la
+# clave es el valor guardado —'crear_cliente'— y el valor es la frase que sale
+# en pantalla —'Crear cliente'—, marcada con N_() porque es un texto fijo. La
+# clave del catálogo es la frase, no el código.
+ACCIONES_AUDITORIA = {
+    # Sesión del panel
+    "login": N_("Iniciar sesión"),
+    "logout": N_("Cerrar sesión"),
+
+    # Cuentas del panel
+    "crear_usuario_panel": N_("Crear cuenta del panel"),
+    "cambiar_password_panel": N_("Cambiar contraseña"),
+    "cambiar_rol_panel": N_("Cambiar rol"),
+    "activar_usuario_panel": N_("Activar cuenta"),
+    "borrar_usuario_panel": N_("Borrar cuenta"),
+    "totp_restablecer": N_("Restablecer segundo factor"),
+    "totp_alta": N_("Alta del segundo factor"),
+    "totp_baja": N_("Baja del segundo factor"),
+    "politica_totp_supervisor": N_("Política del segundo factor"),
+    "designar_superusuario": N_("Designar superusuario"),
+
+    # Certificados
+    "crear_cliente": N_("Crear cliente"),
+    "revocar": N_("Revocar"),
+    "restaurar": N_("Restaurar"),
+    "desconectar": N_("Desconectar"),
+    "archivar": N_("Archivar"),
+    "desarchivar": N_("Desarchivar"),
+    "descargar_ovpn": N_("Descargar perfil"),
+    "dos_pasos_vpn": N_("Segundo factor de un cliente"),
+    "politica_cliente": N_("Política del cliente"),
+    "politica_global": N_("Política global"),
+    "cerrar_reparto": N_("Cerrar reparto"),
+
+    # Lo que hace el panel por su cuenta, sin nadie detrás
+    "caducar_cliente": N_("Caducar cliente"),
+    "expulsar_politica": N_("Expulsar por política"),
+    "fin_sesion": N_("Fin de sesión"),
+    "perfil_compartido": N_("Perfil compartido"),
+    "cuota_agotada": N_("Cuota agotada"),
+    "cuota_restablecida": N_("Cuota restablecida"),
+
+    # Datos y respaldos
+    "rotar_tls_crypt": N_("Rotar la clave tls-crypt"),
+    "exportar_datos": N_("Exportar datos"),
+    "limpiar_base": N_("Limpiar la base"),
+    "crear_respaldo": N_("Crear respaldo"),
+    "borrar_respaldo": N_("Borrar respaldo"),
+    "ajustar_respaldos": N_("Ajustar respaldos"),
+    "ajustar_notificaciones": N_("Ajustar notificaciones"),
+    "probar_notificaciones": N_("Probar notificaciones"),
+    "notificar": N_("Enviar aviso"),
+
+    # Bloqueo de IPs
+    "bloquear_ip": N_("Bloquear IP"),
+    "desbloquear_ip": N_("Desbloquear IP"),
+    "ajustar_bloqueo": N_("Ajustar el bloqueo automático"),
+}
+
+
+# Lo mismo con el resultado. Los cinco primeros son los que se escriben hoy;
+# los tres últimos ya no se escriben, pero las instalaciones de antes los
+# conservan —la auditoría no se reescribe— y saldrían en la tabla.
+RESULTADOS_AUDITORIA = {
+    # Los resultados que se escriben hoy. El código guardado no cambia: lo
+    # que se traduce es el texto que se enseña.
+    "ok": N_("Correcto"),
+    "fallo": N_("Fallo"),
+    "error": N_("Error"),
+    "denegada": N_("Denegada"),
+    "2fa_fallo": N_("Fallo del segundo factor"),
+    "bloqueado": N_("Bloqueado"),
+    "2fa_pendiente": N_("2FA pendiente"),
+    "iniciada": N_("Iniciada"),
+    "descartada": N_("Descartada"),
+}
+
+
+def _texto_accion(accion):
+    """
+    El nombre de la acción como se enseña: traducido, o el valor crudo.
+
+    Una acción que no esté en el diccionario no puede reventar la tabla: se
+    enseña tal cual, que para eso está el valor guardado.
+    """
+    marca = ACCIONES_AUDITORIA.get(accion)
+    return t(marca) if marca else accion
+
+
+def _texto_resultado(resultado):
+    """El resultado de la acción como se enseña: traducido, o el valor crudo."""
+    marca = RESULTADOS_AUDITORIA.get(resultado)
+    return t(marca) if marca else resultado
 
 
 @router.get("/auditoria")
@@ -384,7 +517,7 @@ def pagina_auditoria(
             "sesiones_vpn": sesiones_vpn[
                 pg["desplazamiento"]:pg["desplazamiento"] + pg["por_pagina"]
             ],
-            "avisos": eventos.avisos(c) + avisos,
+            "avisos": eventos.avisos(c) + [eventos.traducir_aviso(a) for a in avisos],
             "pg": pg,
         })
     elif fuente == "vpn":
@@ -400,10 +533,19 @@ def pagina_auditoria(
     else:
         total = db.contar_auditoria(ruta, filtro)
         pg = paginar(total, pagina, por_pagina, base)
+        entradas = db.listar_auditoria(
+            ruta, pg["por_pagina"], pg["desplazamiento"], filtro
+        )
+        # Cada fila lleva su acción y su resultado ya traducidos, en dos
+        # campos aparte: 'accion' y 'resultado' se quedan como están, porque
+        # son los valores guardados y hay consultas que dependen de ellos.
+        # Quien decide si una fila va en rojo sigue siendo db.es_fallo, que
+        # mira el valor guardado y no el texto.
+        for e in entradas:
+            e["accion_texto"] = _texto_accion(e.get("accion") or "")
+            e["resultado_texto"] = _texto_resultado(e.get("resultado") or "")
         contexto.update({
-            "entradas": db.listar_auditoria(
-                ruta, pg["por_pagina"], pg["desplazamiento"], filtro
-            ),
+            "entradas": entradas,
             "pg": pg,
         })
 

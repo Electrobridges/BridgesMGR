@@ -24,6 +24,7 @@ After any change: `sudo systemctl restart ovpn-web`.
 | `puerto` | `55443` | The panel's HTTPS port |
 | `tls_cert` | `/etc/ovpn-web/tls/cert.pem` | The panel's certificate (the installer generates it) |
 | `tls_key` | `/etc/ovpn-web/tls/key.pem` | Private key of the certificate |
+| `idioma` | `es` | Interface language, `es` or `en`, for anyone who has not picked another one in the panel. Also the language of email and Discord alerts |
 
 ## `openvpn`
 
@@ -82,9 +83,9 @@ deployment one is kept in the database and changed from the web:
 
 | Where | What |
 |---|---|
-| **Clientes VPN → Políticas** (VPN clients → Policies) | Temporary access, schedule, maximum session length, monthly quota, fixed IP and allowed destinations, two-step verification |
-| **Clientes VPN** (VPN clients) | Maximum session length for everyone |
-| **Seguridad** (Security) | Automatic IP blocking: threshold, window, duration and allowlist |
+| **VPN clients → Policies** | Temporary access, schedule, maximum session length, monthly quota, fixed IP and allowed destinations, two-step verification |
+| **VPN clients** | Maximum session length for everyone |
+| **Security** | Automatic IP blocking: threshold, window, duration and allowlist |
 
 Policies need two lines in the `server.conf` (servers set up by
 `deploy/instalar-openvpn.sh` already have them):
@@ -106,8 +107,8 @@ auth-gen-token 0
 
 To use fixed IPs, the dynamic pool cannot take up the whole network:
 `server 10.8.0.0 255.255.255.0 nopool` plus `ifconfig-pool 10.8.0.2 10.8.0.191`
-leaves `.192` to `.254` for fixed IPs. The **Seguridad** (*Security*) page
-reviews all of this and says which line is missing.
+leaves `.192` to `.254` for fixed IPs. The **Security** page reviews all of this
+and says which line is missing.
 
 ## Configuration for development
 

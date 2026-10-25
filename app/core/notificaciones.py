@@ -20,6 +20,10 @@ existía. De ahí tres reglas que no se relajan:
    tls-crypt: solo el texto del suceso.
 3. Los fallos se devuelven, no se tragan. Quien llama decide qué hacer con
    ellos, pero se entera.
+
+El texto de los errores se guarda en español —str(e)— y se enseña traducido
+—mensaje(e)—, como en el resto del panel. Lo que sale hacia fuera (el aviso
+de que el mensaje se ha recortado) va en el idioma de la instalación.
 """
 
 import json
@@ -29,6 +33,9 @@ import urllib.error
 import urllib.request
 from email.message import EmailMessage
 
+from .. import idiomas
+from ..idiomas import MensajeError, N_, t
+
 # Corto a propósito: esto corre detrás de una acción del usuario y no puede
 # convertirse en una espera.
 TIMEOUT = 10
@@ -37,8 +44,13 @@ TIMEOUT = 10
 MAX_DISCORD = 1900
 
 
-class ErrorNotificacion(Exception):
-    """No se pudo entregar. Lleva el motivo para que se pueda enseñar."""
+class ErrorNotificacion(MensajeError):
+    """
+    No se pudo entregar. Lleva el motivo para que se pueda enseñar.
+
+    MensajeError: str(e) deja el texto en español (lo que va a los logs y a la
+    auditoría) y mensaje(e) lo enseña en el idioma de quien lo lee.
+    """
 
 
 def enviar_correo(cfg_correo, asunto, cuerpo):
@@ -51,15 +63,19 @@ def enviar_correo(cfg_correo, asunto, cuerpo):
     """
     destinatarios = [d for d in (cfg_correo.destinatarios or []) if d]
     if not destinatarios:
-        raise ErrorNotificacion("No hay destinatarios de correo configurados")
+        raise ErrorNotificacion(N_("No hay destinatarios de correo configurados"))
     if not cfg_correo.servidor:
-        raise ErrorNotificacion("No hay servidor SMTP configurado")
+        raise ErrorNotificacion(N_("No hay servidor SMTP configurado"))
 
-    mensaje = EmailMessage()
-    mensaje["Subject"] = asunto
-    mensaje["From"] = cfg_correo.desde or (cfg_correo.usuario or "ovpn-web@localhost")
-    mensaje["To"] = ", ".join(destinatarios)
-    mensaje.set_content(cuerpo)
+    # 'correo' y no 'mensaje': este módulo define ErrorNotificacion, que es un
+    # MensajeError, y un día necesita el helper mensaje() del mismo sitio. Un
+    # nombre de variable que se parece al de una función importada es una
+    # trampa.
+    correo = EmailMessage()
+    correo["Subject"] = asunto
+    correo["From"] = cfg_correo.desde or (cfg_correo.usuario or "ovpn-web@localhost")
+    correo["To"] = ", ".join(destinatarios)
+    correo.set_content(cuerpo)
 
     try:
         if int(cfg_correo.puerto) == 465:
@@ -68,7 +84,7 @@ def enviar_correo(cfg_correo, asunto, cuerpo):
                                   timeout=TIMEOUT, context=contexto) as s:
                 if cfg_correo.usuario:
                     s.login(cfg_correo.usuario, cfg_correo.password or "")
-                s.send_message(mensaje)
+                s.send_message(correo)
         else:
             with smtplib.SMTP(cfg_correo.servidor, int(cfg_correo.puerto),
                               timeout=TIMEOUT) as s:
@@ -76,9 +92,9 @@ def enviar_correo(cfg_correo, asunto, cuerpo):
                     s.starttls(context=ssl.create_default_context())
                 if cfg_correo.usuario:
                     s.login(cfg_correo.usuario, cfg_correo.password or "")
-                s.send_message(mensaje)
+                s.send_message(correo)
     except (smtplib.SMTPException, OSError, ssl.SSLError) as e:
-        raise ErrorNotificacion("SMTP: %s" % e)
+        raise ErrorNotificacion(N_("SMTP: %(error)s"), error=e)
 
     return len(destinatarios)
 
@@ -95,13 +111,17 @@ def enviar_discord(webhook, titulo, cuerpo, color=None):
     móvil, que es donde se leen estas cosas.
     """
     if not webhook:
-        raise ErrorNotificacion("No hay webhook de Discord configurado")
+        raise ErrorNotificacion(N_("No hay webhook de Discord configurado"))
     if not webhook.startswith("https://"):
-        raise ErrorNotificacion("El webhook de Discord debe ser una URL https")
+        raise ErrorNotificacion(N_("El webhook de Discord debe ser una URL https"))
 
-    texto = cuerpo if len(cuerpo) <= MAX_DISCORD else (
-        cuerpo[:MAX_DISCORD] + "\n… (recortado)"
-    )
+    # Lo que sale hacia fuera va en el idioma de la instalación: el recorte es
+    # parte del aviso, no un mensaje de la interfaz.
+    if len(cuerpo) <= MAX_DISCORD:
+        texto = cuerpo
+    else:
+        with idiomas.usar(idiomas.por_defecto()):
+            texto = cuerpo[:MAX_DISCORD] + "\n" + t("… (recortado)")
 
     carga = json.dumps({
         "embeds": [{
@@ -123,10 +143,11 @@ def enviar_discord(webhook, titulo, cuerpo, color=None):
         with urllib.request.urlopen(peticion, timeout=TIMEOUT) as r:
             # Discord responde 204 sin cuerpo cuando acepta
             if r.status >= 300:
-                raise ErrorNotificacion("Discord respondió %d" % r.status)
+                raise ErrorNotificacion(N_("Discord respondió %(codigo)s"),
+                                        codigo=r.status)
     except urllib.error.HTTPError as e:
-        raise ErrorNotificacion("Discord respondió %d" % e.code)
+        raise ErrorNotificacion(N_("Discord respondió %(codigo)s"), codigo=e.code)
     except (urllib.error.URLError, OSError) as e:
-        raise ErrorNotificacion("Discord: %s" % e)
+        raise ErrorNotificacion(N_("Discord: %(error)s"), error=e)
 
     return 1

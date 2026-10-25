@@ -26,6 +26,8 @@ import struct
 import time
 import urllib.parse
 
+from ..idiomas import MensajeError, N_
+
 # Valores del estándar, que es lo que esperan Google Authenticator, Aegis,
 # FreeOTP y compañía. No los toques sin cambiar también lo que se le enseña
 # al usuario al darse de alta.
@@ -43,8 +45,14 @@ BYTES_SECRETO = 20
 VENTANA = 1
 
 
-class TOTPInvalido(ValueError):
-    """El código no es válido, o el secreto está mal formado"""
+class TOTPInvalido(MensajeError):
+    """
+    El código no es válido, o el secreto está mal formado.
+
+    MensajeError: str(e) deja el texto en español —que es lo que va a los
+    logs— y mensaje(e) lo enseña en el idioma de quien lo lee. Sigue siendo un
+    ValueError, así que los `except ValueError` de siempre lo cogen.
+    """
 
 
 def generar_secreto():
@@ -54,15 +62,19 @@ def generar_secreto():
 
 def _clave(secreto):
     """Decodifica el secreto base32 tolerando minúsculas, espacios y relleno"""
+    # Los textos van con N_() alrededor, como en los demás módulos que lanzan
+    # su propia excepción: así el extractor los encuentra y el catálogo los
+    # tiene. El texto que se guarda es el de español, que es el que va a los
+    # logs.
     if not isinstance(secreto, str):
-        raise TOTPInvalido("El secreto debe ser texto")
+        raise TOTPInvalido(N_("El secreto debe ser texto"))
 
     # Se quita el relleno que pudiera traer: unas apps lo muestran con '=' y
     # otras sin él, y luego se recalcula. Si no, un secreto ya relleno acabaría
     # con el doble de '=' y no decodificaría.
     limpio = secreto.strip().replace(" ", "").replace("-", "").upper().rstrip("=")
     if not limpio:
-        raise TOTPInvalido("El secreto está vacío")
+        raise TOTPInvalido(N_("El secreto está vacío"))
 
     # base32 exige que la longitud sea múltiplo de 8; las apps lo muestran sin
     # el relleno, así que lo reponemos aquí.
@@ -71,7 +83,7 @@ def _clave(secreto):
     try:
         return base64.b32decode(limpio + relleno, casefold=True)
     except (ValueError, TypeError):
-        raise TOTPInvalido("El secreto no es base32 válido")
+        raise TOTPInvalido(N_("El secreto no es base32 válido"))
 
 
 def paso_actual(momento=None):

@@ -13,6 +13,9 @@ servidor:
   puerto: 55443
   tls_cert: "/etc/ovpn-web/tls/cert.pem"
   tls_key: "/etc/ovpn-web/tls/key.pem"
+  # Idioma de la interfaz: "es" o "en". Es el de quien todavía no ha elegido
+  # otro en el panel, y el de los avisos por correo y Discord.
+  idioma: "es"
 
 openvpn:
   # Estas rutas son las que deja deploy/instalar-openvpn.sh. Si tu servidor ya

@@ -14,7 +14,7 @@ Clientes, políticas de acceso, verificación en dos pasos y endurecimiento,<br>
 sin ceder root a una página web.
 
 [![Pruebas](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml/badge.svg)](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml)
-![Versión](https://img.shields.io/badge/versión-0.5.0-10c4d8.svg)
+![Versión](https://img.shields.io/badge/versión-0.6.0-10c4d8.svg)
 ![Licencia](https://img.shields.io/badge/licencia-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![OpenVPN](https://img.shields.io/badge/OpenVPN-2.5%20%7C%202.6-orange.svg)
@@ -35,6 +35,12 @@ Se instala en el propio servidor VPN y se abre por su IP de la red local, por
 ejemplo `https://192.168.1.192:55443`. Es la versión web de
 [OpenVPN-Manager-CLI](https://github.com/Electrobridges/OpenVPN-Manager-CLI),
 del que hereda el núcleo de parseo y comunicación con OpenVPN.
+
+> [!NOTE]
+> La interfaz del panel está en español y en inglés. El idioma se elige con el
+> selector de la barra superior o con el idioma del navegador;
+> `servidor.idioma` en `config.yaml` fija el idioma de la instalación, que es
+> también el de los avisos por correo.
 
 ## ✨ Qué hace
 

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% set activo = 'conexiones' %}
-{% block titulo %}Conexiones — BridgesMGR{% endblock %}
+{% block titulo %}{{ t('Conexiones') }} — BridgesMGR{% endblock %}
 
 {% block contenido %}
-<h1>Conexiones activas</h1>
+<h1>{{ t('Conexiones activas') }}</h1>
 
 <div class="barra-tabla">
-  <p class="tenue">La tabla se actualiza sola cada 10 segundos.</p>
+  <p class="tenue">{{ t('La tabla se actualiza sola cada 10 segundos.') }}</p>
 
   {# Pide el mismo fragmento que el intervalo, así que no hay dos caminos
      distintos hasta la tabla: solo sirve para no esperar al siguiente. #}
@@ -21,7 +21,7 @@
     <svg class="icono" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-8 8s3.57 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
     </svg>
-    Actualizar
+    {{ t('Actualizar') }}
   </button>
 </div>
 
@@ -31,6 +31,6 @@
      hx-get="/conexiones/tabla"
      hx-trigger="load, every 10s, clientes-actualizados from:body"
      hx-swap="innerHTML">
-  <p class="tenue">Cargando…</p>
+  <p class="tenue">{{ t('Cargando…') }}</p>
 </div>
 {% endblock %}

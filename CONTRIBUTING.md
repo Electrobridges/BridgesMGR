@@ -209,6 +209,38 @@ Sigue el código que ya hay; si dudas, mira
 No hay linter configurado. Cuatro espacios de indentación y líneas de hasta 88
 caracteres, como el resto del código.
 
+## Textos de la interfaz
+
+El panel está en español y en inglés. Todo texto que vea una persona se
+escribe en español, tal cual, envuelto en una de estas funciones; el texto
+español es la clave del catálogo `app/idiomas/en.json`:
+
+| Función | Para qué |
+|---|---|
+| `t("Texto %(cn)s", cn=x)` | Texto plano, con huecos con nombre |
+| `tn("%(n)s día", "%(n)s días", n)` | Singular o plural según `n` |
+| `th("Texto con <strong>%(cn)s</strong>", cn=x)` | Literal con HTML en línea; los valores se escapan |
+| `N_("Texto")` | Marca un texto fijo de módulo para traducirlo más tarde con `t(variable)` |
+| `raise MensajeError("Texto %(x)s", x=…)` | Un error que acaba en pantalla, desde un módulo que no traduce. `str(e)` es el español (para auditar), `mensaje(e)` el texto traducido (para enseñar) |
+
+En las plantillas son las mismas: `{{ t('Guardar') }}`. Cuatro reglas, que
+vigila `tests/test_idiomas.py`:
+
+- **`t()`, nunca `_()`**: aquí `_` es la variable de descarte, y una función
+  que la use revienta al llamar a `_("texto")`.
+- **Solo literales**: nada de `t(f"...")` ni `t("a" + b)`; el extractor no los
+  ve. Frases enteras con huecos, no trozos pegados: el orden cambia entre
+  idiomas.
+- **Nada a nivel de módulo**: una constante `X = t("...")` se queda en el
+  idioma del arranque. `N_()` al definirla y `t()` al enseñarla.
+- **Nada que sea un dato**: lo que se guarda en la base, lo que lee una
+  expresión regular o lo que cruza al helper y a los scripts de OpenVPN se
+  queda en español siempre, y se traduce solo al enseñarlo.
+
+Al añadir un texto, añade también su traducción:
+`python -m app.idiomas.extraer --faltan` lista los que faltan, listos para
+pegar en `en.json`.
+
 ## Pruebas
 
 Todo cambio de comportamiento viene con pruebas. Si arreglas un fallo, añade la

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titulo %}Verificación — BridgesMGR{% endblock %}
+{% block titulo %}{{ t('Verificación') }} — BridgesMGR{% endblock %}
 
 {% block contenido %}
 {% include "partials/fondo_marca.html" %}
@@ -8,10 +8,11 @@
   <div class="login-cabecera">
     <img class="marca-logo grande" src="/static/imagenes/bridgesmgr-oscuro-transparente.png"
          alt="" width="76" height="76">
-    <h1>Verificación en dos pasos</h1>
+    <h1>{{ t('Verificación en dos pasos') }}</h1>
+    {# Una frase entera con su hueco, no dos trozos pegados: en inglés el
+       nombre puede ir en otro sitio de la frase. #}
     <p class="tenue">
-      Abre tu aplicación de autenticación y escribe el código de
-      {{ usuario }}.
+      {{ t('Abre tu aplicación de autenticación y escribe el código de %(usuario)s.', usuario=usuario) }}
     </p>
   </div>
 
@@ -20,21 +21,22 @@
   {% endif %}
 
   <form method="post" action="/login/codigo" class="formulario">
-    <label for="codigo">Código de 6 dígitos</label>
+    <label for="codigo">{{ t('Código de 6 dígitos') }}</label>
     {# inputmode numeric abre el teclado numérico en el móvil; one-time-code
        deja que el navegador lo ofrezca desde el SMS o el llavero. #}
     <input type="text" id="codigo" name="codigo" required autofocus
            inputmode="numeric" pattern="[0-9 ]*" maxlength="9"
            autocomplete="one-time-code" placeholder="000000">
 
-    <button type="submit" class="boton boton-principal">Verificar</button>
+    <button type="submit" class="boton boton-principal">{{ t('Verificar') }}</button>
   </form>
 
   <p class="tenue centrado">
-    El código cambia cada 30 segundos.
-    <a href="/login">Volver a empezar</a>
+    {{ t('El código cambia cada 30 segundos.') }}
+    <a href="/login">{{ t('Volver a empezar') }}</a>
   </p>
 
+  {% include "partials/selector_idioma.html" %}
   {% include "partials/firma.html" %}
 </div>
 {% endblock %}

@@ -30,7 +30,8 @@
   function poner(abierto) {
     barra.classList.toggle("abierto", abierto);
     boton.setAttribute("aria-expanded", abierto ? "true" : "false");
-    boton.setAttribute("aria-label", abierto ? "Cerrar menú" : "Abrir menú");
+    // Los rótulos vienen de la plantilla, ya en el idioma de la página
+    boton.setAttribute("aria-label", abierto ? boton.dataset.cerrar : boton.dataset.abrir);
   }
 
   function abierto() {

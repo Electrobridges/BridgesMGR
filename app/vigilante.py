@@ -38,9 +38,10 @@ aplicación cientos de veces, no levantan un hilo cada vez.
 import threading
 from datetime import datetime, timezone
 
-from . import bloqueos, caducidades, db, eventos, notificar, politicas, respaldar, trafico
+from . import bloqueos, caducidades, db, eventos, idiomas, notificar, politicas, respaldar, trafico
 from .core import conexiones, easyrsa, mgmt, respaldos, salud
 from .core import politicas as pol
+from .idiomas import mensaje, t, tn
 
 # Cada cuánto se mira. Cinco minutos: lo que vigila cambia en días o de golpe,
 # así que apurar más solo añade ruido y llamadas al helper.
@@ -90,32 +91,42 @@ def _revisar_crl(cfg):
     db.guardar_ajuste(ruta_db, AJUSTE_CRL, str(umbral))
 
     cuando = fecha.strftime("%d/%m/%Y %H:%M UTC")
-    if dias < 0:
-        asunto = "[%s] LA CRL HA CADUCADO" % cfg.servidor.host_bind
-        cuerpo = "\n".join([
-            "La lista de revocación caducó el %s." % cuando,
-            "",
-            "OpenVPN está rechazando TODAS las conexiones, no solo las de los",
-            "certificados revocados. Nadie puede entrar en la VPN.",
-            "",
-            "Se arregla revocando o restaurando cualquier cliente desde el panel:",
-            "eso regenera la CRL. O en el servidor:",
-            "  cd %s && ./easyrsa gen-crl" % cfg.openvpn.easyrsa_path,
-            "  chmod 0644 %s" % crl,
-        ])
-    else:
-        asunto = "[%s] La CRL caduca en %d día(s)" % (cfg.servidor.host_bind, dias)
-        cuerpo = "\n".join([
-            "La lista de revocación caduca el %s." % cuando,
-            "",
-            "Cuando caduque, OpenVPN rechazará TODAS las conexiones, no solo las",
-            "de los certificados revocados, y el error no menciona la CRL.",
-            "",
-            "Se renueva regenerándola: revoca o restaura cualquier cliente desde",
-            "el panel, o en el servidor:",
-            "  cd %s && ./easyrsa gen-crl" % cfg.openvpn.easyrsa_path,
-            "  chmod 0644 %s" % crl,
-        ])
+
+    # Los avisos del vigilante van en el idioma de la INSTALACIÓN. Aquí coincide
+    # con el idioma por defecto —el vigilante corre fuera de las peticiones—,
+    # pero se dice a propósito: lo que sale del servidor lo lee quien lo
+    # administra, no quien esté mirando el panel.
+    with idiomas.usar(idiomas.por_defecto()):
+        if dias < 0:
+            asunto = "[%s] %s" % (cfg.servidor.host_bind, t("LA CRL HA CADUCADO"))
+            cuerpo = "\n".join([
+                t("La lista de revocación caducó el %(cuando)s.", cuando=cuando),
+                "",
+                t("OpenVPN está rechazando TODAS las conexiones, no solo las de los "
+                  "certificados revocados. Nadie puede entrar en la VPN."),
+                "",
+                t("Se arregla revocando o restaurando cualquier cliente desde el panel: "
+                  "eso regenera la CRL. O en el servidor:"),
+                "  cd %s && ./easyrsa gen-crl" % cfg.openvpn.easyrsa_path,
+                "  chmod 0644 %s" % crl,
+            ])
+        else:
+            asunto = "[%s] %s" % (
+                cfg.servidor.host_bind,
+                tn("La CRL caduca en %(dias)s día", "La CRL caduca en %(dias)s días",
+                   dias, dias=dias),
+            )
+            cuerpo = "\n".join([
+                t("La lista de revocación caduca el %(cuando)s.", cuando=cuando),
+                "",
+                t("Cuando caduque, OpenVPN rechazará TODAS las conexiones, no solo las "
+                  "de los certificados revocados, y el error no menciona la CRL."),
+                "",
+                t("Se renueva regenerándola: revoca o restaura cualquier cliente desde "
+                  "el panel, o en el servidor:"),
+                "  cd %s && ./easyrsa gen-crl" % cfg.openvpn.easyrsa_path,
+                "  chmod 0644 %s" % crl,
+            ])
 
     notificar.avisar(cfg, notificar.SERVICIO, asunto, cuerpo, grave=(dias < 7))
 
@@ -145,27 +156,28 @@ def _revisar_servicio(cfg):
     db.guardar_ajuste(ruta_db, AJUSTE_SERVICIO, ahora)
     cuando = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
 
-    if activo:
-        notificar.avisar(
-            cfg, notificar.SERVICIO,
-            "[%s] OpenVPN ha vuelto" % cfg.servidor.host_bind,
-            "El servicio %s vuelve a estar activo.\n\nDesde: %s"
-            % (cfg.openvpn.servicio, cuando),
-        )
-    else:
-        notificar.avisar(
-            cfg, notificar.SERVICIO,
-            "[%s] OpenVPN NO está corriendo" % cfg.servidor.host_bind,
-            "\n".join([
-                "El servicio %s ha dejado de estar activo." % cfg.openvpn.servicio,
-                "Estado: %s" % detalle,
-                "Detectado: %s" % cuando,
+    with idiomas.usar(idiomas.por_defecto()):
+        if activo:
+            asunto = "[%s] %s" % (cfg.servidor.host_bind, t("OpenVPN ha vuelto"))
+            cuerpo = "\n".join([
+                t("El servicio %(servicio)s vuelve a estar activo.",
+                  servicio=cfg.openvpn.servicio),
                 "",
-                "Nadie puede conectarse a la VPN mientras siga así.",
+                t("Desde: %(cuando)s", cuando=cuando),
+            ])
+        else:
+            asunto = "[%s] %s" % (cfg.servidor.host_bind, t("OpenVPN NO está corriendo"))
+            cuerpo = "\n".join([
+                t("El servicio %(servicio)s ha dejado de estar activo.",
+                  servicio=cfg.openvpn.servicio),
+                t("Estado: %(estado)s", estado=detalle),
+                t("Detectado: %(cuando)s", cuando=cuando),
+                "",
+                t("Nadie puede conectarse a la VPN mientras siga así."),
                 "  systemctl status %s" % cfg.openvpn.servicio,
-            ]),
-            grave=True,
-        )
+            ])
+
+        notificar.avisar(cfg, notificar.SERVICIO, asunto, cuerpo, grave=not activo)
 
 
 def _revisar_respaldo(cfg):
@@ -187,31 +199,31 @@ def _revisar_respaldo(cfg):
     except respaldos.ErrorRespaldo as e:
         if anterior != "fallo":
             db.guardar_ajuste(ruta_db, AJUSTE_RESPALDO, "fallo")
-            notificar.avisar(
-                cfg, notificar.SERVICIO,
-                "[%s] El respaldo automático está fallando" % cfg.servidor.host_bind,
-                "\n".join([
-                    "No se pudo respaldar la base del panel.",
+            with idiomas.usar(idiomas.por_defecto()):
+                asunto = "[%s] %s" % (cfg.servidor.host_bind,
+                                      t("El respaldo automático está fallando"))
+                cuerpo = "\n".join([
+                    t("No se pudo respaldar la base del panel."),
                     "",
-                    "Motivo: %s" % e,
-                    "Destino: %s" % respaldar.directorio(cfg),
+                    t("Motivo: %(error)s", error=mensaje(e)),
+                    t("Destino: %(destino)s", destino=respaldar.directorio(cfg)),
                     "",
-                    "Mientras siga así no hay copias nuevas, y eso solo se nota",
-                    "el día que hace falta una.",
-                ]),
-                grave=True,
-            )
+                    t("Mientras siga así no hay copias nuevas, y eso solo se nota "
+                      "el día que hace falta una."),
+                ])
+            notificar.avisar(cfg, notificar.SERVICIO, asunto, cuerpo, grave=True)
         return
 
     if nombre is None:
         return
 
     if anterior == "fallo":
-        notificar.avisar(
-            cfg, notificar.SERVICIO,
-            "[%s] El respaldo automático vuelve a funcionar" % cfg.servidor.host_bind,
-            "Se ha creado %s en %s." % (nombre, respaldar.directorio(cfg)),
-        )
+        with idiomas.usar(idiomas.por_defecto()):
+            asunto = "[%s] %s" % (cfg.servidor.host_bind,
+                                  t("El respaldo automático vuelve a funcionar"))
+            cuerpo = t("Se ha creado %(nombre)s en %(destino)s.",
+                        nombre=nombre, destino=respaldar.directorio(cfg))
+        notificar.avisar(cfg, notificar.SERVICIO, asunto, cuerpo)
 
     db.guardar_ajuste(ruta_db, AJUSTE_RESPALDO, "ok")
 

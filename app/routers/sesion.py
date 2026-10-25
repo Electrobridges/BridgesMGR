@@ -29,6 +29,7 @@ from ..auth import (
     usuario_actual,
 )
 from ..core import totp
+from ..idiomas import t, tn
 from .comun import auditar, cfg, render
 
 router = APIRouter()
@@ -52,7 +53,9 @@ def _bloqueado(request, usuario, bloqueo):
     return render(
         request,
         "login.html",
-        {"error": "Demasiados intentos fallidos. Prueba de nuevo en %d minuto(s)." % minutos},
+        {"error": tn("Demasiados intentos fallidos. Prueba de nuevo en %(n)s minuto.",
+                       "Demasiados intentos fallidos. Prueba de nuevo en %(n)s minutos.",
+                       minutos)},
         status_code=429,
     )
 
@@ -91,7 +94,7 @@ def procesar_login(
         return render(
             request,
             "login.html",
-            {"error": "Usuario o contraseña incorrectos"},
+            {"error": t("Usuario o contraseña incorrectos")},
             status_code=401,
         )
 
@@ -142,7 +145,7 @@ def verificar_codigo(request: Request, codigo: str = Form(...)):
         respuesta = render(
             request,
             "login.html",
-            {"error": "La verificación ha caducado. Entra otra vez."},
+            {"error": t("La verificación ha caducado. Entra otra vez.")},
             status_code=401,
         )
         respuesta.delete_cookie("ovpnweb_2fa", path="/")
@@ -170,7 +173,7 @@ def verificar_codigo(request: Request, codigo: str = Form(...)):
         return render(
             request,
             "login_totp.html",
-            {"error": "Código incorrecto o caducado", "usuario": usuario},
+            {"error": t("Código incorrecto o caducado"), "usuario": usuario},
             status_code=401,
         )
 

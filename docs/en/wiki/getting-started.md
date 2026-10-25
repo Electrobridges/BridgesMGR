@@ -31,14 +31,14 @@ That first account is the **superusuario** of the installation.
 
 | Page | What is on it |
 |---|---|
-| **Panel** (Panel) | The state at a glance and the charts for the last 30 days |
-| **Conexiones** (Connections) | Who is connected right now, with their IP and their traffic. It refreshes itself |
-| **Clientes VPN** (VPN clients) | The certificates: create, download, revoke, policies |
+| **Dashboard** | The state at a glance and the charts for the last 30 days |
+| **Connections** | Who is connected right now, with their IP and their traffic. It refreshes itself |
+| **VPN clients** | The certificates: create, download, revoke, policies |
 | **Logs** | The OpenVPN log, colourised and filterable |
-| **Auditoría** (Audit) | What was done in the panel and what happened on the VPN, kept in the database |
-| **Usuarios** (Users) | The panel accounts |
-| **Seguridad** (Security) | The `server.conf` review and IP blocking |
-| **Configuración** (Settings) | Alerts, history retention and what the panel reads from `config.yaml` |
+| **Audit log** | What was done in the panel and what happened on the VPN, kept in the database |
+| **Users** | The panel accounts |
+| **Security** | The `server.conf` review and IP blocking |
+| **Settings** | Alerts, history retention and what the panel reads from `config.yaml` |
 
 A `supervisor` does not see in the menu what they cannot use.
 
@@ -48,7 +48,7 @@ A `supervisor` does not see in the menu what they cannot use.
 |---|---|
 | `superusuario` | Everything, and nobody can touch their account. It is the first one created |
 | `admin` | Everything on the VPN and manage the accounts, including other admins'; not the superusuario |
-| `supervisor` | Look: panel, connections, clients, logs and audit, without a single button that changes anything. They do not get into *Usuarios* or *Configuración* |
+| `supervisor` | Look: panel, connections, clients, logs and audit, without a single button that changes anything. They do not get into *Users* or *Settings* |
 
 A `supervisor` is what you give to someone who has to watch without being able
 to break anything: support, an auditor, a colleague on call.
@@ -62,8 +62,8 @@ enable the 2FA for your panel account: you scan a QR code with Google
 Authenticator, Aegis or similar, and confirm with a code. From then on, the
 password alone is not enough to sign in.
 
-It is optional for the person in charge; in **Usuarios** (Users) it can be made
-mandatory for `supervisor` accounts.
+It is optional for the person in charge; in **Users** it can be made mandatory
+for `supervisor` accounts.
 
 > [!IMPORTANT]
 > This protects **the panel**. Asking clients **on the VPN** for a code is

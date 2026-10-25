@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ idioma_actual() }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -47,28 +47,31 @@
      este botón, como en electrobridges.com. Nace oculto por CSS y lo enseña
      menu.js: sin JavaScript no hay botón que no haga nada, y la barra se
      queda desplegada como siempre. #}
+  {# Los dos rótulos van en data-* porque menu.js los alterna al abrir y
+     cerrar, y un .js estático no sabe en qué idioma está la página. #}
   <button type="button" class="menu-boton" aria-controls="menu-principal"
-          aria-expanded="false" aria-label="Abrir menú"><span></span></button>
+          aria-expanded="false" aria-label="{{ t('Abrir menú') }}"
+          data-abrir="{{ t('Abrir menú') }}" data-cerrar="{{ t('Cerrar menú') }}"><span></span></button>
 
   <div class="menu" id="menu-principal">
   {# El activo lleva aria-current además de la clase: el subrayado cian y el
      texto en blanco solo los ve quien ve. Sin él, un lector de pantalla
      anuncia siete enlaces indistinguibles y no dice dónde estás. #}
-  <nav class="nav" aria-label="Secciones del panel">
+  <nav class="nav" aria-label="{{ t('Secciones del panel') }}">
     {% set secciones = [
-      ('/', 'dashboard', 'Panel'),
-      ('/conexiones', 'conexiones', 'Conexiones'),
-      ('/clientes', 'clientes', 'Clientes VPN'),
-      ('/logs', 'logs', 'Logs'),
-      ('/admin/auditoria', 'auditoria', 'Auditoría'),
+      ('/', 'dashboard', t('Panel')),
+      ('/conexiones', 'conexiones', t('Conexiones')),
+      ('/clientes', 'clientes', t('Clientes VPN')),
+      ('/logs', 'logs', t('Logs')),
+      ('/admin/auditoria', 'auditoria', t('Auditoría')),
     ] %}
     {# 'manda' y nunca el nombre del rol: lo inyecta routers/comun.py:render()
        desde db.ROLES_MANDO, que es la misma lista que mira solo_admin. #}
     {% if manda %}
       {% set secciones = secciones + [
-        ('/admin/usuarios', 'usuarios', 'Usuarios'),
-        ('/seguridad', 'seguridad', 'Seguridad'),
-        ('/configuracion', 'configuracion', 'Configuración'),
+        ('/admin/usuarios', 'usuarios', t('Usuarios')),
+        ('/seguridad', 'seguridad', t('Seguridad')),
+        ('/configuracion', 'configuracion', t('Configuración')),
       ] %}
     {% endif %}
     {% for url, clave, texto in secciones %}
@@ -79,9 +82,11 @@
 
   <div class="sesion">
     <a href="/perfil" class="usuario{{ ' activo' if activo == 'perfil' }}">{{ sesion.usuario }}</a>
-    <span class="rol rol-{{ sesion.rol }}">{{ sesion.rol }}</span>
+    {# La clase CSS lleva el valor guardado; el texto, el nombre traducido. #}
+    <span class="rol rol-{{ sesion.rol }}">{{ nombre_rol(sesion.rol) }}</span>
+    {% include "partials/selector_idioma.html" %}
     <form method="post" action="/logout" class="en-linea">
-      <button type="submit" class="boton-plano">Salir</button>
+      <button type="submit" class="boton-plano">{{ t('Salir') }}</button>
     </form>
   </div>
   </div>
@@ -118,11 +123,11 @@
    aquí es destructivo —revocar, eliminar, borrar una cuenta— y un Intro de
    más no puede ser lo que revoque un certificado. #}
 <dialog id="dialogo-confirmar" class="dialogo" aria-labelledby="dialogo-titulo">
-  <h2 id="dialogo-titulo">Confirmar</h2>
+  <h2 id="dialogo-titulo">{{ t('Confirmar') }}</h2>
   <p class="dialogo-texto"></p>
   <form method="dialog" class="dialogo-botones">
-    <button value="no" class="boton" autofocus>Cancelar</button>
-    <button value="si" class="boton boton-principal">Continuar</button>
+    <button value="no" class="boton" autofocus>{{ t('Cancelar') }}</button>
+    <button value="si" class="boton boton-principal">{{ t('Continuar') }}</button>
   </form>
 </dialog>
 

@@ -14,7 +14,7 @@ Clients, access policies, two-step verification and hardening,<br>
 without handing root over to a web page.
 
 [![Tests](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml/badge.svg)](https://github.com/Electrobridges/BridgesMGR/actions/workflows/pruebas.yml)
-![Version](https://img.shields.io/badge/version-0.5.0-10c4d8.svg)
+![Version](https://img.shields.io/badge/version-0.6.0-10c4d8.svg)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![OpenVPN](https://img.shields.io/badge/OpenVPN-2.5%20%7C%202.6-orange.svg)
@@ -37,9 +37,12 @@ for example `https://192.168.1.192:55443`. It is the web version of
 from which it inherits the core parsing and communication with OpenVPN.
 
 > [!NOTE]
-> The panel's interface is currently in Spanish only. This documentation
-> is in English; menu and button names are quoted as they appear on
-> screen, with a translation.
+> The panel's interface is in Spanish and English. The language is chosen with
+> the selector in the top bar, or with the browser's language;
+> `servidor.idioma` in `config.yaml` sets the language of the installation,
+> which is also the one the email alerts are written in. This documentation is
+> in English, and menu and button names are quoted as they appear on screen in
+> the English panel.
 
 ## ✨ What it does
 
@@ -219,7 +222,7 @@ sudo bash deploy/comprobar-servidor.sh
 
 The lines each feature needs — policies, two-step in the VPN, fixed IPs — are in
 [docs/en/configuration.md](docs/en/configuration.md#what-is-configured-from-the-panel),
-and the **Seguridad** (Security) page of the panel points them out one by one.
+and the **Security** page of the panel points them out one by one.
 
 </details>
 

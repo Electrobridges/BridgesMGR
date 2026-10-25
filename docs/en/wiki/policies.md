@@ -4,10 +4,9 @@
 
 [← Wiki](README.md)
 
-Every client has their own policies page: **Clientes VPN → Políticas** (VPN
-clients → Policies), in the client's row. Everything is optional; an empty field
-means *no limit*. Fill in what you need and press **Guardar y aplicar** (Save
-and apply).
+Every client has their own policies page: **VPN clients → Policies**, in the
+client's row. Everything is optional; an empty field means *no limit*. Fill in
+what you need and press **Save and apply**.
 
 <img src="../../capturas/politicas.png" alt="ana's policies: temporary access until 31/12/2026 at 18:00, a Monday-to-Friday schedule from 08:00 to 19:00 and Saturdays from 09:00 to 13:00, and a maximum session length of 480 minutes" width="900">
 
@@ -30,9 +29,9 @@ Checking on connect is not enough, so the panel acts at three moments:
 
 ## Temporary access
 
-**Caduca** (Expires): from that date and time they cannot connect, whoever is
-inside is disconnected, and **their certificate revokes itself**. This is what
-you want for a contractor, an external technician or an intern.
+**Expires**: from that date and time they cannot connect, whoever is inside is
+disconnected, and **their certificate revokes itself**. This is what you want
+for a contractor, an external technician or an intern.
 
 It can also be set when creating the client, in the same registration form.
 
@@ -52,8 +51,7 @@ In minutes. When it is met they are disconnected and have to sign in again
 (and type the certificate password, if they have one). Useful so that nobody
 leaves the VPN open for days on end.
 
-Empty uses the shared value from **Clientes VPN → Duración máxima de sesión**
-(VPN clients → Maximum session length).
+Empty uses the shared value from **VPN clients → Maximum session length**.
 
 ## Monthly traffic quota
 
@@ -83,17 +81,17 @@ VPN server itself. It requires a fixed IP, because that is what identifies the
 client in the firewall.
 
 > [!TIP]
-> Recipe for a contractor who only maintains one machine: **Caduca** (Expires)
-> on the day the contract ends, **Horario** (Schedule) for office hours,
-> **IP fija** (Fixed IP), and a single **destino** (destination),
-> `DEVICE_IP:443/tcp`. And, if you want, [two-step](vpn-2fa.md).
+> Recipe for a contractor who only maintains one machine: **Expires** on the
+> day the contract ends, **Schedule** for office hours, **Fixed IP**, and a
+> single **destination**, `DEVICE_IP:443/tcp`. And, if you want,
+> [two-step](vpn-2fa.md).
 
 ## What the excluded client sees
 
 Their OpenVPN client cannot get as far as connecting and keeps retrying. In
-**Auditoría → VPN → Rechazos** (Audit → VPN → Rejections) it is recorded with
-the reason (outside schedule, expired, quota used up…), and on the client's
-policies page a yellow warning says whether they could get in right now.
+**Audit log → VPN → Rejections** it is recorded with the reason (outside
+schedule, expired, quota used up…), and on the client's policies page a yellow
+warning says whether they could get in right now.
 
 ---
 

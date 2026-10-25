@@ -13,6 +13,7 @@ traduce el resultado.
 import json
 import subprocess
 
+from ..idiomas import MensajeError, N_
 from .validacion import validar_cn
 
 TIMEOUT_POR_DEFECTO = 120
@@ -23,9 +24,25 @@ MARCA_CLAVE = "con-clave"
 
 MIN_CLAVE = 12
 
+# Los mensajes del panel se marcan con N_() y van con marcadores con nombre:
+# así el texto se enseña en el idioma de quien lo lee, pero str(e) —que es lo
+# que va a la auditoría y a los logs— sale siempre en español, como un dato más.
+# Lo que devuelve el helper en su stderr no se marca: cruza la frontera.
+_SIN_HELPER = N_("No se encontró el helper en %(ruta)s")
+_SIN_RESPUESTA = N_("El helper no respondió en %(segundos)s segundos")
+_CODIGO = N_("El helper terminó con código %(codigo)s")
+_RESPUESTA_MALA = N_("Respuesta no válida del helper: %(respuesta)s")
+_SIN_CONTENIDO = N_("El helper no devolvió contenido para %(cn)s.ovpn")
 
-class ErrorHelper(Exception):
-    """El helper privilegiado falló o devolvió un error"""
+
+class ErrorHelper(MensajeError):
+    """
+    El helper privilegiado falló o devolvió un error.
+
+    Hereda de MensajeError para que str() deje el mensaje en español —que es
+    lo que va a la auditoría— y mensaje() lo enseñe en el idioma de quien lo
+    lee.
+    """
 
 
 def _ejecutar(cfg, args, timeout=TIMEOUT_POR_DEFECTO, entrada=None):
@@ -54,18 +71,22 @@ def _ejecutar(cfg, args, timeout=TIMEOUT_POR_DEFECTO, entrada=None):
             timeout=timeout,
         )
     except FileNotFoundError:
-        raise ErrorHelper("No se encontró el helper en %s" % cfg.seguridad.helper)
+        raise ErrorHelper(_SIN_HELPER, ruta=cfg.seguridad.helper)
     except subprocess.TimeoutExpired:
-        raise ErrorHelper("El helper no respondió en %s segundos" % timeout)
+        raise ErrorHelper(_SIN_RESPUESTA, segundos=timeout)
 
     if proc.returncode != 0:
         detalle = (proc.stderr or proc.stdout or "").strip()
-        raise ErrorHelper(detalle or "El helper terminó con código %d" % proc.returncode)
+        if detalle:
+            # Lo que escribe el helper en su stderr cruza la frontera: sale
+            # tal cual, sin traducir, porque es su texto y no el nuestro.
+            raise ErrorHelper(detalle)
+        raise ErrorHelper(_CODIGO, codigo=proc.returncode)
 
     try:
         return json.loads(proc.stdout)
     except ValueError:
-        raise ErrorHelper("Respuesta no válida del helper: %s" % proc.stdout[:200])
+        raise ErrorHelper(_RESPUESTA_MALA, respuesta=proc.stdout[:200])
 
 
 def listar_certificados(cfg):
@@ -85,8 +106,14 @@ def revocar(cfg, cn):
     return _ejecutar(cfg, ["revocar", cn])
 
 
-class ClaveInvalida(ValueError):
-    """La contraseña del certificado no cumple el mínimo"""
+class ClaveInvalida(MensajeError):
+    """
+    La contraseña del certificado no cumple el mínimo.
+
+    MensajeError: str(e) deja el texto en español (lo que va a los logs) y
+    mensaje(e) lo enseña en el idioma de quien lo lee. Sigue siendo un
+    ValueError, así que los `except ValueError` de siempre lo cogen.
+    """
 
 
 def _argumentos_de_emision(sub, cn, clave):
@@ -101,12 +128,15 @@ def _argumentos_de_emision(sub, cn, clave):
 
     if len(clave) < MIN_CLAVE:
         raise ClaveInvalida(
-            "La contraseña del certificado debe tener al menos %d caracteres" % MIN_CLAVE
+            N_("La contraseña del certificado debe tener al menos %(n)s caracteres"),
+            n=MIN_CLAVE,
         )
     if "\n" in clave or "\r" in clave:
         # El helper lee la primera línea de stdin: un salto partiría la
         # contraseña en dos y cifraría con un trozo, en silencio.
-        raise ClaveInvalida("La contraseña del certificado no puede tener saltos de línea")
+        raise ClaveInvalida(
+            N_("La contraseña del certificado no puede tener saltos de línea")
+        )
 
     return [sub, cn, MARCA_CLAVE], clave + "\n"
 
@@ -139,7 +169,7 @@ def generar_ovpn(cfg, cn):
     contenido = datos.get("contenido")
 
     if not contenido:
-        raise ErrorHelper("El helper no devolvió contenido para %s.ovpn" % cn)
+        raise ErrorHelper(_SIN_CONTENIDO, cn=cn)
 
     return contenido
 

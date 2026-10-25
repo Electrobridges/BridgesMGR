@@ -14,7 +14,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import __version__, db
+from . import __version__, db, idiomas
+from .idiomas import t
 from .auth import (
     CSRFInvalido,
     NoAutenticado,
@@ -25,7 +26,8 @@ from .auth import (
 from .config import cargar_config
 from .core.eventos_vpn import formatear_duracion
 from .core.parsers import format_bytes
-from .routers import administracion, clientes, metricas, panel, perfil, seguridad, sesion
+from .routers import (administracion, clientes, idioma, metricas, panel, perfil, seguridad,
+                      sesion)
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
@@ -45,6 +47,7 @@ def crear_app(cfg=None):
     )
 
     app.state.cfg = cfg
+    idiomas.fijar_por_defecto(cfg.servidor.idioma)
     db.init_db(cfg.seguridad.db_path)
     db.purgar_sesiones(cfg.seguridad.db_path)
     db.purgar_logins_pendientes(cfg.seguridad.db_path)
@@ -53,6 +56,14 @@ def crear_app(cfg=None):
     plantillas.env.globals["format_bytes"] = format_bytes
     plantillas.env.globals["formatear_duracion"] = formatear_duracion
     plantillas.env.globals["version"] = __version__
+    # Textos de la interfaz: ver app/idiomas/__init__.py. Funciones y no
+    # valores, para que cada plantilla pregunte el idioma de SU petición.
+    plantillas.env.globals["t"] = idiomas.t
+    plantillas.env.globals["th"] = idiomas.th
+    plantillas.env.globals["tn"] = idiomas.tn
+    plantillas.env.globals["idioma_actual"] = idiomas.actual
+    plantillas.env.globals["nombre_rol"] = idiomas.nombre_rol
+    plantillas.env.globals["idiomas_disponibles"] = idiomas.NOMBRES
     app.state.plantillas = plantillas
 
     app.mount("/static", StaticFiles(directory=os.path.join(BASE, "static")), name="static")
@@ -85,17 +96,19 @@ def crear_app(cfg=None):
 
     @app.exception_handler(SinPermiso)
     def _sin_permiso(request: Request, exc):
+        # El texto va en el idioma de quien lo lee: la página de error se
+        # enseña traducida, y el aviso de HTMX también.
         if _es_htmx(request):
             return plantillas.TemplateResponse(
                 request,
                 "partials/aviso.html",
-                {"tipo": "error", "mensaje": exc.mensaje},
+                {"tipo": "error", "mensaje": idiomas.mensaje(exc)},
                 status_code=403,
             )
         return plantillas.TemplateResponse(
             request,
             "error.html",
-            {"codigo": 403, "mensaje": exc.mensaje, "sesion": sesion_opcional(request)},
+            {"codigo": 403, "mensaje": idiomas.mensaje(exc), "sesion": sesion_opcional(request)},
             status_code=403,
         )
 
@@ -115,10 +128,12 @@ def crear_app(cfg=None):
             request,
             "partials/aviso.html",
             {"tipo": "error",
-             "mensaje": "Token CSRF no válido. Recarga la página e inténtalo de nuevo."},
+             "mensaje": t("Token CSRF no válido. Recarga la página e "
+                          "inténtalo de nuevo.")},
             status_code=403,
         )
 
+    app.include_router(idioma.router)
     app.include_router(sesion.router)
     app.include_router(panel.router)
     app.include_router(clientes.router)
@@ -126,6 +141,10 @@ def crear_app(cfg=None):
     app.include_router(perfil.router)
     app.include_router(seguridad.router)
     app.include_router(metricas.router)
+
+    # El último que se añade es el más externo: así el idioma ya está fijado
+    # cuando corren las demás capas, los manejadores de error incluidos.
+    app.add_middleware(idioma.MiddlewareIdioma)
 
     return app
 

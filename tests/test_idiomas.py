@@ -1,0 +1,993 @@
+"""
+Idiomas de la interfaz: español (el de los textos fuente) e inglés.
+
+Estas pruebas son la red para traducir el panel por partes. Vigilan cuatro
+cosas, y cada una existe porque es como se rompe esto sin que nadie lo vea:
+
+1. El catálogo: todo texto marcado en el código tiene su traducción, con los
+   mismos %(huecos)s, y no sobra nada.
+2. Las reglas de uso de t(): nada a nivel de módulo, nada no literal, nada en
+   los módulos que manejan datos.
+3. Las páginas ya traducidas no dejan frases en español cuando se piden en
+   inglés.
+4. Sin elegir nada, todo sigue en español, como siempre.
+"""
+
+import ast
+import re
+from pathlib import Path
+
+import pytest
+from starlette.requests import Request
+
+from app import idiomas
+from app.idiomas import extraer
+from app.routers.idioma import COOKIE, del_navegador
+
+from .conftest import PASSWORD_ADMIN, PASSWORD_SUPERVISOR
+
+RAIZ = Path(__file__).resolve().parents[1]
+APP = RAIZ / "app"
+FUNCIONES_T = {"t", "th", "tn", "N_"}
+
+
+@pytest.fixture(autouse=True)
+def _idioma_limpio():
+    """Ninguna prueba deja otro idioma por defecto a la siguiente"""
+    yield
+    idiomas.fijar_por_defecto("es")
+
+
+# ------------------------------------------------------------ 1. el catálogo
+
+@pytest.fixture(scope="module")
+def comparacion():
+    return extraer.comparar()
+
+
+def test_el_extractor_lee_todas_las_llamadas(comparacion):
+    """t(variable), t(f"...") o t("a" + b): el extractor no los ve y se quedan sin traducir"""
+    assert comparacion["problemas"] == []
+
+
+def test_ningun_texto_marcado_sin_traducir(comparacion):
+    faltan = {k: v[0] for k, v in comparacion["faltan"].items()}
+    faltan.update({k: v[1][0] for k, v in comparacion["faltan_plurales"].items()})
+    assert faltan == {}, (
+        "Textos marcados sin traducción en app/idiomas/en.json. "
+        "'python -m app.idiomas.extraer --faltan' los lista listos para pegar."
+    )
+
+
+def test_el_catalogo_no_guarda_textos_que_ya_no_existen(comparacion):
+    assert comparacion["sobran"] == []
+    assert comparacion["sobran_plurales"] == []
+
+
+def test_las_traducciones_respetan_los_huecos(comparacion):
+    """Un %(cn)s que se pierde o cambia de nombre revienta al formatear, en inglés y solo ahí"""
+    assert comparacion["descuadres"] == []
+
+
+def test_el_catalogo_es_coherente():
+    datos = extraer.catalogo_en()
+    assert set(datos) <= {"textos", "plurales"}
+    for es, en in datos["textos"].items():
+        assert isinstance(en, str) and en.strip(), es
+    for es, formas in datos["plurales"].items():
+        assert isinstance(formas, list) and len(formas) == 2 and all(formas), es
+
+
+# --------------------------------------------------- 2. las reglas de uso
+
+def _py():
+    return sorted(p for p in APP.rglob("*.py") if "__pycache__" not in p.parts)
+
+
+def _llamadas_t(nodo):
+    for n in ast.walk(nodo):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in FUNCIONES_T - {"N_"}:
+            yield n
+
+
+def test_nada_se_traduce_al_importar():
+    """
+    MENSAJE = t("...") a nivel de módulo se evalúa una vez, al importar, en el
+    idioma por defecto, y ya no cambia. Para textos fijos: N_() al definirlos y
+    t() al enseñarlos.
+    """
+    malos = []
+    for ruta in _py():
+        arbol = ast.parse(ruta.read_text(encoding="utf-8"))
+        funciones = [(f.lineno, f.end_lineno) for f in ast.walk(arbol)
+                     if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
+        for llamada in _llamadas_t(arbol):
+            if not any(a <= llamada.lineno <= b for a, b in funciones):
+                malos.append("%s:%d" % (ruta.relative_to(RAIZ), llamada.lineno))
+    assert malos == []
+
+
+def test_nadie_usa_guion_bajo_para_traducir():
+    """
+    En este código `_` es la variable de descarte (`_, x = ...`). Una función
+    que la use y además llame a _("texto") revienta con UnboundLocalError, y
+    solo cuando pasa por esa línea.
+    """
+    malos = []
+    for ruta in _py():
+        for n in ast.walk(ast.parse(ruta.read_text(encoding="utf-8"))):
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_"
+                    and n.args and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)):
+                malos.append("%s:%d" % (ruta.relative_to(RAIZ), n.lineno))
+    plantillas = sorted((APP / "templates").rglob("*.html"))
+    for ruta in plantillas:
+        if re.search(r"(?<![\w.])_\(\s*['\"]", ruta.read_text(encoding="utf-8")):
+            malos.append(str(ruta.relative_to(RAIZ)))
+    assert malos == []
+
+
+# Módulos cuyos textos son DATOS: se guardan en la base, se comparan con
+# expresiones regulares o cruzan al helper y a los scripts de OpenVPN. Si se
+# traducen, algo deja de casar sin dar ningún error.
+SIN_TRADUCCION = (
+    "app/db.py",
+    "app/core/eventos_vpn.py",
+)
+
+
+@pytest.mark.parametrize("modulo", SIN_TRADUCCION)
+def test_los_modulos_de_datos_no_traducen(modulo):
+    """
+    Pueden lanzar MensajeError, que guarda el texto sin traducir y se traduce
+    donde se enseña; lo que no pueden es traducir ellos.
+    """
+    arbol = ast.parse((RAIZ / modulo).read_text(encoding="utf-8"))
+    assert list(_llamadas_t(arbol)) == []
+    for nodo in ast.walk(arbol):
+        if isinstance(nodo, ast.ImportFrom) and nodo.module and nodo.module.endswith("idiomas"):
+            assert {a.name for a in nodo.names} <= {"MensajeError", "N_"}, modulo
+
+
+def test_mensaje_error_guarda_el_espanol_y_traduce_al_ensenarlo():
+    from app import db
+    with idiomas.usar("en"):
+        try:
+            db.cambiar_password(":memory:", "ana", "corta")
+        except ValueError as e:
+            error = e
+    # str(): lo que va a la auditoría, siempre en español
+    assert str(error) == "La contraseña debe tener al menos 12 caracteres"
+    with idiomas.usar("en"):
+        assert idiomas.mensaje(error) == "The password must be at least 12 characters long"
+    assert idiomas.mensaje(RuntimeError("del helper")) == "del helper"
+
+
+def test_lo_que_cruza_la_frontera_no_importa_idiomas():
+    """El helper y los scripts de OpenVPN son stdlib pura y hablan en datos fijos"""
+    for ruta in (RAIZ / "deploy").iterdir():
+        if ruta.is_file() and ruta.suffix in ("", ".py"):
+            assert "idiomas" not in ruta.read_text(encoding="utf-8", errors="replace"), ruta.name
+
+
+def test_menu_js_no_lleva_textos_propios():
+    """Un .js estático no sabe el idioma de la página: los rótulos vienen en data-*"""
+    js = (APP / "static" / "menu.js").read_text(encoding="utf-8")
+    codigo = re.sub(r"/\*.*?\*/|//[^\n]*", "", js, flags=re.S)
+    assert "dataset.abrir" in codigo and "dataset.cerrar" in codigo
+    assert "Abrir menú" not in codigo and "Cerrar menú" not in codigo
+
+
+# ------------------------------------------------- el núcleo de idiomas
+
+def test_en_espanol_el_texto_sale_tal_cual():
+    with idiomas.usar("es"):
+        assert idiomas.t("Clientes VPN") == "Clientes VPN"
+        assert idiomas.t("Texto que no está en ningún catálogo %(x)s", x=1) == \
+            "Texto que no está en ningún catálogo 1"
+
+
+def test_en_ingles_se_traduce_y_lo_que_falta_cae_al_espanol():
+    with idiomas.usar("en"):
+        assert idiomas.t("Clientes VPN") == "VPN clients"
+        assert idiomas.t("Sin traducir aún") == "Sin traducir aún"
+
+
+def test_plurales():
+    singular = "Demasiados intentos fallidos. Prueba de nuevo en %(n)s minuto."
+    plural = "Demasiados intentos fallidos. Prueba de nuevo en %(n)s minutos."
+    with idiomas.usar("es"):
+        assert idiomas.tn(singular, plural, 1).endswith("1 minuto.")
+        assert idiomas.tn(singular, plural, 5).endswith("5 minutos.")
+    with idiomas.usar("en"):
+        assert idiomas.tn(singular, plural, 1).endswith("1 minute.")
+        assert idiomas.tn(singular, plural, 5).endswith("5 minutes.")
+
+
+def test_th_escapa_lo_que_se_intercala_y_no_el_texto():
+    marcado = idiomas.th("Cliente <strong>%(cn)s</strong>", cn="<script>x</script>")
+    assert "<strong>" in marcado
+    assert "<script>" not in marcado and "&lt;script&gt;" in marcado
+
+
+def test_usar_restaura_el_idioma_anterior():
+    with idiomas.usar("en"):
+        with idiomas.usar("es"):
+            assert idiomas.actual() == "es"
+        assert idiomas.actual() == "en"
+    assert idiomas.actual() == "es"
+
+
+def test_fuera_de_una_peticion_manda_el_de_la_instalacion():
+    """El vigilante y la CLI no tienen navegador: usan servidor.idioma"""
+    idiomas.fijar_por_defecto("en")
+    assert idiomas.t("Clientes VPN") == "VPN clients"
+    idiomas.fijar_por_defecto("xx")
+    assert idiomas.actual() == "es"
+
+
+@pytest.mark.parametrize("cabecera,esperado", [
+    ("en-US,en;q=0.9", "en"),
+    ("es-ES,es;q=0.9,en;q=0.8", "es"),
+    ("fr-FR,fr;q=0.9,en;q=0.5", "en"),
+    ("fr-FR,de;q=0.9", None),
+    ("es;q=0.2,en;q=0.8", "en"),
+    ("en;q=0", None),
+    ("", None),
+    ("basura;;;q=x", None),
+])
+def test_accept_language(cabecera, esperado):
+    assert del_navegador(cabecera) == esperado
+
+
+def test_config_rechaza_un_idioma_desconocido(tmp_path):
+    from app.config import cargar_config
+    ruta = tmp_path / "config.yaml"
+    ruta.write_text("servidor:\n  idioma: fr\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="idioma"):
+        cargar_config(str(ruta))
+
+
+# ----------------------------------------------------- 4. por defecto, español
+
+def test_sin_elegir_nada_la_entrada_sigue_en_espanol(cliente):
+    r = cliente.get("/login")
+    assert '<html lang="es">' in r.text
+    assert "Contraseña" in r.text and "Entrar" in r.text
+
+
+def test_el_navegador_en_ingles_recibe_ingles(cliente):
+    r = cliente.get("/login", headers={"Accept-Language": "en-GB,en;q=0.9"})
+    assert '<html lang="en">' in r.text and "Password" in r.text
+
+
+def test_la_cookie_manda_sobre_el_navegador(cliente):
+    cliente.cookies.set(COOKIE, "es")
+    r = cliente.get("/login", headers={"Accept-Language": "en"})
+    assert '<html lang="es">' in r.text
+
+
+def test_un_idioma_no_se_filtra_a_la_peticion_siguiente(cliente):
+    assert '<html lang="en">' in cliente.get("/login", headers={"Accept-Language": "en"}).text
+    assert '<html lang="es">' in cliente.get("/login").text
+    assert idiomas.actual() == "es"
+
+
+# ----------------------------------------------------- la ruta de cambio
+
+def test_cambiar_de_idioma_pone_la_cookie_y_vuelve(cliente):
+    r = cliente.get("/idioma/en?volver=/clientes", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/clientes"
+    assert "idioma=en" in r.headers["set-cookie"]
+    assert "httponly" in r.headers["set-cookie"].lower()
+
+
+@pytest.mark.parametrize("volver", [
+    "//otra.web/x", "https://otra.web", "/\\otra.web", "javascript:alert(1)", "", "/a\r\nSet-Cookie: x=1",
+])
+def test_cambiar_de_idioma_no_redirige_fuera(cliente, volver):
+    r = cliente.get("/idioma/en", params={"volver": volver}, follow_redirects=False)
+    assert r.headers["location"] == "/"
+
+
+def test_un_idioma_desconocido_no_toca_la_cookie(cliente):
+    r = cliente.get("/idioma/xx?volver=/", follow_redirects=False)
+    assert r.status_code == 303
+    assert "set-cookie" not in r.headers
+
+
+def test_el_selector_aparece_en_la_entrada_y_en_la_barra(cliente, usuarios):
+    assert 'href="/idioma/en?volver=' in cliente.get("/login").text
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    assert 'class="selector-idioma"' in cliente.get("/").text
+
+
+# ------------------------------------- 3. las páginas traducidas, en inglés
+
+# Rasgos de una frase en español que no aparecen en inglés: letras que el
+# inglés no usa y palabras gramaticales muy frecuentes. Es una heurística, y
+# está ajustada para no dar falsos positivos en lo que sí puede salir en una
+# página en inglés (nombres de clientes, rutas, el nombre de la marca).
+_RASGOS_ES = re.compile(
+    r"[áéíóúñ¿¡]|\b(el|la|los|las|del|de|que|con|para|por|una|un|es|en|su|sin|al|y|o"
+    # Vocabulario del propio panel, para los rótulos cortos sin artículos
+    # ni tildes ("Crear cliente", "Guardar")
+    r"|crear|guardar|borrar|eliminar|descargar|cliente|clientes|usuario|usuarios"
+    r"|conectado|conectados|activo|activa|revocar|revocado|revocados|restaurar"
+    r"|horario|desde|hasta|nombre|fecha|ver|volver|cambiar|quitar|cerrar|abrir"
+    r"|buscar|filtrar|todo|todos|ninguno|ninguna|minutos|segundos|hoy|ayer)\b",
+    re.I,
+)
+
+
+def restos_en_espanol(html):
+    """Frases en español que quedan en una página que debería estar en inglés"""
+    # Fuera lo que no se lee o no es texto de la interfaz
+    html = re.sub(r"<(script|style)\b.*?</\1>", " ", html, flags=re.S | re.I)
+    html = re.sub(r"<!--.*?-->", " ", html, flags=re.S)
+    # El contenido de <code> y <pre> son literales: órdenes, claves de
+    # config.yaml, directivas del server.conf, nombres de archivo. Nunca se
+    # traducen, así que no pueden contar como un resto en español.
+    html = re.sub(r"<(code|pre)\b.*?</\1>", " ", html, flags=re.S | re.I)
+    # El selector nombra cada idioma en su idioma, a propósito
+    html = re.sub(r'<nav class="selector-idioma".*?</nav>', " ", html, flags=re.S)
+    # Atributos que lee una persona (lector de pantalla, tooltip, ejemplo)
+    atributos = re.findall(r'\b(?:title|aria-label|placeholder|alt|data-abrir|data-cerrar|'
+                           r'hx-confirm)="([^"]*)"', html)
+    texto = re.sub(r"<[^>]+>", "\n", html)
+    trozos = [t.strip() for t in texto.split("\n") + atributos]
+    return sorted({t for t in trozos if t and _RASGOS_ES.search(t)})
+
+
+# Páginas ya traducidas, con qué parte se comprueba: "todo" o la barra
+# superior (que es de base.html y se traduce antes que el contenido). Cada
+# fase de la traducción añade las suyas aquí; al terminar, todas en "todo".
+#
+# "todo" significa que la página entera se lee en inglés: si queda una frase
+# en español, la prueba lo dice. Por eso, desde la fase 1, la barra deja de
+# ser una parte aparte: el panel, las conexiones y los logs ya van enteros.
+PAGINAS = {
+    "/login": ("anonimo", "todo"),
+    "/login/codigo": ("login2fa", "todo"),
+    "/": ("admin", "todo"),
+    "/conexiones": ("admin", "todo"),
+    "/logs": ("admin", "todo"),
+    "/clientes": ("admin", "todo"),
+    "/clientes/ana/politica": ("admin", "todo"),
+    "/perfil": ("admin", "todo"),
+    "/admin/usuarios": ("admin", "todo"),
+    "/admin/auditoria": ("admin", "todo"),
+    "/admin/auditoria?fuente=vpn": ("admin", "todo"),
+    "/seguridad": ("admin", "todo"),
+    "/configuracion": ("admin", "todo"),
+}
+
+
+def _parte(html, parte):
+    if parte == "todo":
+        return html
+    m = re.search(r'<header class="barra">.*?</header>', html, re.S)
+    assert m, "la página no tiene barra"
+    dialogo = re.search(r'<dialog id="dialogo-confirmar".*?</dialog>', html, re.S)
+    return m.group(0) + (dialogo.group(0) if dialogo else "")
+
+
+@pytest.mark.parametrize("ruta", sorted(PAGINAS))
+def test_pagina_en_ingles_sin_restos_en_espanol(cliente, usuarios, cfg, ruta):
+    quien, parte = PAGINAS[ruta]
+    if quien == "admin":
+        cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    elif quien == "login2fa":
+        _preparar_login_a_medias(cliente, cfg)
+    cliente.cookies.set(COOKIE, "en")
+    r = cliente.get(ruta)
+    assert r.status_code == 200, r.text[:300]
+    assert '<html lang="en">' in r.text
+    assert restos_en_espanol(_parte(r.text, parte)) == []
+
+
+def _preparar_login_a_medias(cliente, cfg):
+    """
+    Deja a una cuenta con la contraseña correcta y el código pendiente.
+
+    Es lo que hace falta para que la página del segundo paso del login se
+    pueda pedir: sin el permiso temporal, redirige a /login.
+    """
+    from app import db
+    from app.auth import COOKIE_PENDIENTE
+
+    registro = db.obtener_usuario(cfg.seguridad.db_path, "jefa")
+    token = db.crear_login_pendiente(cfg.seguridad.db_path, registro["id"], "10.0.0.1")
+    cliente.cookies.set(COOKIE_PENDIENTE, token)
+
+
+# Los fragmentos que HTMX inserta en las páginas. No son páginas: no llevan
+# <html lang>, así que no valen para la prueba de arriba, y sin ellos la
+# mayor parte del texto de la tabla de conexiones y del visor de logs
+# —encabezados, plurales, el hx-confirm de desconectar— no lo vigila nadie.
+FRAGMENTOS = {
+    "/conexiones/tabla": "admin",
+    "/logs/contenido": "admin",
+    "/clientes/tabla": "admin",
+    "/clientes/archivados": "admin",
+    "/admin/usuarios/tabla": "admin",
+    "/admin/politica/totp-supervisor": "admin",
+    "/seguridad/bloqueos/tabla": "admin",
+    "/configuracion/respaldos/tabla": "admin",
+    "/perfil/totp": "admin",
+}
+
+
+@pytest.fixture
+def conexiones_simuladas(monkeypatch):
+    """
+    Una conexión de mentira, para que la tabla tenga filas.
+
+    Sin ella la tabla sale vacía y el botón de desconectar no se pinta: el
+    texto que más falta vigilar es justamente el que vive en las filas.
+    """
+    import app.routers.panel as mod
+
+    def obtener(cfg):
+        return ([{
+            "user": "ana",
+            "real_ip": "192.168.1.50",
+            "virtual_ip": "10.8.0.6",
+            "bytes_recv": 1024,
+            "bytes_sent": 2048,
+            "connected_since": "10:15",
+            "connected_seconds": 3600,
+        }], "management", [])
+
+    monkeypatch.setattr(mod, "obtener_conexiones", obtener)
+
+
+@pytest.mark.parametrize("ruta", sorted(FRAGMENTOS))
+def test_fragmento_en_ingles_sin_restos_en_espanol(cliente, usuarios, ruta, conexiones_simuladas):
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    r = cliente.get(ruta)
+    assert r.status_code == 200, r.text[:300]
+    assert restos_en_espanol(r.text) == []
+
+
+def test_la_tabla_de_conexiones_despide_en_ingles(cliente, usuarios, conexiones_simuladas):
+    """La fila tiene que estar en inglés, y el botón con su confirmación"""
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    html = cliente.get("/conexiones/tabla").text
+
+    assert "Real IP" in html and "Connected for" in html
+    assert "Disconnect ana?" in html
+    assert restos_en_espanol(html) == []
+
+
+def test_el_403_se_enseña_en_el_idioma_de_quien_lo_recibe(cliente, usuarios):
+    """La página de error es de la fase 1, así que su mensaje va con ella"""
+    cliente.post("/login", data={"usuario": "mirona", "password": PASSWORD_SUPERVISOR})
+    cliente.cookies.set(COOKIE, "en")
+    r = cliente.get("/seguridad")
+
+    assert r.status_code == 403
+    assert "Your role does not allow this action" in r.text
+    assert "Tu rol no permite" not in r.text
+
+
+def test_el_motivo_del_gancho_se_enseña_traducido(cliente, usuarios, monkeypatch):
+    """
+    El aviso de que las políticas no se aplican al conectar lleva el motivo
+    que da el server.conf. Sin el server.conf, el aviso no se pinta y el
+    motivo no sale, así que esta prueba lo monta ella.
+    """
+    from app.core import easyrsa
+
+    monkeypatch.setattr(easyrsa, "server_conf", lambda c: {"directivas": [
+        ["server", "10.8.0.0", "255.255.255.0", "nopool"],
+        ["port", "1194"],
+    ]})
+
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    r = cliente.get("/clientes/ana/politica")
+
+    assert r.status_code == 200
+    assert "The policies are not applied on connect" in r.text
+    # th() escapa el valor, así que las comillas van como &#39;
+    assert "the server.conf has no" in r.text
+    assert restos_en_espanol(r.text) == []
+
+
+def test_el_aviso_va_en_el_idioma_de_la_instalacion(cfg, monkeypatch):
+    """
+    Los avisos por correo y Discord van en el idioma de la INSTALACIÓN, no en
+    el de quien esté usando el panel. El aviso lo lee quien administre el
+    servidor, y ese lee en el idioma del servidor.
+
+    Aquí la instalación está en español y quien actúa usa el panel en inglés:
+    el aviso tiene que salir en español.
+    """
+    from app import idiomas, notificar
+
+    enviados = []
+    monkeypatch.setattr(
+        notificar, "avisar",
+        lambda cfg, categoria, asunto, cuerpo, grave=False, **kw: enviados.append((asunto, cuerpo)),
+    )
+
+    idiomas.fijar_por_defecto("es")
+    with idiomas.usar("en"):
+        notificar.notificar_accion(cfg, "revocar", "ana", "jefa", "10.0.0.1", "ok", "detalle")
+
+    assert enviados, "no se ha construido ningún aviso"
+    asunto, cuerpo = enviados[0]
+    assert "Acción:" in cuerpo and "Resultado:" in cuerpo
+    assert "Action:" not in cuerpo and "Result:" not in cuerpo
+    assert "correcto" in cuerpo
+
+
+def test_el_aviso_va_en_el_idioma_de_la_instalacion_tambien_en_ingles(cfg, monkeypatch):
+    """Y al revés: instalación en inglés, panel en español, aviso en inglés."""
+    from app import idiomas, notificar
+
+    enviados = []
+    monkeypatch.setattr(
+        notificar, "avisar",
+        lambda cfg, categoria, asunto, cuerpo, grave=False, **kw: enviados.append((asunto, cuerpo)),
+    )
+
+    idiomas.fijar_por_defecto("en")
+    try:
+        with idiomas.usar("es"):
+            notificar.notificar_accion(cfg, "revocar", "ana", "jefa", "10.0.0.1", "ok", "detalle")
+    finally:
+        idiomas.fijar_por_defecto("es")
+
+    assert enviados, "no se ha construido ningún aviso"
+    asunto, cuerpo = enviados[0]
+    assert "Action:" in cuerpo and "Result:" in cuerpo
+    assert "Acción:" not in cuerpo
+
+
+def test_los_avisos_de_la_vpn_se_traducen():
+    """
+    Los avisos de la pestaña de VPN se guardan en español y se traducen al
+    enseñarlos. Los que devuelve revisar_archivo() vienen con la ruta ya
+    puesta, así que el diccionario los reconoce por una expresión regular.
+    """
+    from app import eventos
+    from app.core import eventos_vpn
+
+    with idiomas.usar("en"):
+        for ruta in ("", "/var/log/openvpn/openvpn.log"):
+            for aviso in eventos_vpn.revisar_archivo(ruta):
+                traducido = eventos.traducir_aviso(aviso)
+                assert traducido != aviso, "no se ha traducido: %r" % aviso
+                assert restos_en_espanol(traducido) == [], traducido
+
+        # Y un texto que no es un aviso se queda tal cual, sin reventar nada.
+        assert eventos.traducir_aviso("lo que sea") == "lo que sea"
+
+
+def test_el_diccionario_de_avisos_sigue_casando():
+    """
+    El diccionario de los avisos duplica los textos de app/core/eventos_vpn.py,
+    que no se puede tocar. Si uno de los dos cambia y el otro no, el aviso se
+    queda sin traducir sin que nada lo note. Esta prueba lo vigila.
+    """
+    from app import eventos
+    from app.core import eventos_vpn
+
+    with idiomas.usar("en"):
+        for ruta in ("", "/var/log/openvpn/openvpn.log"):
+            for aviso in eventos_vpn.revisar_archivo(ruta):
+                assert eventos.traducir_aviso(aviso) != aviso, (
+                    "El aviso %r ya no casa con el diccionario de app/eventos.py: "
+                    "alguien cambió uno de los dos textos." % aviso
+                )
+
+        # Y los de app/eventos.py, que también están duplicados en el
+        # diccionario (o son los mismos).
+        for aviso in (eventos.AVISO_VERB, eventos.AVISO_SIN_FECHAS,
+                      "El panel todavía no ha leído el log de OpenVPN. Lo hace el "
+                      "vigilante cada cinco minutos, y este arranca con el "
+                      "servicio del panel; si esto no cambia, mira que el "
+                      "servicio esté en marcha."):
+            assert eventos.traducir_aviso(aviso) != aviso, aviso
+
+
+def test_los_motivos_de_un_tramo_que_falta_se_traducen():
+    """Los motivos van dentro del aviso, así que se traducen por separado"""
+    from app import eventos
+
+    with idiomas.usar("en"):
+        assert eventos.traducir_motivo(
+            "el log rotó más de una vez mientras el panel no miraba"
+        ) == "the log was rotated more than once while the panel was not looking"
+        # Un motivo que no se reconoce no se cuela en el texto: se dice lo
+        # mismo que dicen los de rotación.
+        assert eventos.traducir_motivo("un motivo de una versión vieja") == "there was a rotation"
+
+
+def test_el_informe_de_seguridad_en_ingles(cliente, usuarios, monkeypatch):
+    """
+    La revisión del server.conf, con sus hallazgos y el arreglo que propone.
+
+    Sin un server.conf la página solo enseña el error de que no se pudo leer,
+    y los hallazgos —que es donde está todo el texto de la fase— no se ven.
+    """
+    from app.core import easyrsa
+
+    monkeypatch.setattr(easyrsa, "server_conf", lambda c: {
+        "ruta": "/etc/openvpn/server/server.conf",
+        "version": "OpenVPN 2.6.3 x86_64-pc-linux-gnu",
+        "directivas": [
+            ["server", "10.8.0.0", "255.255.255.0", "nopool"],
+            ["port", "1194"],
+            ["data-ciphers", "AES-256-GCM:AES-128-GCM:BF-CBC"],
+            ["tls-auth", "/etc/openvpn/server/ta.key", "0"],
+            ["script-security", "1"],
+            ["duplicate-cn"],
+            ["compression"],
+            ["client-to-client"],
+            ["push", "redirect-gateway"],
+        ],
+    })
+
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    r = cliente.get("/seguridad")
+
+    assert r.status_code == 200
+    assert "server.conf audit" in r.text
+    assert restos_en_espanol(r.text) == []
+
+
+def test_el_arreglo_del_informe_se_traduce():
+    """
+    El arreglo de un hallazgo se enseña dentro de un <code>, y la heurística no
+    mira dentro de los <code>: ahí solo hay literales, como órdenes y
+    directivas del server.conf. El problema es que el arreglo mezcla las dos
+    cosas, y la prosa se traducía a medias. Esta prueba mira el dato, no el
+    HTML, que es donde el fallo se cuela.
+
+    Para distinguir una cosa de la otra se usa el catálogo: si el texto en
+    español sale de alguna clave, es prosa y se tiene que traducir; si no sale
+    de ninguna, es una directiva del server.conf y tiene que salir igual.
+    """
+    from app.core import auditor
+    from app.idiomas import catalogo
+
+    directivas = [
+        ["server", "10.8.0.0", "255.255.255.0", "nopool"],
+        ["port", "1194"],
+        ["duplicate-cn"],
+        ["compression"],
+        ["client-to-client"],
+    ]
+    version = "OpenVPN 2.6.3 x86_64-pc-linux-gnu"
+    textos = catalogo("en")["textos"]
+
+    with idiomas.usar("es"):
+        en_es = auditor.auditar(directivas, version)["hallazgos"]
+    with idiomas.usar("en"):
+        en_en = auditor.auditar(directivas, version)["hallazgos"]
+
+    prosa = directivas_ = 0
+    for h_es, h_en in zip(en_es, en_en):
+        if not h_es["arreglo"]:
+            continue
+        if _sale_del_catalogo(h_es["arreglo"], textos):
+            prosa += 1
+            assert h_en["arreglo"] != h_es["arreglo"], (
+                "El arreglo %r es prosa y no se ha traducido." % h_es["arreglo"]
+            )
+        else:
+            directivas_ += 1
+            assert h_en["arreglo"] == h_es["arreglo"], (
+                "El arreglo %r es una directiva y no debe cambiar." % h_es["arreglo"]
+            )
+
+    assert prosa, "ningún arreglo del informe es prosa: la prueba no vigila nada"
+    assert directivas_, "ningún arreglo del informe es una directiva: la prueba no vigila nada"
+
+
+_PATRONES = {}
+
+
+def _sale_del_catalogo(texto, textos):
+    """Si el texto sale de alguna clave del catálogo, aunque sea con huecos"""
+    for clave in textos:
+        if clave not in _PATRONES:
+            if "%(" in clave:
+                trozos = re.split(r"%\(\w+\)s", clave)
+                patron = re.escape(trozos[0])
+                for trozo in trozos[1:]:
+                    patron += "(.+?)" + re.escape(trozo)
+            else:
+                patron = re.escape(clave)
+            _PATRONES[clave] = re.compile(patron, re.S)
+        if _PATRONES[clave].fullmatch(texto or ""):
+            return True
+    return False
+
+
+@pytest.mark.parametrize("dias, es, en", [
+    (1, "La CRL caduca en 1 día", "The CRL expires in 1 day"),
+    (10, "La CRL caduca en 10 días", "The CRL expires in 10 days"),
+])
+def test_el_plural_de_la_caducidad_de_la_crl(dias, es, en):
+    """
+    El título de la caducidad lleva un número, y con plural de verdad.
+
+    Con un día sale 'caduca en 1 día', no 'en 1 días'. Y el hueco del número
+    tiene que llegarle al texto: si no, al formatear sale un KeyError y la
+    página del servidor se queda en un 500.
+    """
+    from app.core import auditor
+
+    with idiomas.usar("es"):
+        informe = auditor.auditar([], crl_dias=dias)
+        titulo = [h for h in informe["hallazgos"] if h["clave"] == "crl-fecha"][0]["titulo"]
+        assert titulo == es
+
+    with idiomas.usar("en"):
+        informe = auditor.auditar([], crl_dias=dias)
+        titulo = [h for h in informe["hallazgos"] if h["clave"] == "crl-fecha"][0]["titulo"]
+        assert titulo == en
+
+
+def test_la_verificacion_en_dos_pasos_en_ingles(app):
+    """Sin pasar por todo el alta del segundo factor: se pinta la plantilla"""
+    pedido = Request({"type": "http", "method": "GET", "path": "/login/codigo",
+                      "query_string": b"", "headers": [], "app": app})
+    with idiomas.usar("en"):
+        html = app.state.plantillas.get_template("login_totp.html").render(
+            request=pedido, sesion=None, manda=False, usuario="ana", error=None)
+    assert restos_en_espanol(html) == []
+    assert "Open your authenticator app and enter the code for ana." in html
+
+
+@pytest.mark.parametrize("estado", ["secreto", "pendiente", "activado", "desactivado"])
+def test_el_panel_del_segundo_factor_en_ingles(app, estado):
+    """
+    Los estados del panel de segundo factor, en inglés.
+
+    Tres de ellos solo salen en la respuesta de un POST y el cuarto, en la
+    página del perfil. La rama de «obligatorio» y el QR también entran aquí: son
+    las partes donde el texto se escapa.
+    """
+    pedido = Request({"type": "http", "method": "GET", "path": "/perfil/totp",
+                      "query_string": b"", "headers": [], "app": app})
+    contexto = {
+        "activado": estado == "activado",
+        "obligatorio": estado in ("activado", "desactivado"),
+        "pendiente": estado == "pendiente",
+        "secreto": "JBSWY3DPEHPK3PXP" if estado == "secreto" else None,
+        "secreto_legible": "JBSW Y3DP EHPK 3PXP" if estado == "secreto" else None,
+        "qr": "data:image/svg+xml;base64,PHN2Zy8+" if estado == "secreto" else None,
+        "fallo_qr": None,
+        "mensaje": None,
+        "error": None,
+    }
+    with idiomas.usar("en"):
+        html = app.state.plantillas.get_template("partials/totp_panel.html").render(
+            request=pedido, sesion={"usuario": "ana"}, manda=True, **contexto)
+    assert restos_en_espanol(html) == []
+    # El segundo factor se llama siempre igual, en las cuatro ramas.
+    assert "second factor" not in html
+
+
+def test_el_error_de_csrf_se_enseña_en_ingles(cliente, usuarios):
+    """
+    El error de CSRF sale desde todos los POST del panel cuando la sesión
+    caduca, así que se enseña en el idioma de quien lo recibe.
+    """
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+
+    r = cliente.post("/clientes", data={"cn": "ana", "password": "contrasena-larga"})
+
+    assert r.status_code == 403
+    assert "Invalid CSRF token" in r.text
+    assert "Token CSRF no válido" not in r.text
+
+
+def test_la_heuristica_detecta_lo_que_tiene_que_detectar():
+    """Si esto deja de fallar donde debe, la prueba de arriba no vigila nada"""
+    assert restos_en_espanol("<p>Crear cliente</p>") == ["Crear cliente"]
+    assert restos_en_espanol("<p>Guardar</p>") == ["Guardar"]
+    assert restos_en_espanol("<p>Descargar el perfil</p>") == ["Descargar el perfil"]
+    assert restos_en_espanol('<input placeholder="contraseña">') == ["contraseña"]
+    assert restos_en_espanol("<p>Download the profile</p>") == []
+
+
+# ------------------------------------------- ninguna página sin vigilar
+
+# Lo que no devuelve HTML: el selector de idioma (cambia una cookie y
+# redirige), las métricas de Prometheus (no son HTML) y las dos descargas.
+FUERA_DE_LAS_PAGINAS = (
+    "/idioma/en",
+    "/metrics",
+    "/configuracion/exportar",
+    "/clientes/ana/ovpn",
+)
+
+
+def _rutas_html(app):
+    """Las rutas GET que devuelven una página, con los routers desplegados"""
+    def todas(rutas, prefijo=""):
+        for r in rutas:
+            original = getattr(r, "original_router", None)
+            if original is not None:
+                # Las rutas ya vienen con el prefijo del router puesto, así que
+                # no hay que añadirlo otra vez.
+                for x in todas(original.routes, prefijo):
+                    yield x
+            elif hasattr(r, "routes") and not hasattr(r, "methods"):
+                for x in todas(r.routes, prefijo):
+                    yield x
+            else:
+                yield prefijo + getattr(r, "path", ""), r
+
+    for path, r in todas(app.routes):
+        metodos = getattr(r, "methods", None) or set()
+        if "GET" in metodos:
+            # Los parámetros se cambian por un valor concreto: una ruta con
+            # {cn} es una página igual que su hermana sin él, y sin esto se
+            # colarían sin que nadie lo viera.
+            yield (path.replace("{cn}", "ana")
+                       .replace("{codigo}", "en")
+                       .replace("{usuario}", "jefa"))
+
+
+def test_ninguna_pagina_del_panel_queda_sin_vigilar(app):
+    """
+    Toda página del panel tiene que estar en la lista de las que se comprueban.
+
+    Sin esto, una página nueva se cuela sin traducir y ninguna prueba lo
+    dice: la lista la escribe a mano y nadie avisa de que se ha quedado corta.
+    """
+    vistas = set(PAGINAS) | set(FRAGMENTOS)
+    sin_vigilar = sorted(r for r in _rutas_html(app)
+                         if r not in vistas and r not in FUERA_DE_LAS_PAGINAS)
+
+    assert sin_vigilar == [], (
+        "Páginas que no vigila ninguna prueba: %s. Añádelas a PAGINAS (o a "
+        "FRAGMENTOS, si son fragmentos que HTMX inserta) o a FUERA_DE_LAS_PAGINAS "
+        "si no devuelven HTML." % ", ".join(sin_vigilar)
+    )
+
+
+# ------------------------------------------------- las etiquetas de la política
+
+def test_las_etiquetas_de_la_politica_no_se_separan():
+    """
+    Las etiquetas cortas de la tabla tienen dos versiones: una en español, que
+    es la que va a la auditoría porque es un dato, y otra traducida para la
+    tabla. Si a una se le añade una etiqueta y a la otra no, se separan sin que
+    nadie lo note: la tabla enseñaría menos de lo que la auditoría guarda.
+    """
+    from app.core import politicas as pol
+
+    politicas = [
+        {},
+        {"bloqueo": "cuota"},
+        {"expira": "2030-01-02T03:04"},
+        {"horario": [{"dias": [0, 1, 2, 3, 4], "desde": "08:00", "hasta": "19:00"}]},
+        {"max_sesion_min": 480},
+        {"cuota_mb_mes": 5000},
+        {"ip_fija": "10.8.0.6"},
+        {"destinos": ["192.168.1.10"]},
+        {"destinos": ["192.168.1.10", "192.168.1.11"]},
+        {"bloqueo": "cuota", "expira": "2030-01-02T03:04", "ip_fija": "10.8.0.6",
+         "max_sesion_min": 480, "cuota_mb_mes": 5000,
+         "horario": [{"dias": [4, 5], "desde": "09:00", "hasta": "13:00"}],
+         "destinos": ["192.168.1.10"]},
+    ]
+
+    for p in politicas:
+        assert len(pol.resumen(p)) == len(pol.resumen_traducido(p)), p
+        # Y en el MISMO orden: si a una se le añade una etiqueta delante y a la
+        # otra detrás, el número sigue igual y la prueba pasaba, pero la tabla
+        # y la auditoría enseñarían las etiquetas en distinto orden.
+        assert _forma(pol.resumen(p)) == _forma(pol.resumen_traducido(p)), p
+
+
+def _forma(etiquetas):
+    """Qué campo representa cada etiqueta, para comparar el orden"""
+    formas = []
+    for etiqueta in etiquetas:
+        if "(" in etiqueta:
+            formas.append(etiqueta.split("(")[0].strip())
+        elif "%(" in etiqueta:
+            formas.append(etiqueta.split("%(")[0].strip())
+        else:
+            formas.append(etiqueta)
+    return formas
+
+
+def test_las_etiquetas_de_la_politica_se_traducen():
+    from app.core import politicas as pol
+
+    p = {"bloqueo": "cuota", "expira": "2030-01-02T03:04", "ip_fija": "10.8.0.6",
+         "max_sesion_min": 480, "cuota_mb_mes": 5000,
+         "horario": [{"dias": [0, 1, 2, 3, 4], "desde": "08:00", "hasta": "19:00"}],
+         "destinos": ["192.168.1.10", "192.168.1.11"]}
+
+    with idiomas.usar("en"):
+        etiquetas = pol.resumen_traducido(p)
+    juntos = " | ".join(etiquetas)
+
+    assert "blocked (quota)" in juntos
+    assert "expires 02/01/2030 03:04" in juntos
+    assert "Mon–Fri 08:00–19:00" in juntos
+    assert "max. session 8 h" in juntos
+    assert "quota 5 GB/month" in juntos
+    assert "IP 10.8.0.6" in juntos
+    assert "2 destinations" in juntos
+    # Y en español siguen igual, porque es lo que va a la auditoría.
+    assert "bloqueado (cuota)" in pol.resumen(p)
+    assert "L–V 08:00–19:00" in " ".join(pol.resumen(p))
+
+
+# --------------------------------------- los datos guardados, al enseñarlos
+
+def _detalles_de_eventos_vpn():
+    """
+    Todos los textos fijos que app/core/eventos_vpn.py guarda como detalle: los
+    que devuelve _clasificar() como segundo elemento y los valores de los
+    diccionarios de motivos de los scripts de OpenVPN.
+    """
+    arbol = ast.parse((APP / "core" / "eventos_vpn.py").read_text(encoding="utf-8"))
+    textos = set()
+    for nodo in ast.walk(arbol):
+        if isinstance(nodo, ast.FunctionDef) and nodo.name == "_clasificar":
+            for r in ast.walk(nodo):
+                if (isinstance(r, ast.Return) and isinstance(r.value, ast.Tuple)
+                        and isinstance(r.value.elts[1], ast.Constant)
+                        and isinstance(r.value.elts[1].value, str)):
+                    textos.add(r.value.elts[1].value)
+        if (isinstance(nodo, ast.Assign) and isinstance(nodo.value, ast.Dict)
+                and any(isinstance(d, ast.Name) and d.id.startswith("MOTIVOS")
+                        for d in nodo.targets)):
+            textos.update(v.value for v in nodo.value.values if isinstance(v, ast.Constant))
+    return textos
+
+
+def test_todos_los_detalles_de_la_vpn_tienen_traduccion():
+    """
+    eventos_vpn.py no puede importar idiomas, así que sus textos se registran en
+    eventos.DETALLES. Si alguien añade un caso allí y no aquí, el detalle se
+    enseñaría en español en el panel en inglés.
+    """
+    from app import eventos
+    detalles = _detalles_de_eventos_vpn()
+    assert len(detalles) >= 10, "la búsqueda en eventos_vpn.py ya no encuentra nada"
+    assert detalles - set(eventos.DETALLES) == set()
+
+
+def test_la_auditoria_con_datos_sale_en_ingles(cliente, usuarios, cfg):
+    """
+    La prueba de PAGINAS pinta la auditoría vacía, y así no veía los detalles
+    que se guardan en español. Esta la llena: un suceso por cada detalle fijo
+    de la VPN, y una expulsión por política en la auditoría del panel.
+    """
+    from app import db
+    from app.core import eventos_vpn
+
+    ruta = cfg.seguridad.db_path
+    filas = [{"ts": "2026-10-20 09:%02d:00" % i, "tipo": eventos_vpn.RECHAZO_CLAVE,
+              "cn": "", "ip": "203.0.113.%d" % (i + 1), "puerto": "1194", "detalle": d}
+             for i, d in enumerate(sorted(_detalles_de_eventos_vpn()))]
+    db.guardar_eventos_vpn(ruta, filas)
+    db.registrar(ruta, "(sistema)", "expulsar_politica", "ana", "ok", "fuera de su horario")
+
+    cliente.post("/login", data={"usuario": "jefa", "password": PASSWORD_ADMIN})
+    cliente.cookies.set(COOKIE, "en")
+    for pagina in ("/admin/auditoria?fuente=vpn&por_pagina=200", "/admin/auditoria"):
+        r = cliente.get(pagina)
+        assert r.status_code == 200
+        assert restos_en_espanol(r.text) == [], pagina
+
+    # Y en español, el detalle sigue saliendo tal como se guardó
+    cliente.cookies.set(COOKIE, "es")
+    assert "fuera de su horario" in cliente.get("/admin/auditoria").text

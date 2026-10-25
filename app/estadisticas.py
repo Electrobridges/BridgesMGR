@@ -11,11 +11,14 @@ from datetime import date
 from . import db, trafico
 from .core import eventos_vpn
 from .core import graficas as gr
+from .idiomas import N_, t
 
 DIAS = 30
 
-SUBIDA = "Subida"
-BAJADA = "Bajada"
+# Los nombres de las series se enseñan (leyenda, tooltip y cabecera de la
+# tabla): se marcan aquí y se traducen donde se usan.
+SUBIDA = N_("Subida")
+BAJADA = N_("Bajada")
 
 
 def _rellenar(dias, valores, defecto=0):
@@ -30,9 +33,9 @@ def trafico_diario(ruta, cn=None, dias=DIAS, hoy=None):
     return gr.columnas(
         etiquetas,
         [
-            {"nombre": BAJADA, "clase": "serie-1",
+            {"nombre": t(BAJADA), "clase": "serie-1",
              "valores": _rellenar(etiquetas, {d: e for d, (r, e) in datos.items()})},
-            {"nombre": SUBIDA, "clase": "serie-2",
+            {"nombre": t(SUBIDA), "clase": "serie-2",
              "valores": _rellenar(etiquetas, {d: r for d, (r, e) in datos.items()})},
         ],
         formato=trafico.bytes_decimales,
@@ -65,7 +68,7 @@ def ranking_mes(ruta, limite=6, hoy=None):
 def panel(ruta, hoy=None):
     return {
         "trafico": trafico_diario(ruta, hoy=hoy),
-        "conexiones": sucesos_diarios(ruta, {eventos_vpn.CONEXION}, "Conexiones", hoy=hoy),
-        "rechazos": sucesos_diarios(ruta, eventos_vpn.FALLOS, "Rechazos", hoy=hoy),
+        "conexiones": sucesos_diarios(ruta, {eventos_vpn.CONEXION}, t("Conexiones"), hoy=hoy),
+        "rechazos": sucesos_diarios(ruta, eventos_vpn.FALLOS, t("Rechazos"), hoy=hoy),
         "ranking": ranking_mes(ruta, hoy=hoy),
     }

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titulo %}Entrar — BridgesMGR{% endblock %}
+{% block titulo %}{{ t('Entrar') }} — BridgesMGR{% endblock %}
 
 {% block contenido %}
 {% include "partials/fondo_marca.html" %}
@@ -9,7 +9,7 @@
     <img class="marca-logo grande" src="/static/imagenes/bridgesmgr-oscuro-transparente.png"
          alt="" width="76" height="76">
     <h1>Bridges<span class="acento">MGR</span></h1>
-    <p class="tenue">Administración del servidor OpenVPN</p>
+    <p class="tenue">{{ t('Administración del servidor OpenVPN') }}</p>
   </div>
 
   {% if error %}
@@ -17,17 +17,18 @@
   {% endif %}
 
   <form method="post" action="/login" class="formulario">
-    <label for="usuario">Usuario</label>
+    <label for="usuario">{{ t('Usuario') }}</label>
     <input type="text" id="usuario" name="usuario" required autofocus
            autocomplete="username" maxlength="64">
 
-    <label for="password">Contraseña</label>
+    <label for="password">{{ t('Contraseña') }}</label>
     <input type="password" id="password" name="password" required
            autocomplete="current-password">
 
-    <button type="submit" class="boton boton-principal">Entrar</button>
+    <button type="submit" class="boton boton-principal">{{ t('Entrar') }}</button>
   </form>
 
+  {% include "partials/selector_idioma.html" %}
   {% include "partials/firma.html" %}
 </div>
 {% endblock %}

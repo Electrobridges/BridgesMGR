@@ -5,15 +5,32 @@ Todos los cambios relevantes de este proyecto se anotan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 el versionado es [SemVer](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [0.6.0] — 2026-10-25
 
 ### Añadido
 
 - **Documentación en inglés.** La portada del repositorio (`README.md`) pasa
   al inglés, con la versión en español en `README.es.md`, y la wiki de uso,
   la instalación, la configuración, el modelo de seguridad y la solución de
-  problemas tienen su versión inglesa en `docs/en/`. El panel sigue solo en
-  español.
+  problemas tienen su versión inglesa en `docs/en/`.
+- **La interfaz del panel, en español y en inglés.** El idioma se elige con el
+  selector de la barra superior, con el idioma del navegador o con
+  `servidor.idioma` en `config.yaml`, que es el idioma de la instalación y el
+  que usan los avisos por correo.
+
+  Lo que se guarda no cambia de idioma: la auditoría, los sucesos de la VPN y
+  los valores de rol siguen en español en la base, y se traducen al
+  enseñarlos. Los mensajes de error que llegan del helper privilegiado siguen
+  en español.
+
+### Cambiado
+
+- La auditoría del panel enseña cada acción con un nombre legible
+  («Iniciar sesión», «Expulsar por política») en vez de su código interno
+  (`login`, `expulsar_politica`), también en español. La base y la
+  exportación CSV siguen guardando los códigos.
+- Los recuentos con «(s)» («2 conexión(es)», «caduca en 3 día(s)») pasan a
+  plurales de verdad.
 
 ## [0.5.0] — 2026-10-15
 
@@ -702,7 +719,8 @@ servidor OpenVPN desde el navegador, con el núcleo portado de
   endurecida y certificado TLS autofirmado.
 - 84 pruebas.
 
-[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.5.0...HEAD
+[Sin publicar]: https://github.com/Electrobridges/BridgesMGR/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.4.0
 [0.3.1]: https://github.com/Electrobridges/BridgesMGR/releases/tag/v0.3.1

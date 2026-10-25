@@ -22,6 +22,8 @@ Solo stdlib y sin E/S: se prueba sin levantar la web.
 import math
 from datetime import date, timedelta
 
+from ..idiomas import t
+
 ANCHO = 640
 ALTO = 190
 MARGEN_IZQ = 48
@@ -150,7 +152,7 @@ def columnas(etiquetas, series, formato=compacto, formato_eje=None, cada_etiquet
         nombre = nombres_x.get(etiqueta, etiqueta)
         lineas = [nombre] + ["%s: %s" % (s["nombre"], formato(s["valores"][i])) for s in series]
         if len(series) > 1:
-            lineas.append("Total: %s" % formato(totales[i]))
+            lineas.append("%s: %s" % (t("Total"), formato(totales[i])))
         columnas_svg.append({
             "segmentos": segmentos,
             "zona": {"x": MARGEN_IZQ + banda * i, "ancho": banda,

@@ -4,8 +4,8 @@
    destello lo pone el CSS: el elemento se recrea en cada intercambio, así que
    la animación se repite en cada pulsación. #}
 <p class="tenue linea-actualizado">
-  Actualizado {{ momento.strftime('%H:%M:%S') }}
-  {%- if entradas %} · {{ entradas|length }} línea{{ '' if entradas|length == 1 else 's' }}{% endif %}
+  {{ t('Actualizado') }} {{ momento.strftime('%H:%M:%S') }}
+  {%- if entradas %} · {{ tn('%(n)s línea', '%(n)s líneas', entradas|length) }}{% endif %}
 </p>
 
 {% if error %}
@@ -20,5 +20,5 @@
    caben. #}
 <div class="log"><pre>{% for e in entradas %}<span class="log-{{ e.nivel }}">{{ e.texto }}</span>{% endfor %}</pre></div>
 {% else %}
-<p class="tenue">Sin líneas que mostrar con ese filtro.</p>
+<p class="tenue">{{ t('Sin líneas que mostrar con ese filtro.') }}</p>
 {% endif %}
